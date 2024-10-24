@@ -4355,7 +4355,7 @@ nif_can_be_predicated(nir_if *nif)
    /* For non-divergent branches, predication is more expensive than a branch
     * because the latter can potentially skip all instructions.
     */
-   if (!nir_src_is_divergent(nif->condition))
+   if (!nir_src_is_divergent(&nif->condition))
       return false;
 
    /* Although it could potentially be possible to allow a limited form of
@@ -4487,7 +4487,7 @@ emit_if(struct ir3_context *ctx, nir_if *nif)
       emit_conditional_branch(ctx, nif);
    }
 
-   ctx->block->divergent_condition = nif->condition.ssa->divergent;
+   ctx->block->divergent_condition = nir_src_is_divergent(&nif->condition);
 
    emit_cf_list(ctx, &nif->then_list);
    emit_cf_list(ctx, &nif->else_list);

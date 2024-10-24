@@ -1059,6 +1059,13 @@ typedef struct nir_def {
     * invocations of the shader.  This is set by nir_divergence_analysis.
     */
    bool divergent;
+
+   /**
+    * True if this SSA value is loop invariant w.r.t. the innermost parent
+    * loop.  This is set by nir_divergence_analysis and used to determine
+    * the divergence of a nir_src.
+    */
+   bool loop_invariant;
 } nir_def;
 
 struct nir_src;
@@ -1213,11 +1220,7 @@ nir_src_is_undef(nir_src src)
    return src.ssa->parent_instr->type == nir_instr_type_undef;
 }
 
-static inline bool
-nir_src_is_divergent(nir_src src)
-{
-   return src.ssa->divergent;
-}
+bool nir_src_is_divergent(nir_src *src);
 
 /* Are all components the same, ie. .xxxx */
 static inline bool
@@ -3338,8 +3341,22 @@ typedef struct {
    nir_loop_info *info;
    nir_loop_control control;
    bool partially_unrolled;
-   bool divergent;
+
+   /**
+    * Whether some loop-active invocations might take a different control-flow path:
+    * divergent_continue indicates that a continue statement might be taken by
+    * only some of the loop-active invocations. A subsequent break is always
+    * considered divergent.
+    */
+   bool divergent_continue;
+   bool divergent_break;
 } nir_loop;
+
+static inline bool
+nir_loop_is_divergent(nir_loop *loop)
+{
+   return loop->divergent_continue || loop->divergent_break;
+}
 
 /**
  * Various bits of metadata that can may be created or required by
@@ -6703,7 +6720,6 @@ bool nir_convert_to_lcssa(nir_shader *shader, bool skip_invariants, bool skip_bo
 void nir_divergence_analysis_impl(nir_function_impl *impl, nir_divergence_options options);
 void nir_divergence_analysis(nir_shader *shader);
 void nir_vertex_divergence_analysis(nir_shader *shader);
-bool nir_update_instr_divergence(nir_shader *shader, nir_instr *instr);
 bool nir_has_divergent_loop(nir_shader *shader);
 
 void

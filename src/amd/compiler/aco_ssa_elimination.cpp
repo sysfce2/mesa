@@ -337,7 +337,15 @@ try_optimize_branching_sequence(ssa_elimination_ctx& ctx, Block& block, const in
    const aco_opcode and_saveexec = ctx.program->lane_mask == s2 ? aco_opcode::s_and_saveexec_b64
                                                                 : aco_opcode::s_and_saveexec_b32;
 
-   if (exec_copy->opcode != and_saveexec && exec_copy->opcode != aco_opcode::p_parallelcopy)
+   const aco_opcode s_and =
+      ctx.program->lane_mask == s2 ? aco_opcode::s_and_b64 : aco_opcode::s_and_b32;
+
+   if (exec_copy->opcode != and_saveexec && exec_copy->opcode != aco_opcode::p_parallelcopy &&
+       (exec_copy->opcode != s_and || exec_copy->operands[1].physReg() != exec))
+      return;
+
+   /* The SCC def of s_and/s_and_saveexec must be unused. */
+   if (exec_copy->opcode != aco_opcode::p_parallelcopy && !exec_copy->definitions[1].isKill())
       return;
 
    /* Only allow SALU with multiple definitions. */
@@ -360,33 +368,6 @@ try_optimize_branching_sequence(ssa_elimination_ctx& ctx, Block& block, const in
 
    const Definition exec_wr_def = exec_val->definitions[0];
    const Definition exec_copy_def = exec_copy->definitions[0];
-
-   if (save_original_exec) {
-      for (int i = exec_copy_idx - 1; i >= 0; i--) {
-         const aco_ptr<Instruction>& instr = block.instructions[i];
-         if (instr->opcode == aco_opcode::p_parallelcopy &&
-             instr->definitions[0].physReg() == exec &&
-             instr->definitions[0].regClass() == ctx.program->lane_mask &&
-             instr->operands[0].physReg() == exec_copy_def.physReg()) {
-            /* The register that we should save exec to already contains the same value as exec. */
-            save_original_exec = false;
-            break;
-         }
-         /* exec_copy_def is clobbered or exec written before we found a copy. */
-         if ((i != exec_val_idx || !vcmpx_exec_only) &&
-             std::any_of(instr->definitions.begin(), instr->definitions.end(),
-                         [&exec_copy_def, &ctx](const Definition& def) -> bool
-                         {
-                            return regs_intersect(exec_copy_def, def) ||
-                                   regs_intersect(Definition(exec, ctx.program->lane_mask), def);
-                         }))
-            break;
-
-         if (instr->isPseudo() && instr->pseudo().needs_scratch_reg &&
-             regs_intersect(exec_copy_def, Definition(instr->pseudo().scratch_sgpr, s1)))
-            break;
-      }
-   }
 
    /* Position where the original exec mask copy should be inserted. */
    const int save_original_exec_idx = exec_val_idx;

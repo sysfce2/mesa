@@ -645,7 +645,8 @@ nir_loop_create(nir_shader *shader)
 
    cf_init(&loop->cf_node, nir_cf_node_loop);
    /* Assume that loops are divergent until proven otherwise */
-   loop->divergent = true;
+   loop->divergent_break = true;
+   loop->divergent_continue = true;
 
    nir_block *body = nir_block_create(shader);
    exec_list_make_empty(&loop->body);
@@ -1554,6 +1555,7 @@ nir_def_init(nir_instr *instr, nir_def *def,
    def->num_components = num_components;
    def->bit_size = bit_size;
    def->divergent = true; /* This is the safer default */
+   def->loop_invariant = false;
 
    if (instr->block) {
       nir_function_impl *impl =

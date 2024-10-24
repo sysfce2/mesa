@@ -42,7 +42,7 @@ extern "C" {
 #endif
 
 #define PIPE_H264_MAX_NUM_LIST_REF    32
-#define PIPE_H264_MAX_DPB_SIZE        33
+#define PIPE_H264_MAX_DPB_SIZE        17
 #define PIPE_H265_MAX_NUM_LIST_REF    15
 #define PIPE_H265_MAX_DPB_SIZE        16
 #define PIPE_H265_MAX_SLICES          128
@@ -59,7 +59,6 @@ extern "C" {
 #define PIPE_H265_MAX_LONG_TERM_REF_PICS_SPS 32
 #define PIPE_H265_MAX_LONG_TERM_PICS 16
 #define PIPE_H265_MAX_DELTA_POC 48
-#define PIPE_H265_MAX_DPB_SIZE 16
 #define PIPE_H265_MAX_NUM_LIST_REF 15
 #define PIPE_H265_MAX_ST_REF_PIC_SETS 65
 #define PIPE_H265_MAX_SUB_LAYERS 7
@@ -762,6 +761,7 @@ struct pipe_h264_enc_dpb_entry
    uint32_t temporal_id;
    bool is_ltr;
    struct pipe_video_buffer *buffer;
+   bool evict;
 };
 
 struct pipe_h264_enc_picture_desc
@@ -1163,6 +1163,7 @@ struct pipe_h265_enc_dpb_entry
    uint32_t temporal_id;
    bool is_ltr;
    struct pipe_video_buffer *buffer;
+   bool evict;
 };
 
 struct pipe_h265_enc_picture_desc

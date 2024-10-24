@@ -1409,9 +1409,9 @@ gather_outputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_
        * so we only propagate constants.
        * TODO: revisit this when workgroup divergence analysis is merged.
        */
-      const bool divergent = value->divergent ||
+      const bool divergent = (!constant && linkage->producer_stage == MESA_SHADER_MESH) ||
                              intr->instr.block->divergent ||
-                             (!constant && linkage->producer_stage == MESA_SHADER_MESH);
+                             nir_src_is_divergent(&intr->src[0]);
 
       if (!out->producer.value) {
          /* This is the first store to this output. */
@@ -4328,8 +4328,6 @@ nir_opt_varyings(nir_shader *producer, nir_shader *consumer, bool spirv,
     * divergence information.
     */
    if (consumer->info.stage == MESA_SHADER_FRAGMENT) {
-      /* Required by the divergence analysis. */
-      NIR_PASS(_, producer, nir_convert_to_lcssa, true, true);
       nir_vertex_divergence_analysis(producer);
    }
 

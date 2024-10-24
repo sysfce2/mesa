@@ -164,14 +164,14 @@ struct NOP_ctx_gfx10 {
    }
 };
 
-template <int Max> struct VGPRCounterMap {
+template <int Start, int Size, int Max> struct CounterMap {
 public:
    int base = 0;
-   BITSET_DECLARE(resident, 256);
-   int val[256];
+   BITSET_DECLARE(resident, Size);
+   int val[Size];
 
    /* Initializes all counters to Max. */
-   VGPRCounterMap() { BITSET_ZERO(resident); }
+   CounterMap() { BITSET_ZERO(resident); }
 
    /* Increase all counters, clamping at Max. */
    void inc() { base++; }
@@ -185,11 +185,12 @@ public:
 
    void set(PhysReg reg, unsigned bytes)
    {
-      if (reg.reg() < 256)
+      if (reg.reg() < Start)
          return;
 
-      for (unsigned i = 0; i < DIV_ROUND_UP(bytes, 4); i++)
-         set(reg.reg() - 256 + i);
+      unsigned size = MIN2(DIV_ROUND_UP(bytes, 4), Start + Size - reg.reg());
+      for (unsigned i = 0; i < size; i++)
+         set(reg.reg() - Start + i);
    }
 
    /* Reset all counters to Max. */
@@ -201,11 +202,12 @@ public:
 
    void reset(PhysReg reg, unsigned bytes)
    {
-      if (reg.reg() < 256)
+      if (reg.reg() < Start)
          return;
 
-      for (unsigned i = 0; i < DIV_ROUND_UP(bytes, 4); i++)
-         BITSET_CLEAR(resident, reg.reg() - 256 + i);
+      unsigned size = MIN2(DIV_ROUND_UP(bytes, 4), Start + Size - reg.reg());
+      for (unsigned i = 0; i < size; i++)
+         BITSET_CLEAR(resident, reg.reg() - Start + i);
    }
 
    uint8_t get(unsigned idx)
@@ -215,14 +217,14 @@ public:
 
    uint8_t get(PhysReg reg, unsigned offset = 0)
    {
-      assert(reg.reg() >= 256);
-      return get(reg.reg() - 256 + offset);
+      assert(reg.reg() >= Start);
+      return get(reg.reg() - Start + offset);
    }
 
-   void join_min(const VGPRCounterMap& other)
+   void join_min(const CounterMap& other)
    {
       unsigned i;
-      BITSET_FOREACH_SET (i, other.resident, 256) {
+      BITSET_FOREACH_SET (i, other.resident, Size) {
          if (BITSET_TEST(resident, i))
             val[i] = MIN2(val[i] + base, other.val[i] + other.base) - base;
          else
@@ -231,21 +233,23 @@ public:
       BITSET_OR(resident, resident, other.resident);
    }
 
-   bool operator==(const VGPRCounterMap& other) const
+   bool operator==(const CounterMap& other) const
    {
       if (!BITSET_EQUAL(resident, other.resident))
          return false;
 
       unsigned i;
-      BITSET_FOREACH_SET (i, other.resident, 256) {
-         if (!BITSET_TEST(resident, i))
-            return false;
-         if (val[i] + base != other.val[i] + other.base)
+      BITSET_FOREACH_SET (i, other.resident, Size) {
+         if (MIN2(val[i] + base, Max) != MIN2(other.val[i] + other.base, Max))
             return false;
       }
       return true;
    }
+
+   unsigned size() const { return Size; }
 };
+
+template <int Max> using VGPRCounterMap = CounterMap<256, 256, Max>;
 
 struct NOP_ctx_gfx11 {
    /* VcmpxPermlaneHazard */
@@ -269,6 +273,10 @@ struct NOP_ctx_gfx11 {
    /* WMMAHazards */
    std::bitset<256> vgpr_written_by_wmma;
 
+   /* VALUReadSGPRHazard */
+   std::bitset<m0.reg() / 2> sgpr_read_by_valu; /* SGPR pairs, excluding null, exec, m0 and scc */
+   CounterMap<0, m0.reg(), 11> sgpr_read_by_valu_then_wr_by_salu;
+
    void join(const NOP_ctx_gfx11& other)
    {
       has_Vcmpx |= other.has_Vcmpx;
@@ -283,6 +291,8 @@ struct NOP_ctx_gfx11 {
       sgpr_read_by_valu_as_lanemask_then_wr_by_salu |=
          other.sgpr_read_by_valu_as_lanemask_then_wr_by_salu;
       vgpr_written_by_wmma |= other.vgpr_written_by_wmma;
+      sgpr_read_by_valu |= other.sgpr_read_by_valu;
+      sgpr_read_by_valu_then_wr_by_salu.join_min(other.sgpr_read_by_valu_then_wr_by_salu);
    }
 
    bool operator==(const NOP_ctx_gfx11& other)
@@ -298,7 +308,9 @@ struct NOP_ctx_gfx11 {
              sgpr_read_by_valu_as_lanemask == other.sgpr_read_by_valu_as_lanemask &&
              sgpr_read_by_valu_as_lanemask_then_wr_by_salu ==
                 other.sgpr_read_by_valu_as_lanemask_then_wr_by_salu &&
-             vgpr_written_by_wmma == other.vgpr_written_by_wmma;
+             vgpr_written_by_wmma == other.vgpr_written_by_wmma &&
+             sgpr_read_by_valu == other.sgpr_read_by_valu &&
+             sgpr_read_by_valu_then_wr_by_salu == other.sgpr_read_by_valu_then_wr_by_salu;
    }
 };
 
@@ -1510,6 +1522,48 @@ handle_instruction_gfx11(State& state, NOP_ctx_gfx11& ctx, aco_ptr<Instruction>&
             }
          }
       }
+   } else {
+      /* VALUReadSGPRHazard
+       * VALU reads SGPR and later written by SALU cannot safely be read by VALU/SALU.
+       */
+      if (instr->isVALU() || instr->isSALU()) {
+         unsigned expiry_count = instr->isSALU() ? 10 : 11;
+         for (Operand& op : instr->operands) {
+            if (sa_sdst == 0)
+               break;
+
+            for (unsigned i = 0; i < op.size(); i++) {
+               unsigned reg = op.physReg() + i;
+               if (reg < ctx.sgpr_read_by_valu_then_wr_by_salu.size() &&
+                   ctx.sgpr_read_by_valu_then_wr_by_salu.get(reg) < expiry_count) {
+                  bld.sopp(aco_opcode::s_waitcnt_depctr, 0xfffe);
+                  sa_sdst = 0;
+                  break;
+               }
+            }
+         }
+      }
+
+      if (sa_sdst == 0)
+         ctx.sgpr_read_by_valu_then_wr_by_salu.reset();
+      else if (instr->isSALU() && !instr->isSOPP())
+         ctx.sgpr_read_by_valu_then_wr_by_salu.inc();
+
+      if (instr->isVALU()) {
+         for (const Operand& op : instr->operands) {
+            for (unsigned i = 0; i < DIV_ROUND_UP(op.size(), 2); i++) {
+               unsigned reg = (op.physReg() / 2) + i;
+               if (reg < ctx.sgpr_read_by_valu.size())
+                  ctx.sgpr_read_by_valu.set(reg);
+            }
+         }
+      } else if (instr->isSALU() && !instr->definitions.empty()) {
+         for (unsigned i = 0; i < instr->definitions[0].size(); i++) {
+            unsigned def_reg = instr->definitions[0].physReg() + i;
+            if ((def_reg / 2) < ctx.sgpr_read_by_valu.size() && ctx.sgpr_read_by_valu[def_reg / 2])
+               ctx.sgpr_read_by_valu_then_wr_by_salu.set(def_reg);
+         }
+      }
    }
 
    /* LdsDirectVMEMHazard
@@ -1666,6 +1720,15 @@ resolve_all_gfx11(State& state, NOP_ctx_gfx11& ctx,
       }
    }
 
+   /* VALUReadSGPRHazard */
+   if (state.program->gfx_level >= GFX12) {
+      for (unsigned i = 0; i < ctx.sgpr_read_by_valu_then_wr_by_salu.size(); i++) {
+         if (ctx.sgpr_read_by_valu_then_wr_by_salu.get(i) < 11)
+            waitcnt_depctr &= 0xfffe;
+      }
+      ctx.sgpr_read_by_valu_then_wr_by_salu.reset();
+   }
+
    /* LdsDirectVMEMHazard */
    if (ctx.vgpr_used_by_vmem_load.any() || ctx.vgpr_used_by_vmem_store.any() ||
        ctx.vgpr_used_by_ds.any() || ctx.vgpr_used_by_vmem_sample.any() ||
@@ -1741,7 +1804,7 @@ handle_block(Program* program, Ctx& ctx, Block& block)
 
 template <typename Ctx, HandleInstr<Ctx> Handle, ResolveAll<Ctx> Resolve>
 void
-mitigate_hazards(Program* program)
+mitigate_hazards(Program* program, Ctx initial_ctx = Ctx())
 {
    std::vector<Ctx> all_ctx(program->blocks.size());
    std::stack<unsigned, std::vector<unsigned>> loop_header_indices;
@@ -1749,6 +1812,9 @@ mitigate_hazards(Program* program)
    for (unsigned i = 0; i < program->blocks.size(); i++) {
       Block& block = program->blocks[i];
       Ctx& ctx = all_ctx[i];
+
+      if (i == 0 || (block.kind & block_kind_resume))
+         ctx = initial_ctx;
 
       if (block.kind & block_kind_loop_header) {
          loop_header_indices.push(i);
@@ -1847,14 +1913,29 @@ required_export_priority(Program* program)
 void
 insert_NOPs(Program* program)
 {
-   if (program->gfx_level >= GFX11)
-      mitigate_hazards<NOP_ctx_gfx11, handle_instruction_gfx11, resolve_all_gfx11>(program);
-   else if (program->gfx_level >= GFX10_3)
+   if (program->gfx_level >= GFX11) {
+      NOP_ctx_gfx11 initial_ctx;
+
+      bool has_previous_part =
+         program->is_epilog || program->info.vs.has_prolog || program->info.ps.has_prolog ||
+         (program->info.merged_shader_compiled_separately && program->stage.sw != SWStage::VS &&
+          program->stage.sw != SWStage::TES) || program->stage == raytracing_cs;
+      if (program->gfx_level >= GFX12 && has_previous_part) {
+         /* resolve_all_gfx11 can't resolve VALUReadSGPRHazard entirely. We have to assume that any
+          * SGPR might have been read by VALU if there was a previous shader part.
+          */
+         initial_ctx.sgpr_read_by_valu.flip();
+      }
+
+      mitigate_hazards<NOP_ctx_gfx11, handle_instruction_gfx11, resolve_all_gfx11>(program,
+                                                                                   initial_ctx);
+   } else if (program->gfx_level >= GFX10_3) {
       ; /* no hazards/bugs to mitigate */
-   else if (program->gfx_level >= GFX10)
+   } else if (program->gfx_level >= GFX10) {
       mitigate_hazards<NOP_ctx_gfx10, handle_instruction_gfx10, resolve_all_gfx10>(program);
-   else
+   } else {
       mitigate_hazards<NOP_ctx_gfx6, handle_instruction_gfx6, resolve_all_gfx6>(program);
+   }
 
    if (program->gfx_level == GFX11_5 && (program->stage.hw == AC_HW_NEXT_GEN_GEOMETRY_SHADER ||
                                          program->stage.hw == AC_HW_PIXEL_SHADER))

@@ -145,15 +145,23 @@ genX(cmd_buffer_flush_compute_state)(struct anv_cmd_buffer *cmd_buffer)
       genX(cmd_buffer_ensure_cfe_state)(cmd_buffer, prog_data->base.total_scratch);
 #endif
 
-#if GFX_VERx10 == 120
-      /* Normally we should not require any dirtying here, but for some reason
-       * on Gfx12.0, when running tests in parallel we see failures in the
-       * dEQP-VK.memory_model.* tests. This is likely a HW issue with push
+      /* Changing the pipeline affects the push constants layout (different
+       * amount of cross/per thread allocations). The allocation is also
+       * bounded to just the amount consummed by the pipeline (see
+       * anv_cmd_buffer_cs_push_constants). So we force the reallocation for
+       * every pipeline change.
+       *
+       * On Gfx12.0 we're also seeing failures in the dEQP-VK.memory_model.*
+       * tests when run in parallel. This is likely a HW issue with push
        * constants & context save/restore.
+       *
+       * TODO: optimize this on Gfx12.5+ where the shader is not using per
+       * thread allocations and is also pulling the data using SEND messages.
+       * We should be able to limit reallocations only the data actually
+       * changes.
        */
       cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_COMPUTE_BIT;
       comp_state->base.push_constants_data_dirty = true;
-#endif
    }
 
    cmd_buffer->state.descriptors_dirty |=
@@ -332,7 +340,7 @@ get_interface_descriptor_data(struct anv_cmd_buffer *cmd_buffer,
       .BindingTablePointer = cmd_buffer->state.binding_tables[MESA_SHADER_COMPUTE].offset,
       /* Typically set to 0 to avoid prefetching on every thread dispatch. */
       .BindingTableEntryCount = devinfo->verx10 == 125 ?
-         0 : 1 + MIN2(shader->bind_map.surface_count, 30),
+         0 : MIN2(shader->bind_map.surface_count, 30),
       .NumberofThreadsinGPGPUThreadGroup = dispatch->threads,
       .SharedLocalMemorySize = intel_compute_slm_encode_size(GFX_VER, prog_data->base.total_shared),
       .PreferredSLMAllocationSize =
@@ -380,6 +388,7 @@ emit_indirect_compute_walker(struct anv_cmd_buffer *cmd_buffer,
       .InterfaceDescriptor =
          get_interface_descriptor_data(cmd_buffer, shader, prog_data,
                                        &dispatch),
+      .EmitInlineParameter      = prog_data->uses_inline_data,
       .InlineData               = {
          [ANV_INLINE_PARAM_NUM_WORKGROUPS_OFFSET / 4 + 0] = UINT32_MAX,
          [ANV_INLINE_PARAM_NUM_WORKGROUPS_OFFSET / 4 + 1] = indirect_addr64 & 0xffffffff,
@@ -419,7 +428,7 @@ emit_compute_walker(struct anv_cmd_buffer *cmd_buffer,
    uint32_t num_workgroup_data[3];
    if (!anv_address_is_null(indirect_addr)) {
       uint64_t indirect_addr64 = anv_address_physical(indirect_addr);
-      num_workgroup_data[0] = 0xffffffff;
+      num_workgroup_data[0] = UINT32_MAX;
       num_workgroup_data[1] = indirect_addr64 & 0xffffffff;
       num_workgroup_data[2] = indirect_addr64 >> 32;
    } else {

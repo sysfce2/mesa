@@ -3427,8 +3427,9 @@ bi_tex_op(nir_texop op)
    case nir_texop_txf_ms:
    case nir_texop_tg4:
       return BIFROST_TEX_OP_FETCH;
-   case nir_texop_txs:
    case nir_texop_lod:
+      return BIFROST_TEX_OP_GRDESC;
+   case nir_texop_txs:
    case nir_texop_query_levels:
    case nir_texop_texture_samples:
    case nir_texop_samples_identical:
@@ -3463,7 +3464,7 @@ bi_emit_texc(bi_builder *b, nir_tex_instr *instr)
       .op = bi_tex_op(instr->op),
       .offset_or_bias_disable = false, /* TODO */
       .shadow_or_clamp_disable = instr->is_shadow,
-      .array = instr->is_array,
+      .array = instr->is_array && instr->op != nir_texop_lod,
       .dimension = bifrost_tex_format(instr->sampler_dim),
       .format = bi_texture_format(instr->dest_type | instr->def.bit_size,
                                   BI_CLAMP_NONE), /* TODO */
@@ -3479,6 +3480,8 @@ bi_emit_texc(bi_builder *b, nir_tex_instr *instr)
          instr->op == nir_texop_tg4
             ? BIFROST_TEXTURE_FETCH_GATHER4_R + instr->component
             : BIFROST_TEXTURE_FETCH_TEXEL);
+      break;
+   case BIFROST_TEX_OP_GRDESC:
       break;
    default:
       unreachable("texture op unsupported");
@@ -3652,10 +3655,41 @@ bi_emit_texc(bi_builder *b, nir_tex_instr *instr)
    unsigned res_size = instr->def.bit_size == 16 ? 2 : 4;
 
    bi_index sr = sr_count ? bi_temp(b->shader) : bi_null();
-   bi_index dst = bi_temp(b->shader);
 
    if (sr_count)
       bi_emit_collect_to(b, sr, dregs, sr_count);
+
+   if (instr->op == nir_texop_lod) {
+      assert(instr->def.num_components == 2 && instr->def.bit_size == 32);
+
+      bi_index res[2];
+      for (unsigned i = 0; i < 2; i++) {
+         desc.shadow_or_clamp_disable = i != 0;
+
+         bi_index grdesc = bi_temp(b->shader);
+         uint32_t desc_u = 0;
+         memcpy(&desc_u, &desc, sizeof(desc_u));
+         bi_instr *I = bi_texc_to(b, grdesc, sr, cx, cy, bi_imm_u32(desc_u),
+                                  false, sr_count, 0);
+         I->register_format = BI_REGISTER_FORMAT_U32;
+
+         bi_emit_cached_split_i32(b, grdesc, 4);
+
+         bi_index lod = bi_s16_to_f32(b, bi_half(bi_extract(b, grdesc, 0), 0));
+
+         lod = bi_fmul_f32(b, lod, bi_imm_f32(1.0f / 256));
+
+         if (i == 0)
+            lod = bi_fround_f32(b, lod, BI_ROUND_NONE);
+
+         res[i] = lod;
+      }
+
+      bi_make_vec_to(b, bi_def_index(&instr->def), res, NULL, 2, 32);
+      return;
+   }
+
+   bi_index dst = bi_temp(b->shader);
 
    uint32_t desc_u = 0;
    memcpy(&desc_u, &desc, sizeof(desc_u));
@@ -3706,8 +3740,8 @@ bi_emit_tex_valhall(bi_builder *b, nir_tex_instr *instr)
 
       switch (instr->src[i].src_type) {
       case nir_tex_src_coord: {
-         unsigned components =
-            nir_src_num_components(instr->src[i].src) - instr->is_array;
+         bool is_array = instr->is_array && instr->op != nir_texop_lod;
+         unsigned components = nir_tex_instr_src_size(instr, i) - is_array;
 
          if (instr->sampler_dim == GLSL_SAMPLER_DIM_CUBE) {
             sregs[VALHALL_TEX_SREG_X_COORD] = bi_emit_texc_cube_coord(
@@ -3725,9 +3759,8 @@ bi_emit_tex_valhall(bi_builder *b, nir_tex_instr *instr)
                sregs[VALHALL_TEX_SREG_Z_COORD] = bi_extract(b, index, 2);
          }
 
-         if (instr->is_array) {
+         if (is_array)
             sregs[VALHALL_TEX_SREG_ARRAY] = bi_extract(b, index, components);
-         }
 
          break;
       }
@@ -3829,13 +3862,41 @@ bi_emit_tex_valhall(bi_builder *b, nir_tex_instr *instr)
       src1 = texture;
    }
 
+   enum bi_dimension dim = valhall_tex_dimension(instr->sampler_dim);
+
+   if (instr->op == nir_texop_lod) {
+      assert(instr->def.num_components == 2 && instr->def.bit_size == 32);
+
+      bi_index res[2];
+
+      for (unsigned i = 0; i < 2; i++) {
+         bi_index grdesc = bi_temp(b->shader);
+         bi_instr *I = bi_tex_gradient_to(b, grdesc, idx, src0, src1, dim,
+                                          !narrow_indices, 1, sr_count);
+         I->derivative_enable = false;
+         I->force_delta_enable = false;
+         I->lod_clamp_disable = i != 0;
+         I->register_format = BI_REGISTER_FORMAT_U32;
+         bi_index lod = bi_s16_to_f32(b, bi_half(grdesc, 0));
+
+         lod = bi_fmul_f32(b, lod, bi_imm_f32(1.0f / 256));
+
+         if (i == 0)
+            lod = bi_fround_f32(b, lod, BI_ROUND_NONE);
+
+         res[i] = lod;
+      }
+
+      bi_make_vec_to(b, bi_def_index(&instr->def), res, NULL, 2, 32);
+      return;
+   }
+
    /* Only write the components that we actually read */
    unsigned mask = nir_def_components_read(&instr->def);
    unsigned comps_per_reg = instr->def.bit_size == 16 ? 2 : 1;
    unsigned res_size = DIV_ROUND_UP(util_bitcount(mask), comps_per_reg);
 
    enum bi_register_format regfmt = bi_reg_fmt_for_nir(instr->dest_type);
-   enum bi_dimension dim = valhall_tex_dimension(instr->sampler_dim);
    bi_index dest = bi_temp(b->shader);
 
    switch (instr->op) {
@@ -4755,7 +4816,6 @@ bi_optimize_nir(nir_shader *nir, unsigned gpu_id, bool is_blend)
                         nir->info.images_used[0];
 
    if (any_indirects) {
-      nir_convert_to_lcssa(nir, true, true);
       NIR_PASS_V(nir, nir_divergence_analysis);
       NIR_PASS_V(nir, bi_lower_divergent_indirects,
                  pan_subgroup_size(pan_arch(gpu_id)));
