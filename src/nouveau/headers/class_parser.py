@@ -388,8 +388,23 @@ impl ArrayMthd for ${to_camel(mthd.name)} {
 ## A mere convenience to convert snake_case to CamelCase. Numbers are prefixed
 ## with "_".
 def to_camel(snake_str):
-    result = ''.join(word.title() for word in snake_str.split('_'))
-    return result if not result[0].isdigit() else '_' + result
+    words = snake_str.split("_")
+    words = [w for w in words if w != ""]
+    assert len(words) > 0
+
+    def to_camel_word(prev_word, word):
+        if word[0].isdigit():
+            if prev_word is None or prev_word[-1].isdigit():
+                return "_" + word.lower()
+            else:
+                return word.lower()
+        else:
+            return word.title()
+
+    return "".join(
+        to_camel_word(prev_word, word)
+        for prev_word, word in zip([None] + words, words)
+    )
 
 def strip_parens(s):
     s = s.strip()
