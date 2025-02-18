@@ -66,6 +66,7 @@ void vk_push_print(FILE *fp, const struct nv_push *push,
                    const struct nv_device_info *devinfo) ATTRIBUTE_COLD;
 
 #define SUBC_NV9097 0
+#define SUBC_NV9297 0
 #define SUBC_NVA097 0
 #define SUBC_NVB097 0
 #define SUBC_NVB197 0
