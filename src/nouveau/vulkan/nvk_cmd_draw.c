@@ -20,6 +20,7 @@
 
 #include "nv_push_cl902d.h"
 #include "nv_push_cl9097.h"
+#include "nv_push_cl9297.h"
 #include "nv_push_cl90b5.h"
 #include "nv_push_cl90c0.h"
 #include "nv_push_cla097.h"
@@ -474,8 +475,15 @@ nvk_push_draw_state_init(struct nvk_queue *queue, struct nv_push *p)
    P_NV9097_SET_WINDOW_OFFSET_X(p, 0);
    P_NV9097_SET_WINDOW_OFFSET_Y(p, 0);
 
-   P_IMMD(p, NV9097, SET_ACTIVE_ZCULL_REGION, 0x3f);
-   P_IMMD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_WINDOW_CLIP_ENABLED), 0);
+   P_IMMD(p, NV9097, SET_ZCULL_BOUNDS, {
+      .z_min_unbounded_enable = false,
+      .z_max_unbounded_enable = false,
+   });
+   P_IMMD(p, NV9097, SET_ZCULL, {
+      .z_enable = true,
+      .stencil_enable = false,
+   });
+
    P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_UPDATE_WINDOW_CLIP));
    P_INLINE_DATA(p, 1);
    P_IMMD(p, NV9097, SET_CLIP_ID_TEST, ENABLE_FALSE);
@@ -1012,12 +1020,28 @@ get_depth_stencil_plane_params(struct nvk_image_view *iview,
 }
 
 
+static uint32_t
+nvk_vk_format_to_zcull_format(VkFormat format) {
+   switch (format) {
+      case VK_FORMAT_D32_SFLOAT:
+      case VK_FORMAT_D32_SFLOAT_S8_UINT:
+         return NV9097_SET_ZCULL_DIR_FORMAT_ZFORMAT_ZF32_1;
+      case VK_FORMAT_D16_UNORM:
+      case VK_FORMAT_D24_UNORM_S8_UINT:
+      case VK_FORMAT_X8_D24_UNORM_PACK32:
+         return NV9097_SET_ZCULL_DIR_FORMAT_ZFORMAT_FP;
+      default:
+         assert(!"Unknown depth format");
+         return NV9097_SET_ZCULL_DIR_FORMAT_ZFORMAT_ZF32_1;
+   }
+}
+
 VKAPI_ATTR void VKAPI_CALL
 nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
                       const VkRenderingInfo *pRenderingInfo)
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
-   struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
+   const struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
    const struct nvk_physical_device *pdev = nvk_device_physical(dev);
    struct nvk_rendering_state *render = &cmd->state.gfx.render;
 
@@ -1066,7 +1090,10 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
 
    nvk_cmd_buffer_dirty_render_pass(cmd);
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, NVK_MAX_RTS * 12 + 44);
+   const size_t zcull_count = 51;
+   struct nv_push *p = nvk_cmd_buffer_push(
+      cmd, NVK_MAX_RTS * 12 + 44 + zcull_count
+   );
 
    P_IMMD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_VIEW_MASK),
           render->view_mask);
@@ -1325,6 +1352,101 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       }
    } else {
       P_IMMD(p, NV9097, SET_ZT_SELECT, 0 /* target_count */);
+   }
+
+   /* TODO: zcull for depth-stencil */
+   bool use_zcull = pdev->info.has_zcull_info &&
+      pRenderingInfo->pDepthAttachment != NULL &&
+      pRenderingInfo->pDepthAttachment->imageView != VK_NULL_HANDLE &&
+      pRenderingInfo->pDepthAttachment->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR;
+
+   if (use_zcull) {
+      uint32_t start_count = nv_push_dw_count(p);
+      struct nil_zcull zcull_info = nil_zcull_new(
+         &pdev->info.zcull_info,
+         render->area.offset.x,
+         render->area.offset.y,
+         render->area.extent.width,
+         render->area.extent.height
+      );
+
+      P_IMMD(p, NV9097, SET_ACTIVE_ZCULL_REGION, 0);
+
+      P_MTHD(p, NV9097, SET_ZCULL_REGION_LOCATION);
+      P_NV9097_SET_ZCULL_REGION_LOCATION(p, {
+         .start_aliquot = 0,
+         .aliquot_count = zcull_info.aliquot_count,
+      });
+      P_NV9097_SET_ZCULL_REGION_ALIQUOTS(p, zcull_info.aliquot_count);
+
+      P_MTHD(p, NV9097, SET_ZCULL_STORAGE_A);
+      P_NV9097_SET_ZCULL_STORAGE_A(p, 0);
+      P_NV9097_SET_ZCULL_STORAGE_B(p, 0);
+      P_NV9097_SET_ZCULL_STORAGE_C(p, 0);
+      P_NV9097_SET_ZCULL_STORAGE_D(p, 0);
+
+      P_IMMD(p, NV9097, SET_ZCULL_REGION_FORMAT, TYPE_Z_4X4);
+
+      P_MTHD(p, NV9097, SET_ZCULL_REGION_SIZE_A);
+      P_NV9097_SET_ZCULL_REGION_SIZE_A(p, zcull_info.width);
+      P_NV9097_SET_ZCULL_REGION_SIZE_B(p, zcull_info.height);
+      P_NV9097_SET_ZCULL_REGION_SIZE_C(p, 1);
+      P_NV9097_SET_ZCULL_REGION_PIXEL_OFFSET_C(p, 0);
+
+      P_MTHD(p, NV9097, SET_ZCULL_REGION_PIXEL_OFFSET_A);
+      P_NV9097_SET_ZCULL_REGION_PIXEL_OFFSET_A(p, zcull_info.x);
+      P_NV9097_SET_ZCULL_REGION_PIXEL_OFFSET_B(p, zcull_info.y);
+
+      P_IMMD(p, NV9297, SET_ZCULL_SUBREGION, {
+         .enable = true,
+         .normalized_aliquots = zcull_info.normalized_aliquots,
+      });
+
+      P_IMMD(p, NV9097, SET_ZCULL_CRITERION, {
+         .sfunc = SFUNC_NEVER,  /* stencil func */
+         .no_invalidate = false,
+         .force_match = false,
+         .sref = 0,
+         .smask = 0,
+      });
+
+      VkFormat fmt = render->depth_att.iview->vk.format;
+      P_IMMD(p, NV9097, SET_ZCULL_DIR_FORMAT, {
+         /* I've tried a variety of depthCompareOp values and depth clear
+          * values, but the blob seems to always use ZDIR_LESS
+          */
+         .zdir = ZDIR_LESS,
+         .zformat = nvk_vk_format_to_zcull_format(fmt),
+      });
+
+      P_0INC(p, NV9297, SET_ZCULL_SUBREGION_ALLOCATION);
+      for (int i = 0; i < zcull_info.subregion_count; i++) {
+         nv_push_val(p, NV9297_SET_ZCULL_SUBREGION_ALLOCATION,
+                     zcull_info.subregions[i]);
+      }
+
+      P_IMMD(p, NV9297, ASSIGN_ZCULL_SUBREGIONS,
+             zcull_info.subregion_algorithm);
+
+      P_IMMD(p, NV9297, SET_ZCULL_SUBREGION_REPORT_TYPE, {
+         .enable = true,
+         .type = TYPE_DEPTH_TEST,
+      });
+
+      P_IMMD(p, NV9097, SET_Z_CLEAR_VALUE,
+         fui(pRenderingInfo->pDepthAttachment->clearValue.depthStencil.depth));
+
+      P_IMMD(p, NV9097, CLEAR_ZCULL_REGION, {
+         .z_enable = true,
+         .stencil_enable = false,
+         .use_clear_rect = false,
+         .use_rt_array_index = false,
+         .make_conservative = true,
+      });
+      uint32_t end_count = nv_push_dw_count(p);
+      assert(end_count - start_count == zcull_count);
+   } else {
+      P_IMMD(p, NV9097, SET_ACTIVE_ZCULL_REGION, 0x3f);
    }
 
    if (nvk_cmd_buffer_3d_cls(cmd) < TURING_A) {
