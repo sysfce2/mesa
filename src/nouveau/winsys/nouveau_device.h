@@ -3,6 +3,7 @@
 
 #include "nouveau_private.h"
 #include "nv_device_info.h"
+#include "drm-uapi/nouveau_drm.h"
 #include "util/simple_mtx.h"
 
 #include <stddef.h>

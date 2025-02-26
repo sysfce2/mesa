@@ -410,6 +410,24 @@ nouveau_ws_device_info(int fd, struct nouveau_ws_device *dev)
    return 0;
 }
 
+static int
+nouveau_ws_device_zcull_info(int fd, struct nouveau_ws_device *dev)
+{
+   struct drm_nouveau_get_zcull_info info;
+   int ret = drmCommandRead(fd, DRM_NOUVEAU_GET_ZCULL_INFO,
+                            &info, sizeof(info));
+
+   if (!ret) {
+      STATIC_ASSERT(sizeof(dev->info.zcull_info) == sizeof(info));
+      memcpy(&dev->info.zcull_info, &info, sizeof(dev->info.zcull_info));
+
+      dev->info.has_zcull_info = true;
+   } else {
+      dev->info.has_zcull_info = false;
+   }
+   return ret;
+}
+
 struct nouveau_ws_device *
 nouveau_ws_device_new(drmDevicePtr drm_device)
 {
@@ -462,6 +480,8 @@ nouveau_ws_device_new(drmDevicePtr drm_device)
 
    if (nouveau_ws_device_info(fd, device))
       goto out_err;
+
+   nouveau_ws_device_zcull_info(fd, device);  /* This is allowed to fail */
 
    const char *name;
    if (drm_device->bustype == DRM_BUS_PCI) {
