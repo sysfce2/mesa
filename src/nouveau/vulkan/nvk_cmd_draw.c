@@ -14,6 +14,7 @@
 #include "nvk_shader.h"
 
 #include "util/bitpack_helpers.h"
+#include "util/compiler.h"
 #include "vk_format.h"
 #include "vk_render_pass.h"
 #include "vk_standard_sample_locations.h"
@@ -1019,6 +1020,16 @@ get_depth_stencil_plane_params(struct nvk_image_view *iview,
    *image_out = nil_image;
 }
 
+static struct nvk_zcull_plane*
+nvk_get_zcull_plane(struct nvk_rendering_state *render) {
+   if (render->depth_att.iview) {
+      struct nvk_image *img = (struct nvk_image*) render->depth_att.iview->vk.image;
+      if (img->zcull.nil.size_B > 0) {
+         return &img->zcull;
+      }
+   }
+   return NULL;
+}
 
 static uint32_t
 nvk_vk_format_to_zcull_format(VkFormat format) {
@@ -1355,20 +1366,34 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
    }
 
    /* TODO: zcull for depth-stencil */
+   struct nvk_zcull_plane *zcull_plane = nvk_get_zcull_plane(render);
    bool use_zcull = pdev->info.has_zcull_info &&
       pRenderingInfo->pDepthAttachment != NULL &&
       pRenderingInfo->pDepthAttachment->imageView != VK_NULL_HANDLE &&
-      pRenderingInfo->pDepthAttachment->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR;
+      pRenderingInfo->pDepthAttachment->loadOp != VK_ATTACHMENT_LOAD_OP_NONE &&
+      (zcull_plane ||
+       pRenderingInfo->pDepthAttachment->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR);
 
    if (use_zcull) {
       uint32_t start_count = nv_push_dw_count(p);
-      struct nil_zcull zcull_info = nil_zcull_new(
-         &pdev->info.zcull_info,
-         render->area.offset.x,
-         render->area.offset.y,
-         render->area.extent.width,
-         render->area.extent.height
-      );
+      struct nil_zcull zcull_info;
+      uint64_t addr_begin, addr_end;
+
+      if (zcull_plane) {
+         zcull_info = zcull_plane->nil;
+         addr_begin = zcull_plane->addr;
+         addr_end = zcull_plane->addr + zcull_plane->nil.size_B;
+      } else {
+         zcull_info = nil_zcull_new(
+            &pdev->info.zcull_info,
+            render->area.offset.x,
+            render->area.offset.y,
+            render->area.extent.width,
+            render->area.extent.height
+         );
+         addr_begin = 0;
+         addr_end = 0;
+      }
 
       P_IMMD(p, NV9097, SET_ACTIVE_ZCULL_REGION, 0);
 
@@ -1380,10 +1405,10 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       P_NV9097_SET_ZCULL_REGION_ALIQUOTS(p, zcull_info.aliquot_count);
 
       P_MTHD(p, NV9097, SET_ZCULL_STORAGE_A);
-      P_NV9097_SET_ZCULL_STORAGE_A(p, 0);
-      P_NV9097_SET_ZCULL_STORAGE_B(p, 0);
-      P_NV9097_SET_ZCULL_STORAGE_C(p, 0);
-      P_NV9097_SET_ZCULL_STORAGE_D(p, 0);
+      P_NV9097_SET_ZCULL_STORAGE_A(p, addr_begin >> 32);
+      P_NV9097_SET_ZCULL_STORAGE_B(p, addr_begin & UINT32_MAX);
+      P_NV9097_SET_ZCULL_STORAGE_C(p, addr_end >> 32);
+      P_NV9097_SET_ZCULL_STORAGE_D(p, addr_end & UINT32_MAX);
 
       P_IMMD(p, NV9097, SET_ZCULL_REGION_FORMAT, TYPE_Z_4X4);
 
@@ -1433,18 +1458,35 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
          .type = TYPE_DEPTH_TEST,
       });
 
-      P_IMMD(p, NV9097, SET_Z_CLEAR_VALUE,
-         fui(pRenderingInfo->pDepthAttachment->clearValue.depthStencil.depth));
+      float depth = 0.0f;
+      switch (pRenderingInfo->pDepthAttachment->loadOp) {
+         case VK_ATTACHMENT_LOAD_OP_CLEAR:
+            depth =
+               pRenderingInfo->pDepthAttachment->clearValue.depthStencil.depth;
+            FALLTHROUGH;
+         case VK_ATTACHMENT_LOAD_OP_DONT_CARE:
+            P_IMMD(p, NV9097, SET_Z_CLEAR_VALUE, fui(depth));
 
-      P_IMMD(p, NV9097, CLEAR_ZCULL_REGION, {
-         .z_enable = true,
-         .stencil_enable = false,
-         .use_clear_rect = false,
-         .use_rt_array_index = false,
-         .make_conservative = true,
-      });
+            P_IMMD(p, NV9097, CLEAR_ZCULL_REGION, {
+               .z_enable = true,
+               .stencil_enable = false,
+               .use_clear_rect = false,
+               .use_rt_array_index = false,
+               .make_conservative = true,
+            });
+            break;
+
+         case VK_ATTACHMENT_LOAD_OP_LOAD:
+            assert(zcull_plane);
+            P_IMMD(p, NV9097, LOAD_ZCULL, 0);
+            break;
+
+         default:
+            assert(!"Unhandled loadOp");
+            break;
+      }
       uint32_t end_count = nv_push_dw_count(p);
-      assert(end_count - start_count == zcull_count);
+      assert(end_count - start_count <= zcull_count);
    } else {
       P_IMMD(p, NV9097, SET_ACTIVE_ZCULL_REGION, 0x3f);
    }
@@ -1616,6 +1658,13 @@ nvk_CmdEndRendering2KHR(VkCommandBuffer commandBuffer,
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    struct nvk_rendering_state *render = &cmd->state.gfx.render;
+
+   struct nvk_zcull_plane* zcull_plane = nvk_get_zcull_plane(render);
+   if (zcull_plane &&
+       render->depth_att.store_op == VK_ATTACHMENT_STORE_OP_STORE) {
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
+      P_IMMD(p, NV9097, STORE_ZCULL, 0);
+   }
 
    if (!(render->flags & VK_RENDERING_SUSPENDING_BIT)) {
       for (uint32_t i = 0; i < render->color_att_count; i++) {

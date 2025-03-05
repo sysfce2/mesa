@@ -70,6 +70,11 @@ struct nvk_image_plane {
    uint64_t host_offset;
 };
 
+struct nvk_zcull_plane {
+   struct nil_zcull nil;
+   uint64_t addr;
+};
+
 struct nvk_image {
    struct vk_image vk;
 
@@ -87,6 +92,8 @@ struct nvk_image {
 
    uint8_t plane_count;
    struct nvk_image_plane planes[NVK_MAX_IMAGE_PLANES];
+
+   struct nvk_zcull_plane zcull;
 
    /* In order to support D32_SFLOAT_S8_UINT, a temp area is
     * needed. The stencil plane can't be a copied using the DMA

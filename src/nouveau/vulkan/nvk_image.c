@@ -1026,6 +1026,15 @@ nvk_image_init(struct nvk_device *dev,
       }
    }
 
+   if ((image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
+       image->vk.image_type != VK_IMAGE_TYPE_3D &&
+       image->vk.tiling == VK_IMAGE_TILING_OPTIMAL &&
+       pdev->info.has_zcull_info) {
+      image->zcull.nil = nil_zcull_new(&pdev->info.zcull_info, 0, 0,
+                                       image->vk.extent.width,
+                                       image->vk.extent.height);
+   }
+
    const enum pipe_format plane0_format = image->planes[0].nil.format.p_format;
    if (plane0_format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) {
       struct nil_image_init_info stencil_nil_info = {
@@ -1244,6 +1253,17 @@ nvk_image_plane_add_req(struct nvk_device *dev,
 }
 
 static void
+nvk_image_zcull_add_req(struct nvk_device *dev,
+                        const struct nvk_zcull_plane *zcull,
+                        uint64_t *size_B, uint32_t *align_B)
+{
+   assert(util_is_power_of_two_or_zero64(*align_B));
+   *align_B = MAX2(*align_B, zcull->nil.align_B);
+   *size_B = align64(*size_B, zcull->nil.align_B);
+   *size_B += zcull->nil.size_B;
+}
+
+static void
 nvk_get_image_memory_requirements(struct nvk_device *dev,
                                   struct nvk_image *image,
                                   VkImageAspectFlags aspects,
@@ -1275,6 +1295,10 @@ nvk_get_image_memory_requirements(struct nvk_device *dev,
          nvk_image_plane_add_req(dev, image, &image->planes[plane],
                                  &size_B, &align_B);
       }
+   }
+
+   if (image->zcull.nil.size_B > 0) {
+      nvk_image_zcull_add_req(dev, &image->zcull, &size_B, &align_B);
    }
 
    if (image->stencil_copy_temp.nil.size_B > 0) {
@@ -1577,6 +1601,17 @@ nvk_image_plane_bind(struct nvk_device *dev,
 }
 
 static VkResult
+nvk_image_zcull_bind(struct nvk_zcull_plane *zcull,
+                     struct nvk_device_memory *mem,
+                     uint64_t *offset_B)
+{
+   *offset_B = align64(*offset_B, zcull->nil.align_B);
+   zcull->addr = mem->mem->va->addr + *offset_B;
+   *offset_B += zcull->nil.size_B;
+   return VK_SUCCESS;
+}
+
+static VkResult
 nvk_bind_image_memory(struct nvk_device *dev,
                       const VkBindImageMemoryInfo *info)
 {
@@ -1624,6 +1659,26 @@ nvk_bind_image_memory(struct nvk_device *dev,
          if (result != VK_SUCCESS)
             return result;
       }
+   }
+
+   if (image->zcull.nil.size_B > 0) {
+      result = nvk_image_zcull_bind(&image->zcull, mem, &offset_B);
+      if (result != VK_SUCCESS)
+         return result;
+
+      /*
+       * zcull hardware kills the context if we try to LOAD_ZCULL on garbage
+       * data. Work around this by always initializing the zcull data to zero.
+       */
+      result = nvk_upload_queue_fill(dev, &dev->upload,
+                                     image->zcull.addr,
+                                     0, image->zcull.nil.size_B);
+      if (result != VK_SUCCESS)
+         return result;
+
+      result = nvk_upload_queue_sync(dev, &dev->upload);
+      if (result != VK_SUCCESS)
+         return result;
    }
 
    if (image->stencil_copy_temp.nil.size_B > 0) {
