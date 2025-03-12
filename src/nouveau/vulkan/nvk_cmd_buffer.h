@@ -240,8 +240,6 @@ struct nvk_cmd_buffer {
     */
    struct util_dynarray pushes;
 
-   uint64_t tls_space_needed;
-
    uint8_t prev_subc;
 };
 
