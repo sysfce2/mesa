@@ -2298,6 +2298,17 @@ anv_DestroyImage(VkDevice _device, VkImage _image,
    ANV_RMV(image_destroy, device, image);
 
    assert(&device->vk == image->vk.base.device);
+
+   /* Report UNBIND events for all bindings */
+   for (uint32_t b = 0; b < ARRAY_SIZE(image->bindings); b++) {
+      if (image->bindings[b].address.bo) {
+         struct anv_address addr = anv_address_add(image->bindings[b].address,
+                                                   image->bindings[b].memory_range.offset);
+         ANV_ADDR_BINDING_REPORT_ADDR_UNBIND(device, &image->vk.base, addr,
+                                             image->bindings[b].memory_range.size);
+      }
+   }
+
    anv_image_finish(image);
 
    vk_free2(&device->vk.alloc, pAllocator, image);
@@ -2943,6 +2954,12 @@ anv_image_bind_address(struct anv_device *device,
          image->bindings[binding].map_size = map_size;
       }
    }
+
+   struct anv_address addr = anv_address_add(address,
+                                             image->bindings[binding].memory_range.offset);
+
+   ANV_ADDR_BINDING_REPORT_ADDR_BIND(device, &image->vk.base, addr,
+                                     image->bindings[binding].memory_range.size);
 
    ANV_RMV(image_bind, device, image, binding);
 
