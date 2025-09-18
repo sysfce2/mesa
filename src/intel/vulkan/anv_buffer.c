@@ -33,6 +33,9 @@ anv_bind_buffer_memory(struct anv_device *device,
 
    ANV_RMV(buffer_bind, device, buffer);
 
+   ANV_ADDR_BINDING_REPORT_ADDR_BIND(device, &buffer->vk.base, buffer->address,
+                                     buffer->vk.size);
+
    if (bind_status)
       *bind_status->pResult = VK_SUCCESS;
 }
@@ -266,6 +269,9 @@ void anv_DestroyBuffer(
 
    if (!buffer)
       return;
+
+   ANV_ADDR_BINDING_REPORT_ADDR_UNBIND(device, &buffer->vk.base,
+                                       buffer->address, buffer->vk.size);
 
    ANV_RMV(buffer_destroy, device, buffer);
 
