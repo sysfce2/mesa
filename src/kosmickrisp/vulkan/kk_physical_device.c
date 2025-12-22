@@ -145,6 +145,8 @@ kk_get_device_extensions(const struct kk_instance *instance,
       .GOOGLE_decorate_string = true,
       .GOOGLE_hlsl_functionality1 = true,
       .GOOGLE_user_type = true,
+      .KHR_external_fence_fd = true,
+      .KHR_external_semaphore_fd = true,
    };
 }
 
