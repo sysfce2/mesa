@@ -74,6 +74,19 @@ __anv_perf_warn(struct anv_device *device,
 }
 
 void
+anv_cmd_buffer_descriptor_buffer_debug(struct anv_cmd_buffer *cmd_buffer,
+                                       VkPipelineStageFlags2 stages,
+                                       const char* reason)
+{
+   struct log_stream *stream = mesa_log_streami();
+
+   mesa_log_stream_printf(stream, "descriptors: cmd=%p stages=0x%08"PRIx64": %s\n",
+                          cmd_buffer, stages, reason);
+
+   mesa_log_stream_destroy(stream);
+}
+
+void
 anv_cmd_buffer_pending_pipe_debug(struct anv_cmd_buffer *cmd_buffer,
                                   VkPipelineStageFlags2 src_stages,
                                   VkPipelineStageFlags2 dst_stages,

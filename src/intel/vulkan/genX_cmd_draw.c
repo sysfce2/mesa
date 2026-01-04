@@ -675,7 +675,9 @@ cmd_buffer_maybe_flush_rt_writes(struct anv_cmd_buffer *cmd_buffer,
    }
 
    if (need_rt_flush) {
-      cmd_buffer->state.descriptors_dirty |= VK_SHADER_STAGE_FRAGMENT_BIT;
+      anv_cmd_buffer_dirty_descriptors(cmd_buffer,
+                                       VK_SHADER_STAGE_FRAGMENT_BIT,
+                                       "render target remap");
 #if GFX_VER >= 11
       /* The PIPE_CONTROL command description says:
        *

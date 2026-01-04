@@ -93,6 +93,7 @@ static const struct debug_control debug_control[] = {
    { "video-encode", ANV_DEBUG_VIDEO_ENCODE},
    { "shader-hash",  ANV_DEBUG_SHADER_HASH},
    { "no-slab",      ANV_DEBUG_NO_SLAB},
+   { "desc-dirty",   ANV_DEBUG_DESCRIPTOR_DIRTY},
    { NULL,    0 }
 };
 

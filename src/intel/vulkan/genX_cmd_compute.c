@@ -187,9 +187,11 @@ cmd_buffer_flush_compute_state(struct anv_cmd_buffer *cmd_buffer)
       comp_state->base.push_constants_data_dirty = true;
    }
 
-   cmd_buffer->state.descriptors_dirty |=
+   anv_cmd_buffer_dirty_descriptors(
+      cmd_buffer,
       genX(cmd_buffer_flush_push_descriptors)(cmd_buffer,
-                                              &cmd_buffer->state.compute.base);
+                                              &cmd_buffer->state.compute.base),
+      "dirty compute descriptor");
 
    if ((cmd_buffer->state.descriptors_dirty & VK_SHADER_STAGE_COMPUTE_BIT) ||
        cmd_buffer->state.compute.pipeline_dirty) {

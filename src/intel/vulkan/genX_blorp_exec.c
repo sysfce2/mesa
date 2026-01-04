@@ -458,7 +458,9 @@ blorp_exec_on_compute(struct blorp_batch *batch,
 
    blorp_exec(batch, params);
 
-   cmd_buffer->state.descriptors_dirty |= VK_SHADER_STAGE_COMPUTE_BIT;
+   anv_cmd_buffer_dirty_descriptors(cmd_buffer,
+                                    VK_SHADER_STAGE_COMPUTE_BIT,
+                                    "blorp compute");
    cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_COMPUTE_BIT;
    cmd_buffer->state.compute.pipeline_dirty = true;
 

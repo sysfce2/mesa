@@ -409,7 +409,7 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
    /* If we have emitted a new state base address we probably need to re-emit
     * binding tables.
     */
-   cmd_buffer->state.descriptors_dirty |= ~0;
+   anv_cmd_buffer_dirty_descriptors(cmd_buffer, ~0, "state base address");
 }
 
 void
@@ -490,7 +490,7 @@ genX(cmd_buffer_emit_bt_pool_base_address)(struct anv_cmd_buffer *cmd_buffer)
    /* If we are emitting a new state base address we probably need to re-emit
     * binding tables.
     */
-   cmd_buffer->state.descriptors_dirty |= ~0;
+   anv_cmd_buffer_dirty_descriptors(cmd_buffer, ~0, "bt pool address");
 }
 
 static void

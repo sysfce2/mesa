@@ -437,13 +437,19 @@ set_dirty_for_bind_map(struct anv_cmd_buffer *cmd_buffer,
 {
    assert(stage < ARRAY_SIZE(cmd_buffer->state.surface_sha1s));
    if (mem_update(cmd_buffer->state.surface_sha1s[stage],
-                  map->surface_sha1, sizeof(map->surface_sha1)))
-      cmd_buffer->state.descriptors_dirty |= mesa_to_vk_shader_stage(stage);
+                  map->surface_sha1, sizeof(map->surface_sha1))) {
+      anv_cmd_buffer_dirty_descriptors(cmd_buffer,
+                                       mesa_to_vk_shader_stage(stage),
+                                       "shader surfaces change");
+   }
 
    assert(stage < ARRAY_SIZE(cmd_buffer->state.sampler_sha1s));
    if (mem_update(cmd_buffer->state.sampler_sha1s[stage],
-                  map->sampler_sha1, sizeof(map->sampler_sha1)))
-      cmd_buffer->state.descriptors_dirty |= mesa_to_vk_shader_stage(stage);
+                  map->sampler_sha1, sizeof(map->sampler_sha1))) {
+      anv_cmd_buffer_dirty_descriptors(cmd_buffer,
+                                       mesa_to_vk_shader_stage(stage),
+                                       "shader samplers change");
+   }
 
    assert(stage < ARRAY_SIZE(cmd_buffer->state.push_sha1s));
    if (mem_update(cmd_buffer->state.push_sha1s[stage],
@@ -646,7 +652,7 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
          pipe_state->descriptor_buffers[set_index].buffer_index = -1;
          pipe_state->descriptor_buffers[set_index].buffer_offset = set->desc_offset;
          pipe_state->descriptor_buffers[set_index].bound = true;
-         cmd_buffer->state.descriptors_dirty |= stages;
+         anv_cmd_buffer_dirty_descriptors(cmd_buffer, stages, "push descriptor bind");
          cmd_buffer->state.descriptor_buffers.offsets_dirty |= stages;
       } else {
          /* Plaforms with LSC will use descriptor buffer push constant
@@ -722,7 +728,7 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
    if (set->is_push)
       cmd_buffer->state.push_descriptors_dirty |= dirty_stages;
    else
-      cmd_buffer->state.descriptors_dirty |= dirty_stages;
+      anv_cmd_buffer_dirty_descriptors(cmd_buffer, dirty_stages, "descriptor bind");
    cmd_buffer->state.push_constants_dirty |= dirty_stages;
    pipe_state->push_constants_data_dirty = true;
 }
@@ -833,7 +839,7 @@ anv_cmd_buffer_set_descriptor_buffer_offsets(struct anv_cmd_buffer *cmd_buffer,
           !pipe_state->descriptor_buffers[set_index].bound) {
          pipe_state->descriptor_buffers[set_index].buffer_index = buffer_indices[i];
          pipe_state->descriptor_buffers[set_index].buffer_offset = buffer_offsets[i];
-         cmd_buffer->state.descriptors_dirty |= stages;
+         anv_cmd_buffer_dirty_descriptors(cmd_buffer, stages, "EXT_DB offset");
          cmd_buffer->state.descriptor_buffers.offsets_dirty |= stages;
       }
       pipe_state->descriptor_buffers[set_index].bound = true;

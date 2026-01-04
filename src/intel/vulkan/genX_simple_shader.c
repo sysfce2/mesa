@@ -328,7 +328,9 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
       device,
       device->null_surface_state).offset + bt_offset;
 
-   state->cmd_buffer->state.descriptors_dirty |= VK_SHADER_STAGE_FRAGMENT_BIT;
+   anv_cmd_buffer_dirty_descriptors(state->cmd_buffer,
+                                    VK_SHADER_STAGE_FRAGMENT_BIT,
+                                    "simple shader");
 #endif
 
 #if INTEL_WA_14018283232_GFX_VER
