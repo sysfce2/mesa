@@ -7064,16 +7064,18 @@ void genX(cmd_emit_timestamp)(struct anv_batch *batch,
             fd.Address = addr;
          }
       } else {
-         genx_batch_emit_pipe_control_write(batch, device->info, 0,
-                                            WriteTimestamp, addr, 0, 0);
+         genX(batch_emit_pipe_control_write)(batch, device->info, 0,
+                                             WriteTimestamp, addr, 0, 0,
+                                             NULL /* no reason */);
       }
       break;
    }
 
    case ANV_TIMESTAMP_CAPTURE_AT_CS_STALL:
-      genx_batch_emit_pipe_control_write
-           (batch, device->info, 0, WriteTimestamp, addr, 0,
-            ANV_PIPE_CS_STALL_BIT);
+      genX(batch_emit_pipe_control_write)(batch, device->info, 0,
+                                          WriteTimestamp, addr, 0,
+                                          ANV_PIPE_CS_STALL_BIT,
+                                          NULL /* no reason */);
       break;
 
 #if GFX_VERx10 >= 125
