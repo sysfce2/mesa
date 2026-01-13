@@ -27,6 +27,7 @@ foreach ver : ['4', '5', '6', '7', '9', '10', '12', '13']
     'pan-arch-v' + ver,
     [
       'pan_blend.c',
+      'pan_buffer.c',
       'pan_desc.c',
       'pan_fb.c',
       'pan_fb_nir.c',

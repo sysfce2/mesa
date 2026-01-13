@@ -18,8 +18,6 @@
 
 struct pan_ptr;
 struct mali_texture_packed;
-struct mali_buffer_packed;
-struct pan_buffer_view;
 
 #if PAN_ARCH >= 7
 void GENX(pan_texture_swizzle_replicate_x)(struct pan_image_view *iview);
@@ -76,19 +74,6 @@ void GENX(pan_tex_emit_interleaved_64k_payload_entry)(
 void GENX(pan_tex_emit_afrc_payload_entry)(
       const struct pan_image_view *iview, unsigned mip_level,
       unsigned layer_or_z_slice, unsigned sample, void **payload);
-#endif
-
-#if PAN_ARCH >= 9
-void GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
-                                   struct mali_buffer_packed *out);
-#elif PAN_ARCH >= 6
-void GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
-                                   struct mali_attribute_buffer_packed *out_buf,
-                                   struct mali_attribute_packed *out_attrib);
-#else
-void GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
-                                   struct mali_texture_packed *out,
-                                   const struct pan_ptr *payload);
 #endif
 
 #endif

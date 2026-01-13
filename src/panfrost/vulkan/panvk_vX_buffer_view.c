@@ -18,9 +18,9 @@
 #include "panvk_priv_bo.h"
 
 #include "pan_afbc.h"
+#include "pan_buffer.h"
 #include "pan_desc.h"
 #include "pan_props.h"
-#include "pan_texture.h"
 
 #include "vk_format.h"
 #include "vk_log.h"
