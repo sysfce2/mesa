@@ -443,6 +443,11 @@ anv_nir_compute_push_layout(nir_shader *nir,
       if (candidate_range->length == 0)
          break;
 
+      if (candidate_range->set == ANV_DESCRIPTOR_SET_DESCRIPTORS) {
+         assert(candidate_range->index < MAX_SETS);
+         map->pushed_sets |= BITFIELD_BIT(candidate_range->index);
+      }
+
       map->push_ranges[n_push_ranges++] = *candidate_range;
       total_push_regs += candidate_range->length;
    }

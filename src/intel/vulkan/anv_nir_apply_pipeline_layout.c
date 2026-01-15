@@ -135,12 +135,18 @@ addr_format_for_desc_type(VkDescriptorType desc_type,
 
 static struct anv_binding_apply_layout *
 add_binding(struct apply_pipeline_layout_state *state,
-            uint32_t set, uint32_t binding)
+            uint32_t set, uint32_t binding,
+            bool sampler)
 {
    const struct anv_descriptor_set_layout *set_layout =
       state->set_layouts[set];
    const struct anv_descriptor_set_binding_layout *bind_layout =
       &set_layout->binding[binding];
+
+   if (sampler)
+      state->bind_map->used_sampler_sets |= BITFIELD_BIT(set);
+   else
+      state->bind_map->used_surface_sets |= BITFIELD_BIT(set);
 
    assert(set < state->set_count);
    assert(binding < set_layout->binding_count);
@@ -180,7 +186,7 @@ static void
 add_binding_type(struct apply_pipeline_layout_state *state,
                  uint32_t set, uint32_t binding, VkDescriptorType type)
 {
-   add_binding(state, set, binding);
+   add_binding(state, set, binding, false);
 
    const struct anv_descriptor_set_layout *set_layout =
       state->set_layouts[set];
@@ -205,23 +211,27 @@ add_binding_type(struct apply_pipeline_layout_state *state,
 }
 
 static struct anv_binding_apply_layout *
-add_deref_src_binding(struct apply_pipeline_layout_state *state, nir_src src)
+add_deref_src_binding(struct apply_pipeline_layout_state *state, nir_src src,
+                      bool sampler)
 {
    nir_deref_instr *deref = nir_src_as_deref(src);
    nir_variable *var = nir_deref_instr_get_variable(deref);
-   return add_binding(state, var->data.descriptor_set, var->data.binding);
+   return add_binding(state, var->data.descriptor_set, var->data.binding, sampler);
 }
 
 static void
 add_tex_src_binding(struct apply_pipeline_layout_state *state,
-                    nir_tex_instr *tex, nir_tex_src_type deref_src_type)
+                    nir_tex_instr *tex,
+                    nir_tex_src_type deref_src_type)
 {
    int deref_src_idx = nir_tex_instr_src_index(tex, deref_src_type);
    if (deref_src_idx < 0)
       return;
 
    struct anv_binding_apply_layout *layout =
-      add_deref_src_binding(state, tex->src[deref_src_idx].src);
+      add_deref_src_binding(state,
+                            tex->src[deref_src_idx].src,
+                            deref_src_type == nir_tex_src_sampler_deref);
 
    /* Track input attachments use */
    nir_variable *var =
@@ -287,7 +297,7 @@ get_used_bindings(UNUSED nir_builder *_b, nir_instr *instr, void *_state)
       case nir_intrinsic_image_deref_load_raw_intel:
       case nir_intrinsic_image_deref_store_raw_intel:
       case nir_intrinsic_image_deref_sparse_load:
-         add_deref_src_binding(state, intrin->src[0]);
+         add_deref_src_binding(state, intrin->src[0], false);
          break;
 
       case nir_intrinsic_load_constant:

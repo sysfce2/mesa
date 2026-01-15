@@ -86,6 +86,9 @@ anv_shader_deserialize(struct vk_device *vk_device,
    blob_copy_bytes(blob, data.bind_map.input_attachments,
                    sizeof(data.bind_map.input_attachments));
    blob_copy_bytes(blob, data.bind_map.push_ranges, sizeof(data.bind_map.push_ranges));
+   data.bind_map.used_surface_sets = blob_read_uint8(blob);
+   data.bind_map.used_sampler_sets = blob_read_uint8(blob);
+   data.bind_map.pushed_sets = blob_read_uint8(blob);
    blob_copy_bytes(blob, data.bind_map.dynamic_descriptors,
                    sizeof(data.bind_map.dynamic_descriptors));
 
@@ -164,6 +167,9 @@ anv_shader_serialize(struct vk_device *device,
                     sizeof(shader->bind_map.input_attachments));
    blob_write_bytes(blob, shader->bind_map.push_ranges,
                     sizeof(shader->bind_map.push_ranges));
+   blob_write_uint8(blob, shader->bind_map.used_surface_sets);
+   blob_write_uint8(blob, shader->bind_map.used_sampler_sets);
+   blob_write_uint8(blob, shader->bind_map.pushed_sets);
    blob_write_bytes(blob, shader->bind_map.dynamic_descriptors,
                     sizeof(shader->bind_map.dynamic_descriptors));
 

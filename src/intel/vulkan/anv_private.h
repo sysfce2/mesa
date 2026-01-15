@@ -1174,6 +1174,15 @@ struct anv_pipeline_bind_map {
 
    struct anv_push_range                        push_ranges[4];
 
+   /* Bitfield of sets for which the surfaces are accessed */
+   uint8_t                                      used_surface_sets;
+
+   /* Bitfield of sets for which the samplers are accessed */
+   uint8_t                                      used_sampler_sets;
+
+   /* Bitfield of sets promoted to push constants */
+   uint8_t                                      pushed_sets;
+
    /* Number of dynamic descriptor in each set */
    uint8_t                                      dynamic_descriptors[MAX_SETS];
 };
