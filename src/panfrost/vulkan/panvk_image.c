@@ -241,17 +241,17 @@ panvk_image_can_use_mod(struct panvk_image *image,
           (image->vk.create_flags & VK_IMAGE_CREATE_DISJOINT_BIT))
          return false;
 
-      /* No ms with AFBC, but we need to create multisampled images in the
-       * background for which the view formats need to be compatible to avoid
-       * headaches when copying --> disable afbc for the base image as well.
-       * When copying the depth plane block sizes aren't matching between
-       * utiled and afbc, thus the views created for the ms images are
-       * invalid.
+#if PAN_ARCH < 7
+      /* On v6 and earlier, we can't reliably resolve directly to AFBC images
+       * (see avoid_direct_resolve_to() in panvk_vX_cmd_draw.c).  For MS2SS,
+       * this means we know a priori that the single-sampled image is going to
+       * be a resolve target.  It's better to leave it uncompressed than to
+       * eat the separate resolves.
        */
       if (image->vk.create_flags &
-          VK_IMAGE_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT) {
+          VK_IMAGE_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT)
          return false;
-      }
+#endif
    }
 
    if (mod == DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED) {
@@ -647,10 +647,6 @@ create_ms_images(struct panvk_device *dev, struct panvk_image *img,
       struct panvk_image *res = panvk_image_from_handle(img->ms_imgs[msaa_idx]);
       assert(res->vk.format == img->vk.format);
       assert(res->plane_count == img->plane_count);
-      for (uint32_t i = 0; i < res->plane_count; ++i) {
-         assert(res->planes[i].image.props.format ==
-                img->planes[i].image.props.format);
-      }
    }
 }
 
