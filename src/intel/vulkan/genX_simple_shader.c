@@ -300,16 +300,10 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
 #endif
 
 #if GFX_VER == 9
-   /* Allocate a binding table for Gfx9 for 2 reason :
-    *
-    *   1. we need a to emit a 3DSTATE_BINDING_TABLE_POINTERS_PS to make the
-    *      HW apply the preceding 3DSTATE_CONSTANT_PS
-    *
-    *   2. Emitting an empty 3DSTATE_BINDING_TABLE_POINTERS_PS would cause RT
-    *      writes (even though they're empty) to disturb later writes
-    *      (probably due to RT cache)
-    *
-    * Our binding table only has one entry to the null surface.
+   /* Allocate a binding table for Gfx9 because the HW does not have a null-rt
+    * bit in the render target write descriptor. Every FS thread needs to
+    * write a render target to end and so will produce some output that needs
+    * to be discard if there is no render target.
     */
    uint32_t bt_offset;
    state->bt_state =

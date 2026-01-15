@@ -150,12 +150,12 @@ cmd_buffer_emit_descriptor_pointers(struct anv_cmd_buffer *cmd_buffer,
          }
       }
 
-      /* Always emit binding table pointers if we're asked to, since on SKL
-       * this is what flushes push constants. */
-      anv_batch_emit(&cmd_buffer->batch,
-                     GENX(3DSTATE_BINDING_TABLE_POINTERS_VS), btp) {
-         btp._3DCommandSubOpcode = binding_table_opcodes[s];
-         btp.PointertoVSBindingTable = cmd_buffer->state.binding_tables[s].offset;
+      if (cmd_buffer->state.binding_tables[s].alloc_size > 0) {
+         anv_batch_emit(&cmd_buffer->batch,
+                        GENX(3DSTATE_BINDING_TABLE_POINTERS_VS), btp) {
+            btp._3DCommandSubOpcode = binding_table_opcodes[s];
+            btp.PointertoVSBindingTable = cmd_buffer->state.binding_tables[s].offset;
+         }
       }
    }
 }
@@ -962,19 +962,20 @@ cmd_buffer_flush_gfx_state(struct anv_cmd_buffer *cmd_buffer)
       /* Because we're pushing UBOs, we have to push whenever either
        * descriptors or push constants is dirty.
        */
-      dirty |= cmd_buffer->state.push_constants_dirty & gfx->active_stages;
+      VkShaderStageFlags push_stages = dirty |
+         (cmd_buffer->state.push_constants_dirty & gfx->active_stages);
 #if INTEL_NEEDS_WA_1604061319
       /* Testing shows that all the 3DSTATE_CONSTANT_XS need to be emitted if
        * any stage has 3DSTATE_CONSTANT_XS emitted.
        */
-      dirty |= gfx->active_stages;
+      push_stages |= gfx->active_stages;
 #endif
       cmd_buffer_flush_gfx_push_constants(cmd_buffer,
-                                          dirty & VK_SHADER_STAGE_ALL_GRAPHICS);
+                                          push_stages & VK_SHADER_STAGE_ALL_GRAPHICS);
 #if GFX_VERx10 >= 125
       cmd_buffer_flush_mesh_inline_data(
-         cmd_buffer, dirty & (VK_SHADER_STAGE_TASK_BIT_EXT |
-                              VK_SHADER_STAGE_MESH_BIT_EXT));
+         cmd_buffer, push_stages & (VK_SHADER_STAGE_TASK_BIT_EXT |
+                                    VK_SHADER_STAGE_MESH_BIT_EXT));
 #endif
    }
 
