@@ -193,16 +193,18 @@ cmd_buffer_flush_compute_state(struct anv_cmd_buffer *cmd_buffer)
                                               &cmd_buffer->state.compute.base),
       "dirty compute descriptor");
 
-   if ((cmd_buffer->state.descriptors_dirty & VK_SHADER_STAGE_COMPUTE_BIT) ||
-       cmd_buffer->state.compute.pipeline_dirty) {
-      genX(cmd_buffer_flush_descriptor_sets)(
-         cmd_buffer,
-         &cmd_buffer->state.compute.base,
-         VK_SHADER_STAGE_COMPUTE_BIT,
-         (const struct anv_shader **)&comp_state->shader, 1);
+   if (cmd_buffer->state.descriptors_dirty & VK_SHADER_STAGE_COMPUTE_BIT) {
+      cmd_buffer->state.descriptors_pointers_dirty |=
+         genX(cmd_buffer_flush_descriptor_sets)(
+            cmd_buffer,
+            &cmd_buffer->state.compute.base,
+            VK_SHADER_STAGE_COMPUTE_BIT,
+            (const struct anv_shader **)&comp_state->shader, 1);
       cmd_buffer->state.descriptors_dirty &= ~VK_SHADER_STAGE_COMPUTE_BIT;
-
+   }
 #if GFX_VERx10 < 125
+   if ((cmd_buffer->state.descriptors_pointers_dirty & VK_SHADER_STAGE_COMPUTE_BIT) ||
+       cmd_buffer->state.compute.pipeline_dirty) {
       uint32_t iface_desc_data_dw[GENX(INTERFACE_DESCRIPTOR_DATA_length)];
       struct GENX(INTERFACE_DESCRIPTOR_DATA) desc = {
          .BindingTablePointer =
@@ -224,8 +226,8 @@ cmd_buffer_flush_compute_state(struct anv_cmd_buffer *cmd_buffer)
          mid.InterfaceDescriptorTotalLength        = size;
          mid.InterfaceDescriptorDataStartAddress   = state.offset;
       }
-#endif
    }
+#endif
 
    if (cmd_buffer->state.push_constants_dirty & VK_SHADER_STAGE_COMPUTE_BIT) {
 

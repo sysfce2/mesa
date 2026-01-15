@@ -632,8 +632,6 @@ cmd_buffer_flush_mesh_inline_data(struct anv_cmd_buffer *cmd_buffer,
          data.InlineData[ANV_INLINE_PARAM_MESH_PROVOKING_VERTEX / 4]   = gfx->dyn_state.mesh_provoking_vertex;
       }
    }
-
-   cmd_buffer->state.push_constants_dirty &= ~dirty_stages;
 }
 #endif
 
@@ -833,19 +831,30 @@ cmd_buffer_flush_gfx_state(struct anv_cmd_buffer *cmd_buffer)
 
    const bool any_dynamic_state_dirty =
       vk_dynamic_graphics_state_any_dirty(dyn);
-   uint32_t descriptors_dirty = cmd_buffer->state.descriptors_dirty &
-                                gfx->active_stages;
 
-   descriptors_dirty |=
+   cmd_buffer->state.descriptors_dirty |=
       genX(cmd_buffer_flush_push_descriptors)(cmd_buffer,
                                               &cmd_buffer->state.gfx.base);
 
-   if (!cmd_buffer->state.gfx.dirty && !descriptors_dirty &&
+   uint32_t descriptors_dirty = cmd_buffer->state.descriptors_dirty &
+                                gfx->active_stages;
+   cmd_buffer->state.descriptors_pointers_dirty |=
+      descriptors_dirty & VK_SHADER_STAGE_ALL_GRAPHICS;
+   uint32_t descriptors_pointers_dirty =
+      cmd_buffer->state.descriptors_pointers_dirty & gfx->active_stages;
+
+   /* Because we're pushing UBOs, we have to push whenever either descriptors
+    * or push constants is dirty.
+    */
+   uint32_t push_constants_dirty =
+      (cmd_buffer->state.push_constants_dirty |
+       cmd_buffer->state.descriptors_dirty) & gfx->active_stages;
+
+   if (!cmd_buffer->state.gfx.dirty &&
+       !descriptors_dirty &&
+       !descriptors_pointers_dirty &&
        !any_dynamic_state_dirty &&
-       ((cmd_buffer->state.push_constants_dirty &
-         (VK_SHADER_STAGE_ALL_GRAPHICS |
-          VK_SHADER_STAGE_TASK_BIT_EXT |
-          VK_SHADER_STAGE_MESH_BIT_EXT)) == 0))
+       !push_constants_dirty)
       return;
 
    if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_XFB_ENABLE) {
@@ -955,42 +964,37 @@ cmd_buffer_flush_gfx_state(struct anv_cmd_buffer *cmd_buffer)
     * emitting push constants, on SKL+ we have to emit the corresponding
     * 3DSTATE_BINDING_TABLE_POINTER_* for the push constants to take effect.
     */
-   uint32_t dirty = 0;
    if (descriptors_dirty) {
-      dirty = genX(cmd_buffer_flush_descriptor_sets)(
-         cmd_buffer,
-         &cmd_buffer->state.gfx.base,
-         descriptors_dirty,
-         (const struct anv_shader **)gfx->shaders,
-         ARRAY_SIZE(gfx->shaders));
-      cmd_buffer->state.descriptors_dirty &= ~dirty;
+      descriptors_pointers_dirty |=
+         genX(cmd_buffer_flush_descriptor_sets)(
+            cmd_buffer,
+            &cmd_buffer->state.gfx.base,
+            descriptors_dirty,
+            (const struct anv_shader **)gfx->shaders,
+            ARRAY_SIZE(gfx->shaders)) & VK_SHADER_STAGE_ALL_GRAPHICS;
    }
 
-   if (dirty || cmd_buffer->state.push_constants_dirty) {
-      /* Because we're pushing UBOs, we have to push whenever either
-       * descriptors or push constants is dirty.
-       */
-      VkShaderStageFlags push_stages = dirty |
-         (cmd_buffer->state.push_constants_dirty & gfx->active_stages);
+   push_constants_dirty = (cmd_buffer->state.push_constants_dirty |
+                           cmd_buffer->state.descriptors_dirty) & gfx->active_stages;
+   if (push_constants_dirty) {
 #if INTEL_NEEDS_WA_1604061319
       /* Testing shows that all the 3DSTATE_CONSTANT_XS need to be emitted if
        * any stage has 3DSTATE_CONSTANT_XS emitted.
        */
-      push_stages |= gfx->active_stages;
+      push_constants_dirty |= gfx->active_stages;
 #endif
-      cmd_buffer_flush_gfx_push_constants(cmd_buffer,
-                                          push_stages & VK_SHADER_STAGE_ALL_GRAPHICS);
+      cmd_buffer_flush_gfx_push_constants(
+         cmd_buffer,
+         push_constants_dirty & VK_SHADER_STAGE_ALL_GRAPHICS);
 #if GFX_VERx10 >= 125
       cmd_buffer_flush_mesh_inline_data(
-         cmd_buffer, push_stages & (VK_SHADER_STAGE_TASK_BIT_EXT |
-                                    VK_SHADER_STAGE_MESH_BIT_EXT));
+         cmd_buffer, push_constants_dirty & (VK_SHADER_STAGE_TASK_BIT_EXT |
+                                             VK_SHADER_STAGE_MESH_BIT_EXT));
 #endif
    }
 
-   if (dirty & VK_SHADER_STAGE_ALL_GRAPHICS) {
-      cmd_buffer_emit_descriptor_pointers(cmd_buffer,
-                                          dirty & VK_SHADER_STAGE_ALL_GRAPHICS);
-   }
+   if (descriptors_pointers_dirty)
+      cmd_buffer_emit_descriptor_pointers(cmd_buffer, descriptors_pointers_dirty);
 
 #if GFX_VER >= 20
    if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_INDIRECT_DATA_STRIDE) {
@@ -1002,6 +1006,8 @@ cmd_buffer_flush_gfx_state(struct anv_cmd_buffer *cmd_buffer)
    }
 #endif
 
+   cmd_buffer->state.descriptors_dirty &= ~descriptors_dirty;
+   cmd_buffer->state.descriptors_pointers_dirty &= ~descriptors_pointers_dirty;
    cmd_buffer->state.gfx.dirty = 0;
 }
 
