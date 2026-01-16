@@ -633,7 +633,8 @@ struct brw_fs_prog_data {
 
    /**
     * Push constant location of the remapping offset in the instruction heap
-    * for Wa_18019110168 in bytes.
+    * for Wa_18019110168 in bytes (the value read by the compiler is a
+    * uint16_t).
     */
    unsigned per_primitive_remap_param;
 

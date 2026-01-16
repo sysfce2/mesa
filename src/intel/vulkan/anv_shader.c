@@ -85,7 +85,11 @@ anv_shader_deserialize(struct vk_device *vk_device,
                             sizeof(*data.bind_map.embedded_sampler_to_binding));
    blob_copy_bytes(blob, data.bind_map.input_attachments,
                    sizeof(data.bind_map.input_attachments));
-   blob_copy_bytes(blob, data.bind_map.push_ranges, sizeof(data.bind_map.push_ranges));
+   blob_copy_bytes(blob, data.bind_map.push_ranges,
+                   sizeof(data.bind_map.push_ranges));
+   data.bind_map.inline_dwords_count = blob_read_uint8(blob);
+   blob_copy_bytes(blob, data.bind_map.inline_dwords,
+                   data.bind_map.inline_dwords_count);
    data.bind_map.used_surface_sets = blob_read_uint8(blob);
    data.bind_map.used_sampler_sets = blob_read_uint8(blob);
    data.bind_map.pushed_sets = blob_read_uint8(blob);
@@ -167,6 +171,9 @@ anv_shader_serialize(struct vk_device *device,
                     sizeof(shader->bind_map.input_attachments));
    blob_write_bytes(blob, shader->bind_map.push_ranges,
                     sizeof(shader->bind_map.push_ranges));
+   blob_write_uint8(blob, shader->bind_map.inline_dwords_count);
+   blob_write_bytes(blob, shader->bind_map.inline_dwords,
+                    shader->bind_map.inline_dwords_count);
    blob_write_uint8(blob, shader->bind_map.used_surface_sets);
    blob_write_uint8(blob, shader->bind_map.used_sampler_sets);
    blob_write_uint8(blob, shader->bind_map.pushed_sets);
@@ -263,7 +270,8 @@ write_ir_text(VkPipelineExecutableInternalRepresentationKHR* ir,
 }
 
 static char *
-get_shader_bind_map_text(const struct anv_shader *shader)
+get_shader_bind_map_text(const struct anv_device *device,
+                         const struct anv_shader *shader)
 {
    char *stream_data = NULL;
    size_t stream_size = 0;
@@ -314,7 +322,13 @@ get_shader_bind_map_text(const struct anv_shader *shader)
          fprintf(stream, "\n");
       }
       fprintf(stream, "\n");
+   }
 
+   if (shader->bind_map.inline_dwords_count > 0) {
+      fprintf(stream, "Inline promoted dwords: ");
+      for (unsigned i = 0; i < bind_map->inline_dwords_count; i++)
+         fprintf(stream, "%hhu, ", bind_map->inline_dwords[i]);
+      fprintf(stream, "\n");
    }
 
    fclose(stream);
@@ -394,7 +408,7 @@ anv_shader_get_executable_internal_representations(
       }
    }
 
-   char *bind_map_text = get_shader_bind_map_text(shader);
+   char *bind_map_text = get_shader_bind_map_text(device, shader);
    if (bind_map_text != NULL) {
       vk_outarray_append_typed(VkPipelineExecutableInternalRepresentationKHR, &out, ir) {
          VK_COPY_STR(ir->name, "Shader push map");

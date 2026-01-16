@@ -977,9 +977,20 @@ anv_shader_compile_task(struct anv_device *device,
 static nir_def *
 mesh_load_provoking_vertex(nir_builder *b, void *data)
 {
-   return nir_load_inline_data_intel(
-      b, 1, 32, nir_imm_int(b, 0),
-      .base = ANV_INLINE_PARAM_MESH_PROVOKING_VERTEX);
+   const struct anv_pipeline_bind_map *bind_map = data;
+
+   for (uint32_t i = 0; i < bind_map->inline_dwords_count; i++) {
+      if (bind_map->inline_dwords[i] == anv_drv_const_dword(gfx.mesh_provoking_vertex)) {
+         return nir_load_inline_data_intel(
+            b, 1, 16, nir_imm_int(b, 0),
+            .base = i * 4 + anv_drv_const_offset(gfx.mesh_provoking_vertex) % 4);
+      }
+   }
+
+   return nir_load_push_data_intel(b, 1, 16, nir_imm_int(b, 0),
+                                   .base = anv_drv_const_offset(gfx.mesh_provoking_vertex) -
+                                           bind_map->push_ranges[0].start,
+                                   .range = anv_drv_const_size(gfx.mesh_provoking_vertex));
 }
 
 static void
@@ -1009,6 +1020,7 @@ anv_shader_compile_mesh(struct anv_device *device,
                  &task_shader_data->prog_data.task.map :
                  NULL,
       .load_provoking_vertex = mesh_load_provoking_vertex,
+      .load_provoking_vertex_data = (void *)&mesh_shader_data->bind_map,
    };
 
    mesh_shader_data->code = (void *)brw_compile_mesh(compiler, &params);

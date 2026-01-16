@@ -47,7 +47,7 @@ lower_base_workgroup_id(nir_builder *b, nir_intrinsic_instr *intrin)
    b->cursor = nir_before_instr(&intrin->instr);
 
    nir_def *base_workgroup_id =
-      anv_load_driver_uniform(b, 3, cs.base_work_group_id[0]);
+      anv_load_driver_uniform(b, 3, cs.base_workgroup[0]);
    nir_def_replace(&intrin->def, base_workgroup_id);
 
    return true;
@@ -105,22 +105,9 @@ lower_num_workgroups(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
    if (mesa_shader_stage_is_mesh(b->shader->info.stage))
       return false;
 
-   const struct anv_physical_device *pdevice = data;
-
    b->cursor = nir_before_instr(&intrin->instr);
-   nir_def *num_workgroups;
-   /* On Gfx12.5+ we use the inline register to push the values, on prior
-    * generation we use push constants.
-    */
-   if (pdevice->info.verx10 >= 125) {
-      num_workgroups =
-         nir_load_inline_data_intel(
-            b, 3, 32, nir_imm_int(b, 0),
-            .base = ANV_INLINE_PARAM_NUM_WORKGROUPS_OFFSET);
-   } else {
-      num_workgroups =
-         anv_load_driver_uniform(b, 3, cs.num_work_groups[0]);
-   }
+   nir_def *num_workgroups =
+      anv_load_driver_uniform(b, 3, cs.num_workgroups[0]);
 
    nir_def *num_workgroups_indirect;
    nir_push_if(b, nir_ieq_imm(b, nir_channel(b, num_workgroups, 0), UINT32_MAX));

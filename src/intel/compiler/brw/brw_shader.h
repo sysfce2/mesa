@@ -283,7 +283,7 @@ brw_dynamic_per_primitive_remap(const struct brw_fs_prog_data *fs_prog_data)
 {
    return byte_offset(
       brw_uniform_reg(
-         fs_prog_data->per_primitive_remap_param / REG_SIZE, BRW_TYPE_UD),
+         fs_prog_data->per_primitive_remap_param / REG_SIZE, BRW_TYPE_UW),
       fs_prog_data->per_primitive_remap_param % REG_SIZE);
 }
 

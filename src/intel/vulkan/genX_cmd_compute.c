@@ -26,6 +26,7 @@
 
 #include "anv_private.h"
 #include "anv_measure.h"
+#include "anv_nir.h"
 
 #include "common/intel_common.h"
 #include "common/intel_compute_slm.h"
@@ -262,62 +263,60 @@ genX(cmd_buffer_flush_compute_state)(struct anv_cmd_buffer *cmd_buffer)
 }
 
 static void
-anv_cmd_buffer_push_workgroups(struct anv_cmd_buffer *cmd_buffer,
-                               const struct anv_pipeline_bind_map *bind_map,
-                               uint32_t baseGroupX,
-                               uint32_t baseGroupY,
-                               uint32_t baseGroupZ,
-                               uint32_t groupCountX,
-                               uint32_t groupCountY,
-                               uint32_t groupCountZ,
-                               struct anv_address indirect_group)
+anv_cmd_buffer_push_driver_values(struct anv_cmd_buffer *cmd_buffer,
+                                  const struct anv_pipeline_bind_map *bind_map,
+                                  uint32_t baseGroupX,
+                                  uint32_t baseGroupY,
+                                  uint32_t baseGroupZ,
+                                  uint32_t groupCountX,
+                                  uint32_t groupCountY,
+                                  uint32_t groupCountZ,
+                                  struct anv_address indirect_group,
+                                  uint32_t unaligned_x_offset)
 {
    if (anv_batch_has_error(&cmd_buffer->batch))
       return;
 
+#define UPDATE_PUSH(field, value) do {          \
+      if (field != value) {                     \
+         field = value;                         \
+         updated = true;                        \
+      }                                         \
+   } while(0)
+
    struct anv_push_constants *push =
       &cmd_buffer->state.compute.base.push_constants;
    bool updated = false;
-   if (push->cs.base_work_group_id[0] != baseGroupX ||
-       push->cs.base_work_group_id[1] != baseGroupY ||
-       push->cs.base_work_group_id[2] != baseGroupZ) {
-      push->cs.base_work_group_id[0] = baseGroupX;
-      push->cs.base_work_group_id[1] = baseGroupY;
-      push->cs.base_work_group_id[2] = baseGroupZ;
-      updated = true;
+   if (bind_map->binding_mask & ANV_PIPELINE_BIND_MASK_BASE_WORKGROUP) {
+      UPDATE_PUSH(push->cs.base_workgroup[0], baseGroupX);
+      UPDATE_PUSH(push->cs.base_workgroup[1], baseGroupY);
+      UPDATE_PUSH(push->cs.base_workgroup[2], baseGroupZ);
    }
 
-   /* On Gfx12.5+ this value goes into the inline parameter register */
-   if (GFX_VERx10 < 125 &&
-       (bind_map->binding_mask & ANV_PIPELINE_BIND_MASK_USES_NUM_WORKGROUP)) {
+   if (bind_map->binding_mask & ANV_PIPELINE_BIND_MASK_NUM_WORKGROUP) {
       if (anv_address_is_null(indirect_group)) {
-         if (push->cs.num_work_groups[0] != groupCountX ||
-             push->cs.num_work_groups[1] != groupCountY ||
-             push->cs.num_work_groups[2] != groupCountZ) {
-            push->cs.num_work_groups[0] = groupCountX;
-            push->cs.num_work_groups[1] = groupCountY;
-            push->cs.num_work_groups[2] = groupCountZ;
-            updated = true;
-         }
+         UPDATE_PUSH(push->cs.num_workgroups[0], groupCountX);
+         UPDATE_PUSH(push->cs.num_workgroups[1], groupCountY);
+         UPDATE_PUSH(push->cs.num_workgroups[2], groupCountZ);
       } else {
          uint64_t addr64 = anv_address_physical(indirect_group);
          uint32_t lower_addr32 = addr64 & 0xffffffff;
          uint32_t upper_addr32 = addr64 >> 32;
-         if (push->cs.num_work_groups[0] != UINT32_MAX ||
-             push->cs.num_work_groups[1] != lower_addr32 ||
-             push->cs.num_work_groups[2] != upper_addr32) {
-            push->cs.num_work_groups[0] = UINT32_MAX;
-            push->cs.num_work_groups[1] = lower_addr32;
-            push->cs.num_work_groups[2] = upper_addr32;
-            updated = true;
-         }
+         UPDATE_PUSH(push->cs.num_workgroups[0], UINT32_MAX);
+         UPDATE_PUSH(push->cs.num_workgroups[1], lower_addr32);
+         UPDATE_PUSH(push->cs.num_workgroups[2], upper_addr32);
       }
    }
+
+   if (bind_map->binding_mask & ANV_PIPELINE_BIND_MASK_UNALIGNED_INV_X)
+      UPDATE_PUSH(push->cs.unaligned_invocations_x, unaligned_x_offset);
 
    if (updated) {
       cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_COMPUTE_BIT;
       cmd_buffer->state.compute.base.push_constants_data_dirty = true;
    }
+
+#undef UPDATE_PUSH
 }
 
 #define GPGPU_DISPATCHDIMX 0x2500
@@ -435,6 +434,48 @@ compute_update_async_threads_limit(struct anv_cmd_buffer *cmd_buffer,
    }
 }
 
+static inline uint32_t
+fill_inline_param(uint8_t param_value,
+                  const uint32_t *push_data,
+                  uint64_t push_addr64,
+                  uint32_t base_wg[3],
+                  uint32_t num_wg[3],
+                  uint32_t unaligned_x_offset)
+{
+   switch (param_value) {
+   case ANV_INLINE_DWORD_PUSH_ADDRESS_LDW:               return push_addr64 & 0xffffffff;
+   case ANV_INLINE_DWORD_PUSH_ADDRESS_UDW:               return push_addr64 >> 32;
+   case anv_drv_const_dword(cs.num_workgroups[0]):       return num_wg[0];
+   case anv_drv_const_dword(cs.num_workgroups[1]):       return num_wg[1];
+   case anv_drv_const_dword(cs.num_workgroups[2]):       return num_wg[2];
+   case anv_drv_const_dword(cs.base_workgroup[0]):       return base_wg[0];
+   case anv_drv_const_dword(cs.base_workgroup[1]):       return base_wg[1];
+   case anv_drv_const_dword(cs.base_workgroup[2]):       return base_wg[2];
+   case anv_drv_const_dword(cs.unaligned_invocations_x): return unaligned_x_offset;
+   default:                                              return push_data[param_value];
+   }
+}
+
+static inline void
+fill_inline_params(struct GENX(COMPUTE_WALKER_BODY) *body,
+                   const struct anv_cmd_compute_state *comp_state,
+                   uint64_t push_addr64,
+                   uint32_t base_wg[3],
+                   uint32_t num_wg[3],
+                   uint32_t unaligned_x_offset)
+{
+   const uint32_t *push_data =
+      (const uint32_t *)&comp_state->base.push_constants;
+   const struct anv_pipeline_bind_map *bind_map =
+      &comp_state->shader->bind_map;
+
+   for (uint32_t i = 0; i < bind_map->inline_dwords_count; i++) {
+      body->InlineData[i] = fill_inline_param(
+         bind_map->inline_dwords[i], push_data, push_addr64,
+         base_wg, num_wg, unaligned_x_offset);
+   }
+}
+
 static inline void
 emit_indirect_compute_walker(struct anv_cmd_buffer *cmd_buffer,
                              const struct brw_cs_prog_data *prog_data,
@@ -457,6 +498,23 @@ emit_indirect_compute_walker(struct anv_cmd_buffer *cmd_buffer,
 
    compute_update_async_threads_limit(cmd_buffer, prog_data, &dispatch);
 
+   struct GENX(COMPUTE_WALKER_BODY) body = {
+      .InterfaceDescriptor     = get_interface_descriptor_data_tables(cmd_buffer),
+      .ExecutionMask           = dispatch.right_mask,
+      .PostSync                = {
+         .MOCS                 = anv_mocs(cmd_buffer->device, NULL, 0),
+      },
+   };
+
+   uint32_t num_workgroup_data[3] = {
+      UINT32_MAX,
+      indirect_addr64 & 0xffffffff,
+      indirect_addr64 >> 32,
+   };
+   fill_inline_params(&body, comp_state, push_addr64,
+                      (uint32_t[]) {0, 0, 0},
+                      num_workgroup_data, 0);
+
    cmd_buffer->state.last_indirect_dispatch =
       anv_batch_emitn_merge_at(
          &cmd_buffer->batch,
@@ -466,20 +524,7 @@ emit_indirect_compute_walker(struct anv_cmd_buffer *cmd_buffer,
          GENX(EXECUTE_INDIRECT_DISPATCH),
          .PredicateEnable            = predicate,
          .MaxCount                   = 1,
-         .body                       = {
-            .InterfaceDescriptor     = get_interface_descriptor_data_tables(cmd_buffer),
-            .ExecutionMask           = dispatch.right_mask,
-            .InlineData              = {
-               [ANV_INLINE_PARAM_PUSH_ADDRESS_OFFSET / 4 + 0]   = push_addr64 & 0xffffffff,
-               [ANV_INLINE_PARAM_PUSH_ADDRESS_OFFSET / 4 + 1]   = push_addr64 >> 32,
-               [ANV_INLINE_PARAM_NUM_WORKGROUPS_OFFSET / 4 + 0] = UINT32_MAX,
-               [ANV_INLINE_PARAM_NUM_WORKGROUPS_OFFSET / 4 + 1] = indirect_addr64 & 0xffffffff,
-               [ANV_INLINE_PARAM_NUM_WORKGROUPS_OFFSET / 4 + 2] = indirect_addr64 >> 32,
-            },
-            .PostSync                = {
-               .MOCS                 = anv_mocs(cmd_buffer->device, NULL, 0),
-            },
-         },
+         .body                       = body,
          .ArgumentBufferStartAddress = indirect_addr,
          .MOCS                       = anv_mocs(cmd_buffer->device,
                                                 indirect_addr.bo, 0),
@@ -488,13 +533,14 @@ emit_indirect_compute_walker(struct anv_cmd_buffer *cmd_buffer,
    genX(cmd_buffer_post_dispatch_wa)(cmd_buffer);
 }
 
+
+
 static inline void
 emit_compute_walker(struct anv_cmd_buffer *cmd_buffer,
                     struct anv_address indirect_addr,
                     const struct brw_cs_prog_data *prog_data,
                     struct intel_cs_dispatch_info dispatch,
-                    uint32_t groupCountX, uint32_t groupCountY,
-                    uint32_t groupCountZ,
+                    uint32_t base_wg[3], uint32_t num_wg[3],
                     uint32_t unaligned_invocations_x)
 {
    const struct anv_cmd_compute_state *comp_state = &cmd_buffer->state.compute;
@@ -509,9 +555,9 @@ emit_compute_walker(struct anv_cmd_buffer *cmd_buffer,
       num_workgroup_data[1] = indirect_addr64 & 0xffffffff;
       num_workgroup_data[2] = indirect_addr64 >> 32;
    } else {
-      num_workgroup_data[0] = groupCountX;
-      num_workgroup_data[1] = groupCountY;
-      num_workgroup_data[2] = groupCountZ;
+      num_workgroup_data[0] = num_wg[0];
+      num_workgroup_data[1] = num_wg[1];
+      num_workgroup_data[2] = num_wg[2];
    }
 
    uint64_t push_addr64 = anv_address_physical(
@@ -520,23 +566,18 @@ emit_compute_walker(struct anv_cmd_buffer *cmd_buffer,
 
    struct GENX(COMPUTE_WALKER_BODY) body = {
       .InterfaceDescriptor            = get_interface_descriptor_data_tables(cmd_buffer),
-      .ThreadGroupIDXDimension        = groupCountX,
-      .ThreadGroupIDYDimension        = groupCountY,
-      .ThreadGroupIDZDimension        = groupCountZ,
+      .ThreadGroupIDXDimension        = num_wg[0],
+      .ThreadGroupIDYDimension        = num_wg[1],
+      .ThreadGroupIDZDimension        = num_wg[2],
       .ExecutionMask                  = dispatch.right_mask,
-      .InlineData                     = {
-         [ANV_INLINE_PARAM_PUSH_ADDRESS_OFFSET / 4 + 0]   = push_addr64 & 0xffffffff,
-         [ANV_INLINE_PARAM_PUSH_ADDRESS_OFFSET / 4 + 1]   = push_addr64 >> 32,
-         [ANV_INLINE_PARAM_NUM_WORKGROUPS_OFFSET / 4 + 0] = num_workgroup_data[0],
-         [ANV_INLINE_PARAM_NUM_WORKGROUPS_OFFSET / 4 + 1] = num_workgroup_data[1],
-         [ANV_INLINE_PARAM_NUM_WORKGROUPS_OFFSET / 4 + 2] = num_workgroup_data[2],
-         [ANV_INLINE_PARAM_UNALIGNED_INVOCATIONS_X_OFFSET / 4 + 0] =
-            unaligned_invocations_x,
-      },
       .PostSync                       = {
          .MOCS = anv_mocs(cmd_buffer->device, NULL, 0),
       },
    };
+
+   fill_inline_params(&body, comp_state, push_addr64,
+                      base_wg, num_workgroup_data,
+                      unaligned_invocations_x);
 
    cmd_buffer->state.last_compute_walker =
       anv_batch_emitn_merge_at(
@@ -562,8 +603,7 @@ static inline void
 emit_gpgpu_walker(struct anv_cmd_buffer *cmd_buffer,
                   bool indirect,
                   const struct brw_cs_prog_data *prog_data,
-                  uint32_t groupCountX, uint32_t groupCountY,
-                  uint32_t groupCountZ)
+                  uint32_t num_wg[3])
 {
    const bool predicate = cmd_buffer->state.conditional_render_enabled;
 
@@ -578,9 +618,9 @@ emit_gpgpu_walker(struct anv_cmd_buffer *cmd_buffer,
       ggw.ThreadDepthCounterMaximum    = 0;
       ggw.ThreadHeightCounterMaximum   = 0;
       ggw.ThreadWidthCounterMaximum    = dispatch.threads - 1;
-      ggw.ThreadGroupIDXDimension      = groupCountX;
-      ggw.ThreadGroupIDYDimension      = groupCountY;
-      ggw.ThreadGroupIDZDimension      = groupCountZ;
+      ggw.ThreadGroupIDXDimension      = num_wg[0];
+      ggw.ThreadGroupIDYDimension      = num_wg[1];
+      ggw.ThreadGroupIDZDimension      = num_wg[2];
       ggw.RightExecutionMask           = dispatch.right_mask;
       ggw.BottomExecutionMask          = 0xffffffff;
    }
@@ -595,7 +635,7 @@ emit_cs_walker(struct anv_cmd_buffer *cmd_buffer,
                const struct brw_cs_prog_data *prog_data,
                struct intel_cs_dispatch_info dispatch,
                struct anv_address indirect_addr,
-               uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ,
+               uint32_t base_wg[3], uint32_t num_wg[3],
                bool is_unaligned_size_x, uint32_t unaligned_invocations_x)
 {
    struct anv_device *device = cmd_buffer->device;
@@ -622,17 +662,17 @@ emit_cs_walker(struct anv_cmd_buffer *cmd_buffer,
    }
 #endif
 
-   if (is_indirect)
+   if (is_indirect) {
       compute_load_indirect_params(cmd_buffer, indirect_addr,
-            is_unaligned_size_x);
+                                   is_unaligned_size_x);
+   }
 
 #if GFX_VERx10 >= 125
    emit_compute_walker(cmd_buffer, indirect_addr, prog_data,
-                       dispatch, groupCountX, groupCountY, groupCountZ,
+                       dispatch, base_wg, num_wg,
                        unaligned_invocations_x);
 #else
-   emit_gpgpu_walker(cmd_buffer, is_indirect, prog_data,
-                     groupCountX, groupCountY, groupCountZ);
+   emit_gpgpu_walker(cmd_buffer, is_indirect, prog_data, num_wg);
 #endif
 }
 
@@ -655,10 +695,10 @@ void genX(CmdDispatchBase)(
    if (anv_batch_has_error(&cmd_buffer->batch))
       return;
 
-   anv_cmd_buffer_push_workgroups(cmd_buffer, bind_map,
-                                  baseGroupX, baseGroupY, baseGroupZ,
-                                  groupCountX, groupCountY, groupCountZ,
-                                  ANV_NULL_ADDRESS);
+   anv_cmd_buffer_push_driver_values(cmd_buffer, bind_map,
+                                     baseGroupX, baseGroupY, baseGroupZ,
+                                     groupCountX, groupCountY, groupCountZ,
+                                     ANV_NULL_ADDRESS, 0);
 
    anv_measure_snapshot(cmd_buffer,
                         INTEL_SNAPSHOT_COMPUTE,
@@ -678,7 +718,8 @@ void genX(CmdDispatchBase)(
 
    emit_cs_walker(cmd_buffer, prog_data, dispatch,
                   ANV_NULL_ADDRESS /* no indirect data */,
-                  groupCountX, groupCountY, groupCountZ,
+                  (uint32_t[]){ baseGroupX, baseGroupY, baseGroupZ },
+                  (uint32_t[]){ groupCountX, groupCountY, groupCountZ },
                   false, 0);
 
    genX(emit_breakpoint)(&cmd_buffer->batch, cmd_buffer->device, false);
@@ -721,8 +762,10 @@ genX(cmd_dispatch_unaligned)(
    struct intel_cs_dispatch_info dispatch =
       brw_cs_get_dispatch_info(cmd_buffer->device->info, prog_data, NULL);
 
-   anv_cmd_buffer_push_workgroups(cmd_buffer, bind_map, 0, 0, 0, groupCountX,
-                                  groupCountY, groupCountZ, ANV_NULL_ADDRESS);
+   anv_cmd_buffer_push_driver_values(cmd_buffer, bind_map, 0, 0, 0,
+                                     groupCountX, groupCountY, groupCountZ,
+                                     ANV_NULL_ADDRESS,
+                                     invocations_x);
 
    /* RT shaders have Y and Z local size set to 1 always. */
    assert(prog_data->local_size[1] == 1 && prog_data->local_size[2] == 1);
@@ -739,7 +782,7 @@ genX(cmd_dispatch_unaligned)(
    trace_intel_begin_compute(&cmd_buffer->trace);
 
    assert((bind_map->binding_mask &
-           ANV_PIPELINE_BIND_MASK_USES_NUM_WORKGROUP) == 0);
+           ANV_PIPELINE_BIND_MASK_NUM_WORKGROUP) == 0);
    genX(cmd_buffer_flush_compute_state)(cmd_buffer);
    if (cmd_buffer->state.conditional_render_enabled)
       genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
@@ -748,7 +791,8 @@ genX(cmd_dispatch_unaligned)(
 
    emit_cs_walker(cmd_buffer, prog_data, dispatch,
                   ANV_NULL_ADDRESS /* no indirect data */,
-                  groupCountX, groupCountY, groupCountZ,
+                  (uint32_t[]) { 0, 0, 0 },
+                  (uint32_t[]) { groupCountX, groupCountY, groupCountZ },
                   false, invocations_x);
 
    genX(emit_breakpoint)(&cmd_buffer->batch, cmd_buffer->device, false);
@@ -777,8 +821,9 @@ genX(cmd_buffer_dispatch_indirect)(struct anv_cmd_buffer *cmd_buffer,
    if (anv_batch_has_error(&cmd_buffer->batch))
       return;
 
-   anv_cmd_buffer_push_workgroups(cmd_buffer, bind_map,
-                                  0, 0, 0, 0, 0, 0, indirect_addr);
+   anv_cmd_buffer_push_driver_values(cmd_buffer, bind_map,
+                                     0, 0, 0, 0, 0, 0,
+                                     indirect_addr, 0);
 
    anv_measure_snapshot(cmd_buffer,
                         INTEL_SNAPSHOT_COMPUTE,
@@ -795,7 +840,9 @@ genX(cmd_buffer_dispatch_indirect)(struct anv_cmd_buffer *cmd_buffer,
    genX(emit_breakpoint)(&cmd_buffer->batch, cmd_buffer->device, true);
 
    emit_cs_walker(cmd_buffer, prog_data, dispatch, indirect_addr,
-                  0, 0, 0, is_unaligned_size_x, 0);
+                  (uint32_t[]){0, 0, 0},
+                  (uint32_t[]){0, 0, 0},
+                  is_unaligned_size_x, 0);
 
    genX(emit_breakpoint)(&cmd_buffer->batch, cmd_buffer->device, false);
 

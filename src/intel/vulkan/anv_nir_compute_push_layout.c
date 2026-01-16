@@ -27,12 +27,13 @@
 #include "util/mesa-sha1.h"
 #include "util/set.h"
 
+#define PUSH_CONSTANTS_DWORDS (sizeof(struct anv_push_constants) / 4)
+
 struct push_data {
    bool push_ubo_ranges;
    bool needs_wa_18019110168;
    bool needs_dyn_tess_config;
-   unsigned app_start, app_end;
-   unsigned driver_start, driver_end;
+   BITSET_DECLARE(push_dwords, PUSH_CONSTANTS_DWORDS);
 };
 
 static void
@@ -52,31 +53,31 @@ adjust_driver_push_values(nir_shader *nir,
        */
       const uint32_t push_reg_mask_start =
          anv_drv_const_offset(gfx.push_reg_mask[nir->info.stage]);
-      const uint32_t push_reg_mask_end =
-         push_reg_mask_start +
-         anv_drv_const_size(gfx.push_reg_mask[nir->info.stage]);
-      data->driver_start = MIN2(data->driver_start, push_reg_mask_start);
-      data->driver_end = MAX2(data->driver_end, push_reg_mask_end);
+      assert(anv_drv_const_size(gfx.push_reg_mask[nir->info.stage]) <= 4);
+      BITSET_SET(data->push_dwords, push_reg_mask_start / 4);
    }
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       if (push_info->fragment_dynamic) {
          const uint32_t fs_config_start = anv_drv_const_offset(gfx.fs_config);
-         const uint32_t fs_config_end = fs_config_start +
-                                        anv_drv_const_size(gfx.fs_config);
-         data->driver_start = MIN2(data->driver_start, fs_config_start);
-         data->driver_end = MAX2(data->driver_end, fs_config_end);
+         assert(anv_drv_const_size(gfx.fs_config) <= 4);
+         BITSET_SET(data->push_dwords, fs_config_start / 4);
       }
 
       if (data->needs_wa_18019110168) {
          const uint32_t fs_per_prim_remap_start =
             anv_drv_const_offset(gfx.fs_per_prim_remap_offset);
-         const uint32_t fs_per_prim_remap_end =
-            fs_per_prim_remap_start +
-            anv_drv_const_size(gfx.fs_per_prim_remap_offset);
-         data->driver_start = MIN2(data->driver_start, fs_per_prim_remap_start);
-         data->driver_end = MAX2(data->driver_end, fs_per_prim_remap_end);
+         assert(anv_drv_const_size(gfx.fs_per_prim_remap_offset) <= 4);
+         BITSET_SET(data->push_dwords, fs_per_prim_remap_start / 4);
       }
+   }
+
+   if (nir->info.stage == MESA_SHADER_MESH &&
+       brw_nir_mesh_shader_needs_wa_18019110168(devinfo, nir)) {
+      const uint32_t mesh_provoking_vertex_start =
+         anv_drv_const_offset(gfx.mesh_provoking_vertex);
+      assert(anv_drv_const_size(gfx.mesh_provoking_vertex) <= 4);
+      BITSET_SET(data->push_dwords, mesh_provoking_vertex_start / 4);
    }
 
    data->needs_dyn_tess_config =
@@ -87,10 +88,8 @@ adjust_driver_push_values(nir_shader *nir,
        push_info->separate_tessellation);
    if (data->needs_dyn_tess_config) {
       const uint32_t tess_config_start = anv_drv_const_offset(gfx.tess_config);
-      const uint32_t tess_config_end = tess_config_start +
-                                       anv_drv_const_size(gfx.tess_config);
-      data->driver_start = MIN2(data->driver_start, tess_config_start);
-      data->driver_end = MAX2(data->driver_end, tess_config_end);
+      assert(anv_drv_const_size(gfx.tess_config) <= 4);
+      BITSET_SET(data->push_dwords, tess_config_start / 4);
    }
 }
 
@@ -104,10 +103,8 @@ gather_push_data(nir_shader *nir,
                  struct set *lowered_ubo_instrs)
 {
    bool has_const_ubo = false;
-   struct push_data data = {
-      .app_start = UINT_MAX, .app_end = 0,
-      .driver_start = UINT_MAX, .driver_end = 0,
-   };
+   struct push_data data = { 0, };
+   BITSET_ZERO(data.push_dwords);
 
    nir_foreach_function_impl(impl, nir) {
       nir_foreach_block(block, impl) {
@@ -127,8 +124,8 @@ gather_push_data(nir_shader *nir,
             case nir_intrinsic_load_push_constant: {
                unsigned base = nir_intrinsic_base(intrin);
                unsigned range = nir_intrinsic_range(intrin);
-               data.app_start = MIN2(data.app_start, base);
-               data.app_end = MAX2(data.app_end, base + range);
+               BITSET_SET_RANGE(data.push_dwords,
+                                base / 4, DIV_ROUND_UP(base + range, 4) - 1);
                break;
             }
 
@@ -141,8 +138,8 @@ gather_push_data(nir_shader *nir,
 
                unsigned base = nir_intrinsic_base(intrin);
                unsigned range = nir_intrinsic_range(intrin);
-               data.driver_start = MIN2(data.driver_start, base);
-               data.driver_end = MAX2(data.driver_end, base + range);
+               BITSET_SET_RANGE(data.push_dwords,
+                                base / 4, DIV_ROUND_UP(base + range, 4) - 1);
                break;
             }
 
@@ -261,6 +258,36 @@ lower_ubo_to_push_data_intel(nir_builder *b,
 }
 
 static bool
+lower_to_inline_data_intel(nir_builder *b,
+                           nir_intrinsic_instr *intrin,
+                           const struct lower_to_push_data_intel_state *state)
+{
+   unsigned base = nir_intrinsic_base(intrin);
+
+   /* Check for push data promoted to inline parameters. Because the push data
+    * is just packed into the inline data, the order is the same (it's just
+    * packed), so even if the value is a vec3/4, once you find the first
+    * matching dword, the rest will follow in the right order.
+    */
+   for (unsigned i = 0; i < state->bind_map->inline_dwords_count; i++) {
+      if (state->bind_map->inline_dwords[i] == base / 4) {
+         b->cursor = nir_before_instr(&intrin->instr);
+         nir_def *data = nir_load_inline_data_intel(
+            b,
+            intrin->def.num_components,
+            intrin->def.bit_size,
+            intrin->src[0].ssa,
+            .base = i * 4 + base % 4,
+            .range = nir_intrinsic_range(intrin));
+         nir_def_replace(&intrin->def, data);
+         return true;
+      }
+   }
+
+   return false;
+}
+
+static bool
 lower_to_push_data_intel(nir_builder *b,
                          nir_intrinsic_instr *intrin,
                          void *_data)
@@ -278,24 +305,36 @@ lower_to_push_data_intel(nir_builder *b,
    switch (intrin->intrinsic) {
    case nir_intrinsic_load_push_data_intel: {
       const unsigned base = nir_intrinsic_base(intrin);
-      /* For lowered UBOs to push constants, shrink the base by the amount we
-       * shrunk the driver push constants.
-       */
-      if (_mesa_set_search(state->lowered_ubo_instrs, intrin))
+      if (_mesa_set_search(state->lowered_ubo_instrs, intrin)) {
+         /* For lowered UBOs to push constants, shrink the base by the amount
+          * we shrinked the driver push constants.
+          */
          nir_intrinsic_set_base(intrin, base - state->reduced_push_ranges);
-      else
-         nir_intrinsic_set_base(intrin, base - base_offset);
+         return true;
+      }
+
+      if (lower_to_inline_data_intel(b, intrin, state))
+         return true;
+
       /* We need to retain this information to update the push constant on
        * vkCmdDispatch*().
        */
-      if (b->shader->info.stage == MESA_SHADER_COMPUTE &&
-          base >= anv_drv_const_offset(cs.num_work_groups[0]) &&
-          base < (anv_drv_const_offset(cs.num_work_groups[2]) + 4))
-         state->bind_map->binding_mask |= ANV_PIPELINE_BIND_MASK_USES_NUM_WORKGROUP;
+      if (b->shader->info.stage == MESA_SHADER_COMPUTE) {
+         if (anv_drv_const_includes_offset(cs.num_workgroups, base))
+            state->bind_map->binding_mask |= ANV_PIPELINE_BIND_MASK_NUM_WORKGROUP;
+         else if (anv_drv_const_includes_offset(cs.base_workgroup, base))
+               state->bind_map->binding_mask |= ANV_PIPELINE_BIND_MASK_BASE_WORKGROUP;
+         else if (anv_drv_const_includes_offset(cs.unaligned_invocations_x, base))
+            state->bind_map->binding_mask |= ANV_PIPELINE_BIND_MASK_UNALIGNED_INV_X;
+      }
+      nir_intrinsic_set_base(intrin, base - base_offset);
       return true;
    }
 
    case nir_intrinsic_load_push_constant: {
+      if (lower_to_inline_data_intel(b, intrin, state))
+         return true;
+
       b->cursor = nir_before_instr(&intrin->instr);
       nir_def *data = nir_load_push_data_intel(
          b,
@@ -314,9 +353,17 @@ lower_to_push_data_intel(nir_builder *b,
 }
 
 static struct anv_push_range
-compute_final_push_range(const struct intel_device_info *devinfo,
-                         const struct push_data *data)
+compute_final_push_range(const nir_shader *nir,
+                         const struct intel_device_info *devinfo,
+                         const struct push_data *data,
+                         struct anv_pipeline_bind_map *map)
 {
+   if (BITSET_IS_EMPTY(data->push_dwords)) {
+      return (struct anv_push_range) {
+         .set = ANV_DESCRIPTOR_SET_PUSH_CONSTANTS,
+      };
+   }
+
    /* Align push_start down to a 32B (for 3DSTATE_CONSTANT) and make it no
     * larger than push_end (no push constants is indicated by push_start =
     * UINT_MAX).
@@ -343,23 +390,53 @@ compute_final_push_range(const struct intel_device_info *devinfo,
     * (unlike all Gfx stages) and so we can bound+align the allocation there
     * (see anv_cmd_buffer_cs_push_constants).
     */
-   unsigned push_start = UINT32_MAX;
+   const bool has_inline_param =
+      devinfo->verx10 >= 125 &&
+      (nir->info.stage == MESA_SHADER_TASK ||
+       nir->info.stage == MESA_SHADER_MESH ||
+       nir->info.stage == MESA_SHADER_COMPUTE);
 
-   if (data->app_end != 0)
-      push_start = MIN2(push_start, data->app_start);
-   if (data->driver_end != 0)
-      push_start = MIN2(push_start, data->driver_start);
+   map->inline_dwords_count = 0;
 
-   if (push_start == UINT32_MAX) {
+   /* Can we fit all the push data in the inline parameters? */
+   if (has_inline_param && BITSET_COUNT(data->push_dwords) < 8) {
+      unsigned i;
+      map->inline_dwords_count = 0;
+      BITSET_FOREACH_SET(i, data->push_dwords, PUSH_CONSTANTS_DWORDS)
+         map->inline_dwords[map->inline_dwords_count++] = i;
+
       return (struct anv_push_range) {
          .set = ANV_DESCRIPTOR_SET_PUSH_CONSTANTS,
       };
    }
 
+   unsigned push_start = (BITSET_FFS(data->push_dwords) - 1) * 4;
+   unsigned push_end   = BITSET_LAST_BIT(data->push_dwords) * 4;
+
+   if (has_inline_param) {
+      /* Reserve the first 2 dwords for the push constant address so the
+       * backend can load the data.
+       */
+      map->inline_dwords[map->inline_dwords_count++] = ANV_INLINE_DWORD_PUSH_ADDRESS_LDW;
+      map->inline_dwords[map->inline_dwords_count++] = ANV_INLINE_DWORD_PUSH_ADDRESS_UDW;
+
+      /* Can we fit all the driver data in the inline parameters? */
+      if ((BITSET_COUNT(data->push_dwords) -
+           BITSET_PREFIX_SUM(data->push_dwords, MAX_PUSH_CONSTANTS_SIZE / 4)) <= 6) {
+         unsigned i;
+         BITSET_FOREACH_SET(i, data->push_dwords, PUSH_CONSTANTS_DWORDS) {
+            /* Iterate application push constants (not driver values) */
+            if (i >= (MAX_PUSH_CONSTANTS_SIZE / 4))
+               map->inline_dwords[map->inline_dwords_count++] = i;
+         }
+
+         push_end = BITSET_LAST_BIT_BEFORE(data->push_dwords, MAX_PUSH_CONSTANTS_SIZE / 4) * 4;
+      }
+   }
+
    push_start = ROUND_DOWN_TO(push_start, 32);
 
-   const unsigned push_size = align(
-      MAX2(data->app_end, data->driver_end) - push_start, devinfo->grf_size);
+   const unsigned push_size = align(push_end - push_start, devinfo->grf_size);
 
    return (struct anv_push_range) {
       .set = ANV_DESCRIPTOR_SET_PUSH_CONSTANTS,
@@ -386,7 +463,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
       gather_push_data(nir, robust_flags, devinfo, push_info, prog_key, map, NULL);
 
    struct anv_push_range push_constant_range =
-      compute_final_push_range(devinfo, &data);
+      compute_final_push_range(nir, devinfo, &data, map);
 
    /* When platforms support Mesh and the fragment shader is not fully linked
     * to the previous shader, payload format can change if the preceding
@@ -499,7 +576,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
 
       /* Update the ranges */
       struct anv_push_range shrinked_push_constant_range =
-         compute_final_push_range(devinfo, &data);
+         compute_final_push_range(nir, devinfo, &data, map);
       assert(shrinked_push_constant_range.length <= push_constant_range.length);
 
       if (shrinked_push_constant_range.length > 0) {
@@ -588,8 +665,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
 
    case MESA_SHADER_COMPUTE: {
       const int subgroup_id_index =
-         data.driver_end == (anv_drv_const_offset(cs.subgroup_id) +
-                             anv_drv_const_size(cs.subgroup_id)) ?
+         BITSET_TEST(data.push_dwords, anv_drv_const_offset(cs.subgroup_id) / 4) ?
          (anv_drv_const_offset(cs.subgroup_id) - push_start) / 4 : -1;
       struct brw_cs_prog_data *cs_prog_data = brw_cs_prog_data(prog_data);
       brw_cs_fill_push_const_info(devinfo, cs_prog_data, subgroup_id_index);

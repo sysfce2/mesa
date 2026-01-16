@@ -26,6 +26,7 @@
 
 #include "anv_private.h"
 #include "anv_measure.h"
+#include "anv_nir.h"
 
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
@@ -604,6 +605,36 @@ get_mesh_task_push_addr64(struct anv_cmd_buffer *cmd_buffer,
          bind_map->push_ranges[0].start * 32));
 }
 
+static inline void
+fill_inline_params(uint32_t *inline_data,
+                   const struct anv_pipeline_bind_map *bind_map,
+                   struct anv_cmd_graphics_state *gfx,
+                   uint64_t push_addr64)
+{
+   const uint32_t *push_data = (const uint32_t *) &gfx->base.push_constants;
+
+   for (uint32_t i = 0; i < bind_map->inline_dwords_count; i++) {
+      switch (bind_map->inline_dwords[i]) {
+      case ANV_INLINE_DWORD_PUSH_ADDRESS_LDW:
+         inline_data[i] = push_addr64 & 0xffffffff;
+         break;
+      case ANV_INLINE_DWORD_PUSH_ADDRESS_UDW:
+         inline_data[i] = push_addr64 >> 32;
+         break;
+      case anv_drv_const_dword(gfx.mesh_provoking_vertex): {
+         const struct brw_mesh_prog_data *mesh_prog_data = get_gfx_mesh_prog_data(gfx);
+         inline_data[i] = gfx->dyn_state.mesh_provoking_vertex |
+                          ((gfx->shaders[MESA_SHADER_MESH]->kernel.offset +
+                            mesh_prog_data->wa_18019110168_mapping_offset) >> 16);
+         break;
+      }
+      default:
+         inline_data[i] = push_data[bind_map->inline_dwords[i]];
+         break;
+      }
+   }
+}
+
 static void
 cmd_buffer_flush_mesh_inline_data(struct anv_cmd_buffer *cmd_buffer,
                                   VkShaderStageFlags dirty_stages)
@@ -612,25 +643,24 @@ cmd_buffer_flush_mesh_inline_data(struct anv_cmd_buffer *cmd_buffer,
 
    if (dirty_stages & VK_SHADER_STAGE_TASK_BIT_EXT &&
        anv_gfx_has_stage(gfx, MESA_SHADER_TASK)) {
+      const struct anv_pipeline_bind_map *bind_map =
+         &gfx->shaders[MESA_SHADER_TASK]->bind_map;
       uint64_t push_addr64 =
          get_mesh_task_push_addr64(cmd_buffer, gfx, MESA_SHADER_TASK);
 
-      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_TASK_SHADER_DATA), data) {
-         data.InlineData[ANV_INLINE_PARAM_PUSH_ADDRESS_OFFSET / 4 + 0] = push_addr64 & 0xffffffff;
-         data.InlineData[ANV_INLINE_PARAM_PUSH_ADDRESS_OFFSET / 4 + 1] = push_addr64 >> 32;
-      }
+      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_TASK_SHADER_DATA), data)
+         fill_inline_params(data.InlineData, bind_map, gfx, push_addr64);
    }
 
    if (dirty_stages & VK_SHADER_STAGE_MESH_BIT_EXT &&
        anv_gfx_has_stage(gfx, MESA_SHADER_MESH)) {
+      const struct anv_pipeline_bind_map *bind_map =
+         &gfx->shaders[MESA_SHADER_MESH]->bind_map;
       uint64_t push_addr64 =
          get_mesh_task_push_addr64(cmd_buffer, gfx, MESA_SHADER_MESH);
 
-      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_MESH_SHADER_DATA), data) {
-         data.InlineData[ANV_INLINE_PARAM_PUSH_ADDRESS_OFFSET / 4 + 0] = push_addr64 & 0xffffffff;
-         data.InlineData[ANV_INLINE_PARAM_PUSH_ADDRESS_OFFSET / 4 + 1] = push_addr64 >> 32;
-         data.InlineData[ANV_INLINE_PARAM_MESH_PROVOKING_VERTEX / 4]   = gfx->dyn_state.mesh_provoking_vertex;
-      }
+      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_MESH_SHADER_DATA), data)
+         fill_inline_params(data.InlineData, bind_map, gfx, push_addr64);
    }
 }
 #endif

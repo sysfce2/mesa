@@ -253,9 +253,7 @@ get_max_vbs(const struct intel_device_info *devinfo) {
 /* Defines where various values are defined in the inline parameter register.
  */
 #define ANV_INLINE_PARAM_PUSH_ADDRESS_OFFSET (0)
-#define ANV_INLINE_PARAM_NUM_WORKGROUPS_OFFSET (8)
 #define ANV_INLINE_PARAM_MESH_PROVOKING_VERTEX (8)
-#define ANV_INLINE_PARAM_UNALIGNED_INVOCATIONS_X_OFFSET (20)
 
 /* RENDER_SURFACE_STATE is a bit smaller (48b) but since it is aligned to 64
  * and we can't put anything else there we use 64b.
@@ -1140,18 +1138,24 @@ struct anv_push_range {
 };
 
 enum anv_pipeline_bind_mask {
-   ANV_PIPELINE_BIND_MASK_SET0               = BITFIELD_BIT(0),
-   ANV_PIPELINE_BIND_MASK_SET1               = BITFIELD_BIT(1),
-   ANV_PIPELINE_BIND_MASK_SET2               = BITFIELD_BIT(2),
-   ANV_PIPELINE_BIND_MASK_SET3               = BITFIELD_BIT(3),
-   ANV_PIPELINE_BIND_MASK_SET4               = BITFIELD_BIT(4),
-   ANV_PIPELINE_BIND_MASK_SET5               = BITFIELD_BIT(5),
-   ANV_PIPELINE_BIND_MASK_SET6               = BITFIELD_BIT(6),
-   ANV_PIPELINE_BIND_MASK_SET7               = BITFIELD_BIT(7),
-   ANV_PIPELINE_BIND_MASK_USES_NUM_WORKGROUP = BITFIELD_BIT(8),
+   ANV_PIPELINE_BIND_MASK_SET0            = BITFIELD_BIT(0),
+   ANV_PIPELINE_BIND_MASK_SET1            = BITFIELD_BIT(1),
+   ANV_PIPELINE_BIND_MASK_SET2            = BITFIELD_BIT(2),
+   ANV_PIPELINE_BIND_MASK_SET3            = BITFIELD_BIT(3),
+   ANV_PIPELINE_BIND_MASK_SET4            = BITFIELD_BIT(4),
+   ANV_PIPELINE_BIND_MASK_SET5            = BITFIELD_BIT(5),
+   ANV_PIPELINE_BIND_MASK_SET6            = BITFIELD_BIT(6),
+   ANV_PIPELINE_BIND_MASK_SET7            = BITFIELD_BIT(7),
+   ANV_PIPELINE_BIND_MASK_NUM_WORKGROUP   = BITFIELD_BIT(8),
+   ANV_PIPELINE_BIND_MASK_BASE_WORKGROUP  = BITFIELD_BIT(9),
+   ANV_PIPELINE_BIND_MASK_UNALIGNED_INV_X = BITFIELD_BIT(10),
 };
 
 #define ANV_PIPELINE_BIND_MASK_SET(i) (ANV_PIPELINE_BIND_MASK_SET0 << i)
+
+#define ANV_INLINE_DWORD_PUSH_ADDRESS_LDW      (UINT8_MAX - 0)
+#define ANV_INLINE_DWORD_PUSH_ADDRESS_UDW      (UINT8_MAX - 1)
+#define ANV_INLINE_DWORD_MESH_PROVOKING_VERTEX (UINT8_MAX - 2)
 
 struct anv_pipeline_bind_map {
    unsigned char                                surface_sha1[SHA1_DIGEST_LENGTH];
@@ -1167,12 +1171,26 @@ struct anv_pipeline_bind_map {
    uint8_t sampler_count;
    uint16_t embedded_sampler_count;
 
+   /* Dwords promoted from push constants (each element is a dword index in
+    * anv_push_constants (we can index up to 1024 bytes).
+    */
+   uint8_t  promoted_push_dwords[4];
+
    struct anv_pipeline_binding *                surface_to_descriptor;
    struct anv_pipeline_binding *                sampler_to_descriptor;
    struct anv_pipeline_embedded_sampler_binding* embedded_sampler_to_binding;
    BITSET_DECLARE(input_attachments, MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS + 1);
 
    struct anv_push_range                        push_ranges[4];
+
+   /* Number of valid elements in inline_dwords[] */
+   uint8_t                                      inline_dwords_count;
+
+   /* Dwords promoted from push constants (each element is a dword index in
+    * anv_push_constants, we can index up to 1024 bytes minus a few values
+    * reserved, see ANV_INLINE_PARAM_* above) to inline data parameters.
+    */
+   uint8_t                                      inline_dwords[8];
 
    /* Bitfield of sets for which the surfaces are accessed */
    uint8_t                                      used_surface_sets;
@@ -4315,7 +4333,9 @@ struct anv_push_constants {
          /** Robust access pushed registers. */
          uint8_t push_reg_mask[MESA_SHADER_STAGES][4];
 
-         uint32_t fs_per_prim_remap_offset;
+         /** Wa_18019110168 */
+         uint16_t mesh_provoking_vertex;
+         uint16_t fs_per_prim_remap_offset;
       } gfx;
 
       struct {
@@ -4323,10 +4343,12 @@ struct anv_push_constants {
           *
           * Used for vkCmdDispatchBase.
           */
-         uint32_t base_work_group_id[3];
+         uint32_t base_workgroup[3];
 
          /** gl_NumWorkgroups */
-         uint32_t num_work_groups[3];
+         uint32_t num_workgroups[3];
+
+         uint32_t unaligned_invocations_x;
 
          /** Subgroup ID
           *
