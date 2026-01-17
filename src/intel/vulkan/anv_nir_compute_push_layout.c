@@ -143,13 +143,6 @@ gather_push_data(nir_shader *nir,
                unsigned range = nir_intrinsic_range(intrin);
                data.driver_start = MIN2(data.driver_start, base);
                data.driver_end = MAX2(data.driver_end, base + range);
-               /* We need to retain this information to update the push
-                * constant on vkCmdDispatch*().
-                */
-               if (nir->info.stage == MESA_SHADER_COMPUTE &&
-                   base >= anv_drv_const_offset(cs.num_work_groups[0]) &&
-                   base < (anv_drv_const_offset(cs.num_work_groups[2]) + 4))
-                  map->binding_mask |= ANV_PIPELINE_BIND_MASK_USES_NUM_WORKGROUP;
                break;
             }
 
@@ -176,7 +169,7 @@ gather_push_data(nir_shader *nir,
 }
 
 struct lower_to_push_data_intel_state {
-   const struct anv_pipeline_bind_map *bind_map;
+   struct anv_pipeline_bind_map *bind_map;
    const struct anv_pipeline_push_map *push_map;
 
    struct set *lowered_ubo_instrs;
@@ -283,15 +276,24 @@ lower_to_push_data_intel(nir_builder *b,
       0 : state->bind_map->push_ranges[0].start * 32;
 
    switch (intrin->intrinsic) {
-   case nir_intrinsic_load_push_data_intel:
+   case nir_intrinsic_load_push_data_intel: {
+      const unsigned base = nir_intrinsic_base(intrin);
       /* For lowered UBOs to push constants, shrink the base by the amount we
        * shrunk the driver push constants.
        */
       if (_mesa_set_search(state->lowered_ubo_instrs, intrin))
-         nir_intrinsic_set_base(intrin, nir_intrinsic_base(intrin) - state->reduced_push_ranges);
+         nir_intrinsic_set_base(intrin, base - state->reduced_push_ranges);
       else
-         nir_intrinsic_set_base(intrin, nir_intrinsic_base(intrin) - base_offset);
+         nir_intrinsic_set_base(intrin, base - base_offset);
+      /* We need to retain this information to update the push constant on
+       * vkCmdDispatch*().
+       */
+      if (b->shader->info.stage == MESA_SHADER_COMPUTE &&
+          base >= anv_drv_const_offset(cs.num_work_groups[0]) &&
+          base < (anv_drv_const_offset(cs.num_work_groups[2]) + 4))
+         state->bind_map->binding_mask |= ANV_PIPELINE_BIND_MASK_USES_NUM_WORKGROUP;
       return true;
+   }
 
    case nir_intrinsic_load_push_constant: {
       b->cursor = nir_before_instr(&intrin->instr);
