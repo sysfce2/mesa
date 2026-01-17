@@ -1163,9 +1163,9 @@ struct anv_pipeline_bind_map {
    /* enum anv_pipeline_bind_mask */
    uint16_t binding_mask;
 
-   uint32_t surface_count;
-   uint32_t sampler_count;
-   uint32_t embedded_sampler_count;
+   uint8_t surface_count;
+   uint8_t sampler_count;
+   uint16_t embedded_sampler_count;
 
    struct anv_pipeline_binding *                surface_to_descriptor;
    struct anv_pipeline_binding *                sampler_to_descriptor;

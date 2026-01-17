@@ -71,9 +71,9 @@ anv_shader_deserialize(struct vk_device *vk_device,
    blob_copy_bytes(blob, data.bind_map.push_sha1, sizeof(data.bind_map.push_sha1));
    data.bind_map.layout_type = blob_read_uint16(blob);
    data.bind_map.binding_mask = blob_read_uint16(blob);
-   data.bind_map.surface_count = blob_read_uint32(blob);
-   data.bind_map.sampler_count = blob_read_uint32(blob);
-   data.bind_map.embedded_sampler_count = blob_read_uint32(blob);
+   data.bind_map.surface_count = blob_read_uint8(blob);
+   data.bind_map.sampler_count = blob_read_uint8(blob);
+   data.bind_map.embedded_sampler_count = blob_read_uint16(blob);
    data.bind_map.surface_to_descriptor = (void *)
       blob_read_bytes(blob, data.bind_map.surface_count *
                             sizeof(*data.bind_map.surface_to_descriptor));
@@ -151,9 +151,9 @@ anv_shader_serialize(struct vk_device *device,
                     sizeof(shader->bind_map.push_sha1));
    blob_write_uint16(blob, shader->bind_map.layout_type);
    blob_write_uint16(blob, shader->bind_map.binding_mask);
-   blob_write_uint32(blob, shader->bind_map.surface_count);
-   blob_write_uint32(blob, shader->bind_map.sampler_count);
-   blob_write_uint32(blob, shader->bind_map.embedded_sampler_count);
+   blob_write_uint8(blob, shader->bind_map.surface_count);
+   blob_write_uint8(blob, shader->bind_map.sampler_count);
+   blob_write_uint16(blob, shader->bind_map.embedded_sampler_count);
    blob_write_bytes(blob, shader->bind_map.surface_to_descriptor,
                     shader->bind_map.surface_count *
                     sizeof(*shader->bind_map.surface_to_descriptor));
