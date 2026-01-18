@@ -856,7 +856,7 @@ update_fs_config(struct anv_gfx_dynamic_state *hw_state,
    if (!brw_fs_prog_data_is_dynamic(fs_prog_data))
       return;
 
-   const struct brw_mesh_prog_data *mesh_prog_data = get_gfx_mesh_prog_data(gfx);
+   UNUSED const struct brw_mesh_prog_data *mesh_prog_data = get_gfx_mesh_prog_data(gfx);
 
    enum intel_fs_config fs_config =
       intel_fs_config((struct intel_fs_params) {
@@ -869,8 +869,10 @@ update_fs_config(struct anv_gfx_dynamic_state *hw_state,
             .provoking_vertex_last     = dyn->rs.provoking_vertex == VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT,
             .first_vue_slot            = hw_state->first_vue_slot,
             .primitive_id_index        = hw_state->primitive_id_index,
+#if INTEL_WA_18019110168_GFX_VER
             .per_primitive_remapping   = mesh_prog_data &&
                                          mesh_prog_data->map.wa_18019110168_active,
+#endif
          });
 
    SET(FS_CONFIG, fs_config, fs_config);
@@ -3662,12 +3664,14 @@ cmd_buffer_gfx_state_emission(struct anv_cmd_buffer *cmd_buffer)
    if (IS_DIRTY(FS_CONFIG)) {
       push_consts->gfx.fs_config = hw_state->fs_config;
 
+#if INTEL_WA_18019110168_GFX_VER
       const struct brw_mesh_prog_data *mesh_prog_data = get_gfx_mesh_prog_data(gfx);
       if (mesh_prog_data) {
          push_consts->gfx.fs_per_prim_remap_offset =
             gfx->shaders[MESA_SHADER_MESH]->kernel.offset +
             mesh_prog_data->wa_18019110168_mapping_offset;
       }
+#endif
 
       cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_FRAGMENT_BIT;
       gfx->base.push_constants_data_dirty = true;
