@@ -4285,22 +4285,24 @@ struct anv_push_constants {
    /** Dynamic offsets for dynamic UBOs and SSBOs */
    uint32_t dynamic_offsets[MAX_DYNAMIC_BUFFERS];
 
-   /** Surface buffer base offset
-    *
-    * Only used prior to DG2 with descriptor buffers.
-    *
-    * (surfaces_base_offset + desc_offsets[set_index]) is relative to
-    * device->va.descriptor_buffer_pool and can be used to compute a 64bit
-    * address to the descriptor buffer (using load_desc_set_address_intel).
-    */
-   uint32_t surfaces_base_offset;
+   union {
+      /** Surface buffer base offset
+       *
+       * Only used prior to DG2 with descriptor buffers.
+       *
+       * (surfaces_base_offset + desc_offsets[set_index]) is relative to
+       * device->va.descriptor_buffer_pool and can be used to compute a 64bit
+       * address to the descriptor buffer (using load_desc_set_address_intel).
+       */
+      uint32_t surfaces_base_offset;
 
-   /** Ray query globals
-    *
-    * Pointer to a couple of RT_DISPATCH_GLOBALS structures (see
-    * genX(cmd_buffer_ray_query_globals))
-    */
-   uint64_t ray_query_globals;
+      /** Ray query globals
+       *
+       * Pointer to a couple of RT_DISPATCH_GLOBALS structures (see
+       * genX(cmd_buffer_ray_query_globals))
+       */
+      uint64_t ray_query_globals;
+   };
 
    union {
       struct {
