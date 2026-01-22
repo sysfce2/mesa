@@ -3021,29 +3021,25 @@ panvk_per_arch(cmd_inherit_render_state)(
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(dev->vk.physical);
-   struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   struct pan_fb_info *fbinfo = &render->fb.info;
 
-   cmdbuf->state.gfx.render.first_provoking_vertex = U_TRISTATE_UNSET;
-   cmdbuf->state.gfx.render.maybe_set_tds_provoking_vertex = NULL;
-   cmdbuf->state.gfx.render.maybe_set_fbds_provoking_vertex = NULL;
-   cmdbuf->state.gfx.render.suspended = false;
-   cmdbuf->state.gfx.render.flags = inheritance_info->flags;
+   render->first_provoking_vertex = U_TRISTATE_UNSET;
+   render->maybe_set_tds_provoking_vertex = NULL;
+   render->maybe_set_fbds_provoking_vertex = NULL;
+   render->suspended = false;
+   render->flags = inheritance_info->flags;
 
    gfx_state_set_dirty(cmdbuf, RENDER_STATE);
-   memset(cmdbuf->state.gfx.render.fb.crc_valid, 0,
-          sizeof(cmdbuf->state.gfx.render.fb.crc_valid));
-   memset(&cmdbuf->state.gfx.render.color_attachments, 0,
-          sizeof(cmdbuf->state.gfx.render.color_attachments));
-   memset(&cmdbuf->state.gfx.render.z_attachment, 0,
-          sizeof(cmdbuf->state.gfx.render.z_attachment));
-   memset(&cmdbuf->state.gfx.render.s_attachment, 0,
-          sizeof(cmdbuf->state.gfx.render.s_attachment));
+   memset(render->fb.crc_valid, 0, sizeof(render->fb.crc_valid));
+   memset(&render->color_attachments, 0, sizeof(render->color_attachments));
+   memset(&render->z_attachment, 0, sizeof(render->z_attachment));
+   memset(&render->s_attachment, 0, sizeof(render->s_attachment));
    cmdbuf->state.gfx.render.bound_attachments = 0;
 
-   cmdbuf->state.gfx.render.view_mask = inheritance_info->viewMask;
-   cmdbuf->state.gfx.render.layer_count = inheritance_info->viewMask ?
-      util_last_bit(inheritance_info->viewMask) :
-      0;
+   render->view_mask = inheritance_info->viewMask;
+   render->layer_count = inheritance_info->viewMask ?
+      util_last_bit(inheritance_info->viewMask) : 0;
 
    /* If a draw was performed, the inherited sample count should match our current sample count */
    assert(fbinfo->nr_samples == 0 || inheritance_info->rasterizationSamples == fbinfo->nr_samples);
@@ -3055,31 +3051,26 @@ panvk_per_arch(cmd_inherit_render_state)(
       .nr_samples = inheritance_info->rasterizationSamples,
       .rt_count = inheritance_info->colorAttachmentCount,
    };
-   cmdbuf->state.gfx.render.fb.nr_samples = inheritance_info->rasterizationSamples;
+   render->fb.nr_samples = inheritance_info->rasterizationSamples;
 
    assert(inheritance_info->colorAttachmentCount <= ARRAY_SIZE(fbinfo->rts));
 
    for (uint32_t i = 0; i < inheritance_info->colorAttachmentCount; i++) {
-      cmdbuf->state.gfx.render.bound_attachments |=
-         MESA_VK_RP_ATTACHMENT_COLOR_BIT(i);
-      cmdbuf->state.gfx.render.color_attachments.fmts[i] =
+      render->bound_attachments |= MESA_VK_RP_ATTACHMENT_COLOR_BIT(i);
+      render->color_attachments.fmts[i] =
          inheritance_info->pColorAttachmentFormats[i];
-      cmdbuf->state.gfx.render.color_attachments.samples[i] =
+      render->color_attachments.samples[i] =
          inheritance_info->rasterizationSamples;
    }
 
    if (inheritance_info->depthAttachmentFormat) {
-      cmdbuf->state.gfx.render.bound_attachments |=
-         MESA_VK_RP_ATTACHMENT_DEPTH_BIT;
-      cmdbuf->state.gfx.render.z_attachment.fmt =
-         inheritance_info->depthAttachmentFormat;
+      render->bound_attachments |= MESA_VK_RP_ATTACHMENT_DEPTH_BIT;
+      render->z_attachment.fmt = inheritance_info->depthAttachmentFormat;
    }
 
    if (inheritance_info->stencilAttachmentFormat) {
-      cmdbuf->state.gfx.render.bound_attachments |=
-         MESA_VK_RP_ATTACHMENT_STENCIL_BIT;
-      cmdbuf->state.gfx.render.s_attachment.fmt =
-         inheritance_info->stencilAttachmentFormat;
+      render->bound_attachments |= MESA_VK_RP_ATTACHMENT_STENCIL_BIT;
+      render->s_attachment.fmt = inheritance_info->stencilAttachmentFormat;
    }
 
    const VkRenderingAttachmentLocationInfoKHR att_loc_info_default = {

@@ -89,29 +89,28 @@ render_state_set_color_attachment(struct panvk_cmd_buffer *cmdbuf,
 {
    struct panvk_physical_device *phys_dev =
          to_panvk_physical_device(cmdbuf->vk.base.device->physical);
-   struct panvk_cmd_graphics_state *state = &cmdbuf->state.gfx;
-   struct pan_fb_info *fbinfo = &state->render.fb.info;
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   struct pan_fb_info *fbinfo = &render->fb.info;
    VK_FROM_HANDLE(panvk_image_view, iview, att->imageView);
 
    struct panvk_image_view *iview_ss = NULL;
-   const bool ms2ss = cmdbuf->state.gfx.render.fb.nr_samples > 1 &&
+   const bool ms2ss = render->fb.nr_samples > 1 &&
                       iview->pview.nr_samples == 1;
 
    if (ms2ss) {
       iview_ss = iview;
-      iview =
-         get_ms2ss_image_view(iview, cmdbuf->state.gfx.render.fb.nr_samples);
+      iview = get_ms2ss_image_view(iview, render->fb.nr_samples);
    }
 
    struct panvk_image *img =
       container_of(iview->vk.image, struct panvk_image, vk);
 
-   state->render.bound_attachments |= MESA_VK_RP_ATTACHMENT_COLOR_BIT(index);
-   state->render.color_attachments.iviews[index] = iview;
-   state->render.color_attachments.preload_iviews[index] =
+   render->bound_attachments |= MESA_VK_RP_ATTACHMENT_COLOR_BIT(index);
+   render->color_attachments.iviews[index] = iview;
+   render->color_attachments.preload_iviews[index] =
       ms2ss ? iview_ss : NULL;
-   state->render.color_attachments.fmts[index] = iview->vk.format;
-   state->render.color_attachments.samples[index] = img->vk.samples;
+   render->color_attachments.fmts[index] = iview->vk.format;
+   render->color_attachments.samples[index] = img->vk.samples;
 
 #if PAN_ARCH < 9
    for (uint8_t p = 0; p < ARRAY_SIZE(iview->pview.planes); p++) {
@@ -123,15 +122,15 @@ render_state_set_color_attachment(struct panvk_cmd_buffer *cmdbuf,
 
       assert(pref.plane_idx < ARRAY_SIZE(img->planes));
       assert(img->planes[pref.plane_idx].mem->bo != NULL);
-      state->render.fb.bos[state->render.fb.bo_count++] =
+      render->fb.bos[render->fb.bo_count++] =
          img->planes[pref.plane_idx].mem->bo;
    }
 #endif
 
    fbinfo->rts[index].view = &iview->pview;
-   fbinfo->rts[index].crc_valid = &state->render.fb.crc_valid[index];
-   state->render.fb.nr_samples =
-      MAX2(state->render.fb.nr_samples,
+   fbinfo->rts[index].crc_valid = &render->fb.crc_valid[index];
+   render->fb.nr_samples =
+      MAX2(render->fb.nr_samples,
            pan_image_view_get_nr_samples(&iview->pview));
 
    if (att->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR) {
@@ -147,7 +146,7 @@ render_state_set_color_attachment(struct panvk_cmd_buffer *cmdbuf,
 
    if (att->resolveMode != VK_RESOLVE_MODE_NONE) {
       struct panvk_resolve_attachment *resolve_info =
-         &state->render.color_attachments.resolve[index];
+         &render->color_attachments.resolve[index];
       VK_FROM_HANDLE(panvk_image_view, resolve_iview, att->resolveImageView);
 
       /* VUID-VkRenderingAttachmentInfo-imageView-06862 and
@@ -171,18 +170,17 @@ static void
 render_state_set_z_attachment(struct panvk_cmd_buffer *cmdbuf,
                               const VkRenderingAttachmentInfo *att)
 {
-   struct panvk_cmd_graphics_state *state = &cmdbuf->state.gfx;
-   struct pan_fb_info *fbinfo = &state->render.fb.info;
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   struct pan_fb_info *fbinfo = &render->fb.info;
    VK_FROM_HANDLE(panvk_image_view, iview, att->imageView);
 
    struct panvk_image_view *iview_ss = NULL;
-   const bool ms2ss = cmdbuf->state.gfx.render.fb.nr_samples > 1 &&
+   const bool ms2ss = render->fb.nr_samples > 1 &&
                       iview->pview.nr_samples == 1;
 
    if (ms2ss) {
       iview_ss = iview;
-      iview =
-         get_ms2ss_image_view(iview, cmdbuf->state.gfx.render.fb.nr_samples);
+      iview = get_ms2ss_image_view(iview, render->fb.nr_samples);
    }
 
    struct panvk_image *img =
@@ -190,29 +188,29 @@ render_state_set_z_attachment(struct panvk_cmd_buffer *cmdbuf,
 
 #if PAN_ARCH < 9
    /* Depth plane always comes first. */
-   state->render.fb.bos[state->render.fb.bo_count++] = img->planes[0].mem->bo;
+   render->fb.bos[render->fb.bo_count++] = img->planes[0].mem->bo;
 #endif
 
-   state->render.z_attachment.fmt = iview->vk.format;
-   state->render.bound_attachments |= MESA_VK_RP_ATTACHMENT_DEPTH_BIT;
+   render->z_attachment.fmt = iview->vk.format;
+   render->bound_attachments |= MESA_VK_RP_ATTACHMENT_DEPTH_BIT;
 
-   state->render.zs_pview = iview->pview;
-   fbinfo->zs.view.zs = &state->render.zs_pview;
+   render->zs_pview = iview->pview;
+   fbinfo->zs.view.zs = &render->zs_pview;
 
    /* Fixup view format when the image is multiplanar. */
    if (panvk_image_is_planar_depth_stencil(img))
-      state->render.zs_pview.format = panvk_image_depth_only_pfmt(img);
+      render->zs_pview.format = panvk_image_depth_only_pfmt(img);
 
-   state->render.zs_pview.planes[0] = (struct pan_image_plane_ref){
+   render->zs_pview.planes[0] = (struct pan_image_plane_ref){
       .image = &img->planes[0].image,
       .plane_idx = 0,
    };
-   state->render.zs_pview.planes[1] = (struct pan_image_plane_ref){0};
-   state->render.fb.nr_samples =
-      MAX2(state->render.fb.nr_samples,
+   render->zs_pview.planes[1] = (struct pan_image_plane_ref){0};
+   render->fb.nr_samples =
+      MAX2(render->fb.nr_samples,
            pan_image_view_get_nr_samples(&iview->pview));
-   state->render.z_attachment.iview = iview;
-   state->render.z_attachment.preload_iview = ms2ss ? iview_ss : NULL;
+   render->z_attachment.iview = iview;
+   render->z_attachment.preload_iview = ms2ss ? iview_ss : NULL;
 
    /* D24S8 is a single plane format where the depth/stencil are interleaved.
     * If we touch the depth component, we need to make sure the stencil
@@ -223,7 +221,7 @@ render_state_set_z_attachment(struct panvk_cmd_buffer *cmdbuf,
       cmdbuf->state.gfx.render.zs_pview.format =
          img->planes[0].image.props.format;
    } else {
-      state->render.zs_pview.format = panvk_image_depth_only_pfmt(img);
+      render->zs_pview.format = panvk_image_depth_only_pfmt(img);
    }
 
    if (att->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
@@ -233,7 +231,7 @@ render_state_set_z_attachment(struct panvk_cmd_buffer *cmdbuf,
 
    if (att->resolveMode != VK_RESOLVE_MODE_NONE) {
       struct panvk_resolve_attachment *resolve_info =
-         &state->render.z_attachment.resolve;
+         &render->z_attachment.resolve;
       VK_FROM_HANDLE(panvk_image_view, resolve_iview, att->resolveImageView);
 
       resolve_info->mode = att->resolveMode;
@@ -251,18 +249,17 @@ static void
 render_state_set_s_attachment(struct panvk_cmd_buffer *cmdbuf,
                               const VkRenderingAttachmentInfo *att)
 {
-   struct panvk_cmd_graphics_state *state = &cmdbuf->state.gfx;
-   struct pan_fb_info *fbinfo = &state->render.fb.info;
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   struct pan_fb_info *fbinfo = &render->fb.info;
    VK_FROM_HANDLE(panvk_image_view, iview, att->imageView);
 
    struct panvk_image_view *iview_ss = NULL;
-   const bool ms2ss = cmdbuf->state.gfx.render.fb.nr_samples > 1 &&
+   const bool ms2ss = render->fb.nr_samples > 1 &&
                       iview->pview.nr_samples == 1;
 
    if (ms2ss) {
       iview_ss = iview;
-      iview =
-         get_ms2ss_image_view(iview, cmdbuf->state.gfx.render.fb.nr_samples);
+      iview = get_ms2ss_image_view(iview, render->fb.nr_samples);
    }
 
    struct panvk_image *img =
@@ -270,46 +267,46 @@ render_state_set_s_attachment(struct panvk_cmd_buffer *cmdbuf,
 
 #if PAN_ARCH < 9
    /* The stencil plane is always last. */
-   state->render.fb.bos[state->render.fb.bo_count++] =
+   render->fb.bos[render->fb.bo_count++] =
       img->planes[img->plane_count - 1].mem->bo;
 #endif
 
-   state->render.s_attachment.fmt = iview->vk.format;
-   state->render.bound_attachments |= MESA_VK_RP_ATTACHMENT_STENCIL_BIT;
+   render->s_attachment.fmt = iview->vk.format;
+   render->bound_attachments |= MESA_VK_RP_ATTACHMENT_STENCIL_BIT;
 
-   state->render.s_pview = iview->pview;
-   fbinfo->zs.view.s = &state->render.s_pview;
+   render->s_pview = iview->pview;
+   fbinfo->zs.view.s = &render->s_pview;
 
    if (panvk_image_is_planar_depth_stencil(img)) {
-      state->render.s_pview.format = panvk_image_stencil_only_pfmt(img);
-      state->render.s_pview.planes[0] = (struct pan_image_plane_ref){0};
-      state->render.s_pview.planes[1] = (struct pan_image_plane_ref){
+      render->s_pview.format = panvk_image_stencil_only_pfmt(img);
+      render->s_pview.planes[0] = (struct pan_image_plane_ref){0};
+      render->s_pview.planes[1] = (struct pan_image_plane_ref){
          .image = &img->planes[1].image,
          .plane_idx = 0,
       };
    } else {
-      state->render.s_pview.format = panvk_image_stencil_only_pfmt(img);
-      state->render.s_pview.planes[0] = (struct pan_image_plane_ref){
+      render->s_pview.format = panvk_image_stencil_only_pfmt(img);
+      render->s_pview.planes[0] = (struct pan_image_plane_ref){
          .image = &img->planes[0].image,
          .plane_idx = 0,
       };
-      state->render.s_pview.planes[1] = (struct pan_image_plane_ref){0};
+      render->s_pview.planes[1] = (struct pan_image_plane_ref){0};
    }
 
-   state->render.fb.nr_samples =
-      MAX2(state->render.fb.nr_samples,
+   render->fb.nr_samples =
+      MAX2(render->fb.nr_samples,
            pan_image_view_get_nr_samples(&iview->pview));
-   state->render.s_attachment.iview = iview;
-   state->render.s_attachment.preload_iview = ms2ss ? iview_ss : NULL;
+   render->s_attachment.iview = iview;
+   render->s_attachment.preload_iview = ms2ss ? iview_ss : NULL;
 
    /* If the depth and stencil attachments point to the same image,
     * and the format is D24S8, we can combine them in a single view
     * addressing both components.
     */
-   if (state->render.s_pview.format == PIPE_FORMAT_X24S8_UINT &&
-       state->render.z_attachment.iview &&
-       state->render.z_attachment.iview->vk.image == iview->vk.image) {
-      state->render.zs_pview.format = PIPE_FORMAT_Z24_UNORM_S8_UINT;
+   if (render->s_pview.format == PIPE_FORMAT_X24S8_UINT &&
+       render->z_attachment.iview &&
+       render->z_attachment.iview->vk.image == iview->vk.image) {
+      render->zs_pview.format = PIPE_FORMAT_Z24_UNORM_S8_UINT;
       fbinfo->zs.preload.s = false;
       fbinfo->zs.view.s = NULL;
 
@@ -318,10 +315,10 @@ render_state_set_s_attachment(struct panvk_cmd_buffer *cmdbuf,
     * is not supported on the stencil-only slot on Bifrost.
     */
    } else if (img->vk.format == VK_FORMAT_D24_UNORM_S8_UINT &&
-              state->render.s_pview.format == PIPE_FORMAT_X24S8_UINT &&
+              render->s_pview.format == PIPE_FORMAT_X24S8_UINT &&
               fbinfo->zs.view.zs == NULL) {
-      fbinfo->zs.view.zs = &state->render.s_pview;
-      state->render.s_pview.format = PIPE_FORMAT_Z24_UNORM_S8_UINT;
+      fbinfo->zs.view.zs = &render->s_pview;
+      render->s_pview.format = PIPE_FORMAT_Z24_UNORM_S8_UINT;
       fbinfo->zs.preload.z = true;
       fbinfo->zs.view.s = NULL;
    }
@@ -333,7 +330,7 @@ render_state_set_s_attachment(struct panvk_cmd_buffer *cmdbuf,
 
    if (att->resolveMode != VK_RESOLVE_MODE_NONE) {
       struct panvk_resolve_attachment *resolve_info =
-         &state->render.s_attachment.resolve;
+         &render->s_attachment.resolve;
       VK_FROM_HANDLE(panvk_image_view, resolve_iview, att->resolveImageView);
 
       resolve_info->mode = att->resolveMode;
@@ -353,30 +350,30 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
 {
    struct panvk_physical_device *phys_dev =
          to_panvk_physical_device(cmdbuf->vk.base.device->physical);
-   struct panvk_cmd_graphics_state *state = &cmdbuf->state.gfx;
-   struct pan_fb_info *fbinfo = &state->render.fb.info;
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   struct pan_fb_info *fbinfo = &render->fb.info;
    uint32_t att_width = UINT32_MAX, att_height = UINT32_MAX;
 
-   state->render.flags = pRenderingInfo->flags;
+   render->flags = pRenderingInfo->flags;
 
-   BITSET_SET(state->dirty, PANVK_CMD_GRAPHICS_DIRTY_RENDER_STATE);
+   BITSET_SET(cmdbuf->state.gfx.dirty, PANVK_CMD_GRAPHICS_DIRTY_RENDER_STATE);
 
 #if PAN_ARCH < 9
-   state->render.fb.bo_count = 0;
-   memset(state->render.fb.bos, 0, sizeof(state->render.fb.bos));
+   render->fb.bo_count = 0;
+   memset(render->fb.bos, 0, sizeof(render->fb.bos));
 #endif
 
-   state->render.first_provoking_vertex = U_TRISTATE_UNSET;
+   render->first_provoking_vertex = U_TRISTATE_UNSET;
 #if PAN_ARCH >= 10
-   state->render.maybe_set_tds_provoking_vertex = NULL;
-   state->render.maybe_set_fbds_provoking_vertex = NULL;
+   render->maybe_set_tds_provoking_vertex = NULL;
+   render->maybe_set_fbds_provoking_vertex = NULL;
 #endif
-   memset(state->render.fb.crc_valid, 0, sizeof(state->render.fb.crc_valid));
-   memset(&state->render.color_attachments, 0,
-          sizeof(state->render.color_attachments));
-   memset(&state->render.z_attachment, 0, sizeof(state->render.z_attachment));
-   memset(&state->render.s_attachment, 0, sizeof(state->render.s_attachment));
-   state->render.bound_attachments = 0;
+   memset(render->fb.crc_valid, 0, sizeof(render->fb.crc_valid));
+   memset(&render->color_attachments, 0,
+          sizeof(render->color_attachments));
+   memset(&render->z_attachment, 0, sizeof(render->z_attachment));
+   memset(&render->s_attachment, 0, sizeof(render->s_attachment));
+   render->bound_attachments = 0;
 
    const VkMultisampledRenderToSingleSampledInfoEXT *ms2ss_info =
       vk_find_struct_const(pRenderingInfo,
@@ -385,10 +382,10 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
                          ? ms2ss_info->multisampledRenderToSingleSampledEnable
                          : VK_FALSE;
 
-   cmdbuf->state.gfx.render.layer_count = pRenderingInfo->viewMask ?
-      util_last_bit(pRenderingInfo->viewMask) :
-      pRenderingInfo->layerCount;
-   cmdbuf->state.gfx.render.view_mask = pRenderingInfo->viewMask;
+   render->layer_count = pRenderingInfo->viewMask
+                         ? util_last_bit(pRenderingInfo->viewMask)
+                         : pRenderingInfo->layerCount;
+   render->view_mask = pRenderingInfo->viewMask;
    *fbinfo = (struct pan_fb_info){
       .tile_buf_budget = pan_query_optimal_tib_size(PAN_ARCH, phys_dev->model),
       .z_tile_buf_budget = pan_query_optimal_z_tib_size(PAN_ARCH, phys_dev->model),
@@ -402,8 +399,7 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
     * All attachments need to have sample count == 1 or the provided value.
     * But, if all attachments have 1, we would end up choosing the wrong value
     * if we don't set it here already. */
-   cmdbuf->state.gfx.render.fb.nr_samples =
-      ms2ss ? ms2ss_info->rasterizationSamples : 1;
+   render->fb.nr_samples = ms2ss ? ms2ss_info->rasterizationSamples : 1;
 
    assert(pRenderingInfo->colorAttachmentCount <= ARRAY_SIZE(fbinfo->rts));
 
@@ -455,7 +451,7 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
 
    fbinfo->frame_bounding_box = fbinfo->draw_extent;
 
-   if (state->render.bound_attachments) {
+   if (render->bound_attachments) {
       fbinfo->width = att_width;
       fbinfo->height = att_height;
    } else {
