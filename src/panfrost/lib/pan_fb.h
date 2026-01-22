@@ -12,6 +12,7 @@
 
 struct nir_shader;
 struct nir_shader_compiler_options;
+struct pan_fb_info;
 struct pan_image_view;
 
 #define PAN_MAX_RTS 8
@@ -355,6 +356,39 @@ struct pan_fb_store {
 #ifdef PAN_ARCH
 void GENX(pan_align_fb_tiling_area)(struct pan_fb_layout *fb,
                                     const struct pan_fb_store *store);
+#endif
+
+struct pan_fb_frame_shaders {
+   uint64_t dcd_pointer;
+   uint8_t modes[3];
+};
+
+struct pan_fb_desc_info {
+   const struct pan_fb_layout *fb;
+   const struct pan_fb_load *load;
+   const struct pan_fb_store *store;
+
+   struct pan_fb_frame_shaders frame_shaders;
+
+   uint64_t sample_pos_array_pointer;
+
+   /* Only used on Valhal */
+   bool sprite_coord_origin_max_y;
+   bool provoking_vertex_first;
+   bool allow_hsr_prepass;
+
+   uint16_t layer;
+
+   const struct pan_tls_info *tls;
+   const struct pan_tiler_context *tiler_ctx;
+};
+
+#ifdef PAN_ARCH
+void GENX(pan_fill_fb_info)(const struct pan_fb_desc_info *info,
+                            struct pan_fb_info *fbinfo);
+
+uint32_t GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info,
+                                void *out);
 #endif
 
 static_assert(PAN_FB_LOAD_OP_COUNT <= (1 << 2),
