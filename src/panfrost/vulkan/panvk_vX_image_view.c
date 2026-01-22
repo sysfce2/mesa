@@ -169,8 +169,7 @@ prepare_tex_descs(struct panvk_image_view *view)
       if (has_storage) {
          uint32_t storage_payload_offset =
             alloc_info.size - storage_payload_size;
-         storage_ptr.gpu += storage_payload_offset;
-         storage_ptr.cpu += storage_payload_offset;
+         storage_ptr = pan_ptr_offset(storage_ptr, storage_payload_offset);
       }
 #endif
 
@@ -191,13 +190,11 @@ prepare_tex_descs(struct panvk_image_view *view)
             if (has_storage) {
                GENX(pan_storage_texture_emit)(
                   &pview, &view->descs.storage_tex[plane], &storage_ptr);
-               storage_ptr.cpu += tex_payload_size;
-               storage_ptr.gpu += tex_payload_size;
+               storage_ptr = pan_ptr_offset(storage_ptr, tex_payload_size);
             }
 #endif
 
-            ptr.cpu += tex_payload_size;
-            ptr.gpu += tex_payload_size;
+            ptr = pan_ptr_offset(ptr, tex_payload_size);
          }
       } else {
          GENX(pan_sampled_texture_emit)(&pview, &view->descs.tex[0], &ptr);
@@ -217,8 +214,7 @@ prepare_tex_descs(struct panvk_image_view *view)
                            ? panvk_image_stencil_only_pfmt(image)
                            : panvk_image_depth_only_pfmt(image);
 
-         ptr.cpu += tex_payload_size;
-         ptr.gpu += tex_payload_size;
+         ptr = pan_ptr_offset(ptr, tex_payload_size);
 
          GENX(pan_sampled_texture_emit)(&pview,
                                         &view->descs.zs.other_aspect_tex, &ptr);

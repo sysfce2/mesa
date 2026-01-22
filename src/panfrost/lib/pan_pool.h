@@ -19,6 +19,14 @@ struct pan_ptr {
    uint64_t gpu;
 };
 
+static inline struct pan_ptr
+pan_ptr_offset(struct pan_ptr ptr, int64_t offset)
+{
+   ptr.cpu = ((char *)ptr.cpu) + offset;
+   ptr.gpu += offset;
+   return ptr;
+}
+
 /* Represents grow-only memory. */
 
 struct pan_pool {

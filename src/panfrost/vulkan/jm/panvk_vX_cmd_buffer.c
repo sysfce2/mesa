@@ -147,18 +147,19 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
          uint32_t layer_id = (view_mask != 0) ? u_bit_scan(&view_mask) : i;
          VkResult result;
 
-         uint64_t fbd = batch->fb.desc.gpu + (batch->fb.desc_stride * layer_id);
-
          result = panvk_per_arch(cmd_prepare_tiler_context)(cmdbuf, layer_id);
          if (result != VK_SUCCESS)
             break;
 
-         fbd |= GENX(pan_emit_fbd)(
-            &cmdbuf->state.gfx.render.fb.info, layer_id, &batch->tlsinfo,
-            &batch->tiler.ctx,
-            batch->fb.desc.cpu + (batch->fb.desc_stride * layer_id));
+         const struct pan_ptr fbd =
+            pan_ptr_offset(batch->fb.desc, batch->fb.desc_stride * layer_id);
+         uint64_t tagged_fbd_ptr = fbd.gpu;
 
-         result = panvk_cmd_prepare_fragment_job(cmdbuf, fbd);
+         tagged_fbd_ptr |= GENX(pan_emit_fbd)(
+            &cmdbuf->state.gfx.render.fb.info, layer_id, &batch->tlsinfo,
+            &batch->tiler.ctx, fbd.cpu);
+
+         result = panvk_cmd_prepare_fragment_job(cmdbuf, tagged_fbd_ptr);
          if (result != VK_SUCCESS)
             break;
       }
