@@ -200,17 +200,22 @@ out:
 }
 
 static VkResult
-alloc_pre_post_dcds(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo)
+alloc_pre_post_dcds(struct panvk_cmd_buffer *cmdbuf,
+                    struct pan_fb_frame_shaders *fs,
+                    struct mali_draw_packed **dcds)
 {
-   if (fbinfo->bifrost.pre_post.dcds.gpu)
+   if (fs->dcd_pointer)
       return VK_SUCCESS;
 
-   uint32_t dcd_count =
-      3 * (PAN_ARCH < 9 ? cmdbuf->state.gfx.render.layer_count : 1);
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   uint32_t dcd_count = 3 * (PAN_ARCH < 9 ? render->layer_count : 1);
 
-   fbinfo->bifrost.pre_post.dcds = panvk_cmd_alloc_desc_array(cmdbuf, dcd_count, DRAW);
-   if (!fbinfo->bifrost.pre_post.dcds.cpu)
+   struct pan_ptr dcd = panvk_cmd_alloc_desc_array(cmdbuf, dcd_count, DRAW);
+   if (!dcd.gpu)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+
+   fs->dcd_pointer = dcd.gpu;
+   *dcds = dcd.cpu;
 
    return VK_SUCCESS;
 }
@@ -256,7 +261,8 @@ get_s_attachment_view(struct panvk_cmd_buffer *cmdbuf)
 }
 
 static void
-fill_textures(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
+fill_textures(struct panvk_cmd_buffer *cmdbuf,
+              const struct pan_fb_info *fbinfo,
               const struct panvk_fb_preload_shader_key *key,
               struct mali_texture_packed *textures)
 {
@@ -299,7 +305,7 @@ fill_textures(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
 }
 
 static void
-fill_bds(struct pan_fb_info *fbinfo,
+fill_bds(const struct pan_fb_info *fbinfo,
          const struct panvk_fb_preload_shader_key *key,
          struct mali_blend_packed *bds)
 {
@@ -341,8 +347,11 @@ fill_bds(struct pan_fb_info *fbinfo,
 
 #if PAN_ARCH < 9
 static VkResult
-cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
-             const struct panvk_fb_preload_shader_key *key)
+cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
+             const struct pan_fb_info *fbinfo,
+             const struct panvk_fb_preload_shader_key *key,
+             struct pan_fb_frame_shaders *fs,
+             struct mali_draw_packed **dcds)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    struct panvk_internal_shader *shader = NULL;
@@ -451,7 +460,7 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
 
    fill_textures(cmdbuf, fbinfo, key, textures.cpu);
 
-   result = alloc_pre_post_dcds(cmdbuf, fbinfo);
+   result = alloc_pre_post_dcds(cmdbuf, fs, dcds);
    if (result != VK_SUCCESS)
       return result;
 
@@ -480,7 +489,6 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
 #endif
    }
 
-   struct mali_draw_packed *dcds = fbinfo->bifrost.pre_post.dcds.cpu;
    uint32_t dcd_idx = key->aspects == VK_IMAGE_ASPECT_COLOR_BIT ? 0 : 1;
 
    if (key->needs_layer_id) {
@@ -501,15 +509,14 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
          };
 
          pan_merge(&dcd_layer, &dcd_base, DRAW);
-         dcds[(l * 3) + dcd_idx] = dcd_layer;
+         (*dcds)[(l * 3) + dcd_idx] = dcd_layer;
       }
    } else {
-      dcds[dcd_idx] = dcd_base;
+      (*dcds)[dcd_idx] = dcd_base;
    }
 
    if (key->aspects == VK_IMAGE_ASPECT_COLOR_BIT) {
-      fbinfo->bifrost.pre_post.modes[dcd_idx] =
-         MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
+      fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
    } else {
       const struct pan_image_plane_ref pref =
          fbinfo->zs.view.zs ? pan_image_view_get_zs_plane(fbinfo->zs.view.zs)
@@ -550,20 +557,21 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
       /* the PAN_ARCH check is redundant but allows compiler optimization
          when PAN_ARCH <= 6 */
       if (PAN_ARCH > 6 && gpu_prod_id >= 0x7200)
-         fbinfo->bifrost.pre_post.modes[dcd_idx] =
-            MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS;
+         fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS;
       else
-         fbinfo->bifrost.pre_post.modes[dcd_idx] = always
-                  ? MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS
-                  : MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
+         fs->modes[dcd_idx] = always ? MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS
+                                     : MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
    }
 
    return VK_SUCCESS;
 }
 #else
 static VkResult
-cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
-             struct panvk_fb_preload_shader_key *key)
+cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
+             const struct pan_fb_info *fbinfo,
+             struct panvk_fb_preload_shader_key *key,
+             struct pan_fb_frame_shaders *fs,
+             struct mali_draw_packed **dcds)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    struct panvk_internal_shader *shader = NULL;
@@ -662,14 +670,13 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
       cfg.depth_cull_enable = false;
    }
 
-   result = alloc_pre_post_dcds(cmdbuf, fbinfo);
+   result = alloc_pre_post_dcds(cmdbuf, fs, dcds);
    if (result != VK_SUCCESS)
       return result;
 
-   struct mali_draw_packed *dcds = fbinfo->bifrost.pre_post.dcds.cpu;
    uint32_t dcd_idx = key->aspects == VK_IMAGE_ASPECT_COLOR_BIT ? 0 : 1;
 
-   pan_pack(&dcds[dcd_idx], DRAW, cfg) {
+   pan_pack(&(*dcds)[dcd_idx], DRAW, cfg) {
       if (key->aspects == VK_IMAGE_ASPECT_COLOR_BIT) {
          /* Skipping ATEST requires forcing Z/S */
          cfg.flags_0.zs_update_operation = MALI_PIXEL_KILL_FORCE_EARLY;
@@ -710,8 +717,7 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
    }
 
    if (key->aspects == VK_IMAGE_ASPECT_COLOR_BIT) {
-      fbinfo->bifrost.pre_post.modes[dcd_idx] =
-         MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
+      fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
    } else {
       /* We could use INTERSECT on Valhall too, but
        * EARLY_ZS_ALWAYS has the advantage of reloading the ZS tile
@@ -725,11 +731,9 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
        * PREPASS_ALWAYS.
        */
 #if PAN_ARCH >= 13
-      fbinfo->bifrost.pre_post.modes[dcd_idx] =
-         MALI_PRE_POST_FRAME_SHADER_MODE_PREPASS_ALWAYS;
+      fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_PREPASS_ALWAYS;
 #else
-      fbinfo->bifrost.pre_post.modes[dcd_idx] =
-         MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS;
+      fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS;
 #endif
    }
 
@@ -739,7 +743,9 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
 
 static VkResult
 cmd_preload_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
-                           struct pan_fb_info *fbinfo)
+                           const struct pan_fb_info *fbinfo,
+                           struct pan_fb_frame_shaders *fs,
+                           struct mali_draw_packed **dcds)
 {
    if (!fbinfo->zs.preload.s && !fbinfo->zs.preload.z)
       return VK_SUCCESS;
@@ -776,12 +782,14 @@ cmd_preload_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
       assert(key.view_type == view_type);
    }
 
-   return cmd_emit_dcd(cmdbuf, fbinfo, &key);
+   return cmd_emit_dcd(cmdbuf, fbinfo, &key, fs, dcds);
 }
 
 static VkResult
 cmd_preload_color_attachments(struct panvk_cmd_buffer *cmdbuf,
-                              struct pan_fb_info *fbinfo)
+                              const struct pan_fb_info *fbinfo,
+                              struct pan_fb_frame_shaders *fs,
+                              struct mali_draw_packed **dcds)
 {
    struct panvk_fb_preload_shader_key key = {
       .type = PANVK_META_OBJECT_KEY_FB_PRELOAD_SHADER,
@@ -815,16 +823,21 @@ cmd_preload_color_attachments(struct panvk_cmd_buffer *cmdbuf,
    if (!needs_preload)
       return VK_SUCCESS;
 
-   return cmd_emit_dcd(cmdbuf, fbinfo, &key);
+   return cmd_emit_dcd(cmdbuf, fbinfo, &key, fs, dcds);
 }
 
 VkResult
 panvk_per_arch(cmd_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
-                               struct pan_fb_info *fbinfo)
+                               const struct pan_fb_info *fbinfo,
+                               struct pan_fb_frame_shaders *fs_out)
 {
-   VkResult result = cmd_preload_color_attachments(cmdbuf, fbinfo);
+   *fs_out = (struct pan_fb_frame_shaders) { .dcd_pointer = 0 };
+   struct mali_draw_packed *dcds = NULL;
+
+   VkResult result = cmd_preload_color_attachments(cmdbuf, fbinfo,
+                                                   fs_out, &dcds);
    if (result != VK_SUCCESS)
       return result;
 
-   return cmd_preload_zs_attachments(cmdbuf, fbinfo);
+   return cmd_preload_zs_attachments(cmdbuf, fbinfo, fs_out, &dcds);
 }

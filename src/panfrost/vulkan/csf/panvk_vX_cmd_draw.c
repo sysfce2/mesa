@@ -1286,11 +1286,11 @@ prepare_incremental_rendering_fbinfos(
    }
 
    if (preload_changed) {
-      memset(&ir_fb->bifrost.pre_post.dcds, 0x0,
-             sizeof(ir_fb->bifrost.pre_post.dcds));
-      VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf, ir_fb);
+      struct pan_fb_frame_shaders fs;
+      VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf, ir_fb, &fs);
       if (result != VK_SUCCESS)
          return result;
+      ir_fb->bifrost = pan_fb_to_fbinfo_frame_shaders(fs);
    }
 
    /* Last incremental rendering pass: preload previous content and deal with
@@ -1329,7 +1329,8 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
-   struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   struct pan_fb_info *fbinfo = &render->fb.info;
 
    /* At this point, we should know sample count and the tile size should have
     * been calculated */
@@ -1368,9 +1369,12 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
       pan_sample_positions_offset(pan_sample_pattern(fbinfo->nr_samples));
    fbinfo->first_provoking_vertex = get_first_provoking_vertex(cmdbuf);
 
-   VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf, fbinfo);
+   struct pan_fb_frame_shaders fs;
+   VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf, fbinfo, &fs);
    if (result != VK_SUCCESS)
       return result;
+
+   fbinfo->bifrost = pan_fb_to_fbinfo_frame_shaders(fs);
 
    struct pan_fb_info ir_fbinfos[PANVK_IR_PASS_COUNT];
    result = prepare_incremental_rendering_fbinfos(cmdbuf, fbinfo, ir_fbinfos);

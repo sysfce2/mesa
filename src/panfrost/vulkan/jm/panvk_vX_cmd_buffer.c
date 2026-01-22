@@ -65,7 +65,8 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
    if (!batch)
       return;
 
-   struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   struct pan_fb_info *fbinfo = &render->fb.info;
 
    assert(batch);
 
@@ -133,9 +134,12 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
       fbinfo->first_provoking_vertex =
          cmdbuf->state.gfx.render.first_provoking_vertex != U_TRISTATE_NO;
 
-      VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf, fbinfo);
+      struct pan_fb_frame_shaders fs;
+      VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf, fbinfo, &fs);
       if (result != VK_SUCCESS)
          return;
+
+      fbinfo->bifrost = pan_fb_to_fbinfo_frame_shaders(fs);
 
       uint32_t view_mask = cmdbuf->state.gfx.render.view_mask;
       assert(view_mask == 0 || util_bitcount(view_mask) <= batch->fb.layer_count);
@@ -176,9 +180,10 @@ panvk_per_arch(cmd_alloc_fb_desc)(struct panvk_cmd_buffer *cmdbuf)
    if (batch->fb.desc.gpu)
       return VK_SUCCESS;
 
-   const struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   const struct pan_fb_info *fbinfo = &render->fb.info;
    bool has_zs_ext = fbinfo->zs.view.zs || fbinfo->zs.view.s;
-   batch->fb.layer_count = cmdbuf->state.gfx.render.layer_count;
+   batch->fb.layer_count = render->layer_count;
    unsigned fbd_size = pan_size(FRAMEBUFFER);
 
    if (has_zs_ext)
@@ -196,9 +201,6 @@ panvk_per_arch(cmd_alloc_fb_desc)(struct panvk_cmd_buffer *cmdbuf)
       panvk_cmd_alloc_dev_mem(cmdbuf, desc, fbd_size * batch->fb.layer_count,
                               pan_alignment(FRAMEBUFFER));
    batch->fb.desc_stride = fbd_size;
-
-   memset(&cmdbuf->state.gfx.render.fb.info.bifrost.pre_post.dcds, 0,
-          sizeof(cmdbuf->state.gfx.render.fb.info.bifrost.pre_post.dcds));
 
    return batch->fb.desc.gpu ? VK_SUCCESS : VK_ERROR_OUT_OF_DEVICE_MEMORY;
 }
