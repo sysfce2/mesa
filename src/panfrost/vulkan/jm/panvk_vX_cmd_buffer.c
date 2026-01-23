@@ -44,7 +44,13 @@ panvk_cmd_prepare_fragment_job(struct panvk_cmd_buffer *cmdbuf, uint64_t fbd)
    if (!job_ptr.gpu)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
-   GENX(pan_emit_fragment_job_payload)(fbinfo, fbd, job_ptr.cpu);
+   pan_section_pack(job_ptr.cpu, FRAGMENT_JOB, PAYLOAD, payload) {
+      payload.bound_min_x = fbinfo->draw_extent.minx >> MALI_TILE_SHIFT;
+      payload.bound_min_y = fbinfo->draw_extent.miny >> MALI_TILE_SHIFT;
+      payload.bound_max_x = fbinfo->draw_extent.maxx >> MALI_TILE_SHIFT;
+      payload.bound_max_y = fbinfo->draw_extent.maxy >> MALI_TILE_SHIFT;
+      payload.framebuffer = fbd;
+   }
 
    pan_section_pack(job_ptr.cpu, FRAGMENT_JOB, HEADER, header) {
       header.type = MALI_JOB_TYPE_FRAGMENT;
