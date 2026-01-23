@@ -128,7 +128,6 @@ render_state_set_color_attachment(struct panvk_cmd_buffer *cmdbuf,
 #endif
 
    fbinfo->rts[index].view = &iview->pview;
-   fbinfo->rts[index].crc_valid = &render->fb.crc_valid[index];
    render->fb.nr_samples =
       MAX2(render->fb.nr_samples,
            pan_image_view_get_nr_samples(&iview->pview));

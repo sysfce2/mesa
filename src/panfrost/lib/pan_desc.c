@@ -1265,7 +1265,7 @@ GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
                      fb->tile_size *
                      pan_image_view_get_nr_samples(fb->rts[i].view);
 
-      if (i != crc_rt)
+      if (i != crc_rt && fb->rts[i].crc_valid != NULL)
          *(fb->rts[i].crc_valid) = false;
    }
 

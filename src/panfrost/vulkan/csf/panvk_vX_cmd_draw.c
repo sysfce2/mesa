@@ -3035,7 +3035,6 @@ panvk_per_arch(cmd_inherit_render_state)(
    render->flags = inheritance_info->flags;
 
    gfx_state_set_dirty(cmdbuf, RENDER_STATE);
-   memset(render->fb.crc_valid, 0, sizeof(render->fb.crc_valid));
    memset(&render->color_attachments, 0, sizeof(render->color_attachments));
    memset(&render->z_attachment, 0, sizeof(render->z_attachment));
    memset(&render->s_attachment, 0, sizeof(render->s_attachment));

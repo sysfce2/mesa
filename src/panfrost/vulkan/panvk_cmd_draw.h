@@ -68,7 +68,6 @@ struct panvk_rendering_state {
 
    struct {
       struct pan_fb_info info;
-      bool crc_valid[MAX_RTS];
 
       /* nr_samples to be used before framebuffer / tiler descriptor are emitted */
       uint32_t nr_samples;
