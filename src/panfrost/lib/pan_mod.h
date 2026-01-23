@@ -58,12 +58,12 @@ struct pan_mod_handler {
                                   unsigned mip_level, unsigned layer_or_z_slice,
                                   unsigned sample, void **payload);
 
-   void (*emit_color_attachment)(const struct pan_fb_info *fb, unsigned rt_idx,
+   void (*emit_color_attachment)(const struct pan_image_view *iview,
                                  unsigned layer_or_z_slice,
                                  unsigned cbuf_offset, void *payload);
-   void (*emit_zs_attachment)(const struct pan_fb_info *fb,
+   void (*emit_zs_attachment)(const struct pan_image_view *iview,
                               unsigned layer_or_z_slice, void *payload);
-   void (*emit_s_attachment)(const struct pan_fb_info *fb,
+   void (*emit_s_attachment)(const struct pan_image_view *iview,
                              unsigned layer_or_z_slice, void *payload);
 };
 
