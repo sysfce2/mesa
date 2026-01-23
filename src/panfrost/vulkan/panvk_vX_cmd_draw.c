@@ -358,21 +358,16 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
 
    BITSET_SET(cmdbuf->state.gfx.dirty, PANVK_CMD_GRAPHICS_DIRTY_RENDER_STATE);
 
-#if PAN_ARCH < 9
-   render->fb.bo_count = 0;
-   memset(render->fb.bos, 0, sizeof(render->fb.bos));
-#endif
-
    render->first_provoking_vertex = U_TRISTATE_UNSET;
 #if PAN_ARCH >= 10
    render->maybe_set_tds_provoking_vertex = NULL;
    render->maybe_set_fbds_provoking_vertex = NULL;
 #endif
-   memset(render->fb.crc_valid, 0, sizeof(render->fb.crc_valid));
    memset(&render->color_attachments, 0,
           sizeof(render->color_attachments));
    memset(&render->z_attachment, 0, sizeof(render->z_attachment));
    memset(&render->s_attachment, 0, sizeof(render->s_attachment));
+   memset(&render->fb, 0, sizeof(render->fb));
    render->bound_attachments = 0;
 
    const VkMultisampledRenderToSingleSampledInfoEXT *ms2ss_info =
