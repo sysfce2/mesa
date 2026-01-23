@@ -553,24 +553,31 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
 void
 panvk_per_arch(cmd_select_tile_size)(struct panvk_cmd_buffer *cmdbuf)
 {
-   struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   struct pan_fb_layout *fb = &render->fb.layout;
 
    /* In case we never emitted tiler/framebuffer descriptors, we emit the
     * current sample count and compute tile size */
-   if (fbinfo->nr_samples == 0) {
-      fbinfo->nr_samples = cmdbuf->state.gfx.render.fb.nr_samples;
-      GENX(pan_select_tile_size)(fbinfo);
+   assert(fb->sample_count == render->fb.info.nr_samples);
+   if (fb->sample_count == 0) {
+      fb->sample_count = render->fb.nr_samples;
+      render->fb.info.nr_samples = render->fb.nr_samples;
+
+      GENX(pan_select_fb_tile_size)(fb);
 
 #if PAN_ARCH != 6
-      if (fbinfo->cbuf_allocation > fbinfo->tile_buf_budget) {
+      if (fb->tile_rt_alloc_B > fb->tile_rt_budget_B) {
          vk_perf(VK_LOG_OBJS(&cmdbuf->vk.base),
                  "Using too much tile-memory, disabling pipelining");
       }
 #endif
+
+      render->fb.info.tile_size = fb->tile_size_px;
+      render->fb.info.cbuf_allocation = fb->tile_rt_alloc_B;
    } else {
       /* In case we already emitted tiler/framebuffer descriptors, we ensure
        * that the sample count didn't change (this should never happen) */
-      assert(fbinfo->nr_samples == cmdbuf->state.gfx.render.fb.nr_samples);
+      assert(fb->sample_count == render->fb.nr_samples);
    }
 }
 

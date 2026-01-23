@@ -2337,7 +2337,7 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *draw)
       return result;
 
    if (!cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable) {
-      const struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+      const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
       uint32_t *nr_samples = &cmdbuf->state.gfx.render.fb.nr_samples;
       uint32_t rasterization_samples =
          cmdbuf->vk.dynamic_graphics_state.ms.rasterization_samples;
@@ -2357,8 +2357,8 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *draw)
        * XXX: This currently can happen in case we resume a render pass with no
        * attachements and without any draw as the FBD is emitted when suspending.
        */
-      assert(fbinfo->nr_samples == 0 ||
-             fbinfo->nr_samples == cmdbuf->state.gfx.render.fb.nr_samples);
+      assert(fb->sample_count == 0 ||
+             fb->sample_count == cmdbuf->state.gfx.render.fb.nr_samples);
    }
 
    if (!inherits_render_ctx(cmdbuf)) {
