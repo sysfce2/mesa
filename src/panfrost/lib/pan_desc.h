@@ -295,6 +295,8 @@ void GENX(pan_emit_tls)(const struct pan_tls_info *info,
 int GENX(pan_select_crc_rt)(const struct pan_fb_info *fb, unsigned tile_size);
 
 #if PAN_ARCH >= 5
+void GENX(pan_emit_default_color_attachment)(enum pipe_format format,
+                                             void *payload);
 void GENX(pan_emit_linear_color_attachment)(const struct pan_image_view *iview,
                                             unsigned layer_or_z_slice,
                                             void *payload);

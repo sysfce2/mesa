@@ -644,6 +644,17 @@ get_rt_formats(enum pipe_format pfmt, uint32_t *writeback, uint32_t *internal,
 }
 
 void
+GENX(pan_emit_default_color_attachment)(enum pipe_format format,
+                                        void *payload)
+{
+   pan_cast_and_pack(payload, RGB_RENDER_TARGET, cfg) {
+      get_rt_formats(format, &cfg.writeback_format, &cfg.internal_format,
+                     &cfg.swizzle);
+      cfg.srgb = util_format_is_srgb(format);
+   }
+}
+
+void
 GENX(pan_emit_afbc_color_attachment)(const struct pan_image_view *iview,
                                      unsigned layer_or_z_slice,
                                      void *payload)
