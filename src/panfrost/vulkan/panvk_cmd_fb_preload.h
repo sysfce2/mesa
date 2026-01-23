@@ -15,11 +15,12 @@ VkResult panvk_per_arch(cmd_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
                                         struct pan_fb_frame_shaders *fs_out);
 
 static inline struct pan_fb_bifrost_info
-pan_fb_to_fbinfo_frame_shaders(struct pan_fb_frame_shaders fs)
+pan_fb_to_fbinfo_frame_shaders(struct pan_fb_frame_shaders fs,
+                               uint32_t idx)
 {
    return (struct pan_fb_bifrost_info) {
       .pre_post = {
-         .dcds.gpu = fs.dcd_pointer,
+         .dcds.gpu = fs.dcd_pointer + idx * 3 * pan_size(DRAW),
          .modes = { fs.modes[0], fs.modes[1], fs.modes[2] },
       }
    };

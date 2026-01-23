@@ -139,8 +139,6 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
       if (result != VK_SUCCESS)
          return;
 
-      fbinfo->bifrost = pan_fb_to_fbinfo_frame_shaders(fs);
-
       uint32_t view_mask = cmdbuf->state.gfx.render.view_mask;
       assert(view_mask == 0 || util_bitcount(view_mask) <= batch->fb.layer_count);
       uint32_t enabled_layer_count = view_mask ?
@@ -158,6 +156,8 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
          const struct pan_ptr fbd =
             pan_ptr_offset(batch->fb.desc, batch->fb.desc_stride * layer_id);
          uint64_t tagged_fbd_ptr = fbd.gpu;
+
+         fbinfo->bifrost = pan_fb_to_fbinfo_frame_shaders(fs, layer_id);
 
          tagged_fbd_ptr |= GENX(pan_emit_fbd)(
             &cmdbuf->state.gfx.render.fb.info, layer_id, &batch->tlsinfo,

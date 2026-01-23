@@ -1290,7 +1290,7 @@ prepare_incremental_rendering_fbinfos(
       VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf, ir_fb, &fs);
       if (result != VK_SUCCESS)
          return result;
-      ir_fb->bifrost = pan_fb_to_fbinfo_frame_shaders(fs);
+      ir_fb->bifrost = pan_fb_to_fbinfo_frame_shaders(fs, 0);
    }
 
    /* Last incremental rendering pass: preload previous content and deal with
@@ -1374,7 +1374,7 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
    if (result != VK_SUCCESS)
       return result;
 
-   fbinfo->bifrost = pan_fb_to_fbinfo_frame_shaders(fs);
+   fbinfo->bifrost = pan_fb_to_fbinfo_frame_shaders(fs, 0);
 
    struct pan_fb_info ir_fbinfos[PANVK_IR_PASS_COUNT];
    result = prepare_incremental_rendering_fbinfos(cmdbuf, fbinfo, ir_fbinfos);
