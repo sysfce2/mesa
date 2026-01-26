@@ -1960,6 +1960,19 @@ opcode("bfdot2_bfadd", 1, tint16, [2, 2, 1], [tint16, tint16, tint16],
    dst.x = _mesa_float_to_bfloat16_bits_rte(acc);
 """, valid_fp_math_ctrl = preserve_sz_inf_nan + exact)
 
+opcode("bfdot2_fadd", 1, tfloat32, [2, 2, 1], [tint16, tint16, tfloat32],
+       False, _2src_commutative, """
+   const float a0 = _mesa_bfloat16_bits_to_float(src0.x);
+   const float a1 = _mesa_bfloat16_bits_to_float(src0.y);
+   const float b0 = _mesa_bfloat16_bits_to_float(src1.x);
+   const float b1 = _mesa_bfloat16_bits_to_float(src1.y);
+
+   float acc = src2.x;
+   acc = fmaf(a0, b0, acc);
+   acc = fmaf(a1, b1, acc);
+
+   dst.x = acc;
+""")
 
 unop_numeric_convert("e4m3fn2f", tfloat32, tuint8, "_mesa_e4m3fn_to_float(src0)")
 unop_numeric_convert("f2e4m3fn", tuint8, tfloat32, "_mesa_float_to_e4m3fn(src0)")
@@ -1970,3 +1983,73 @@ unop_numeric_convert("f2e4m3fn_satfn", tuint8, tfloat32, "isinf(src0) ? 0x7f : _
 unop_numeric_convert("e5m22f", tfloat32, tuint8, "_mesa_e5m2_to_float(src0)")
 unop_numeric_convert("f2e5m2", tuint8, tfloat32, "_mesa_float_to_e5m2(src0)")
 unop_numeric_convert("f2e5m2_sat", tuint8, tfloat32, "_mesa_float_to_e5m2_sat(src0)")
+
+
+opcode("f16dot2_fadd", 1, tfloat, [2, 2, 1], [tfloat16, tfloat16, tfloat],
+       False, _2src_commutative, """
+   float acc = src2.x;
+   acc = fmaf(src0.x, src1.x, acc);
+   acc = fmaf(src0.y, src1.y, acc);
+
+   dst.x = acc;
+""")
+
+opcode("e4m3fn_dot4_fadd", 1, tfloat32, [1, 1, 1], [tuint32, tuint32, tfloat32],
+       False, _2src_commutative, """
+   const float a0 = _mesa_e4m3fn_to_float(src0.x);
+   const float a1 = _mesa_e4m3fn_to_float(src0.x >> 8);
+   const float a2 = _mesa_e4m3fn_to_float(src0.x >> 16);
+   const float a3 = _mesa_e4m3fn_to_float(src0.x >> 24);
+   const float b0 = _mesa_e4m3fn_to_float(src1.x);
+   const float b1 = _mesa_e4m3fn_to_float(src1.x >> 8);
+   const float b2 = _mesa_e4m3fn_to_float(src1.x >> 16);
+   const float b3 = _mesa_e4m3fn_to_float(src1.x >> 24);
+
+   float acc = src2.x;
+   acc = fmaf(a0, b0, acc);
+   acc = fmaf(a1, b1, acc);
+   acc = fmaf(a2, b2, acc);
+   acc = fmaf(a3, b3, acc);
+
+   dst.x = acc;
+""")
+
+opcode("e5m2_dot4_fadd", 1, tfloat32, [1, 1, 1], [tuint32, tuint32, tfloat32],
+       False, _2src_commutative, """
+   const float a0 = _mesa_e5m2_to_float(src0.x);
+   const float a1 = _mesa_e5m2_to_float(src0.x >> 8);
+   const float a2 = _mesa_e5m2_to_float(src0.x >> 16);
+   const float a3 = _mesa_e5m2_to_float(src0.x >> 24);
+   const float b0 = _mesa_e5m2_to_float(src1.x);
+   const float b1 = _mesa_e5m2_to_float(src1.x >> 8);
+   const float b2 = _mesa_e5m2_to_float(src1.x >> 16);
+   const float b3 = _mesa_e5m2_to_float(src1.x >> 24);
+
+   float acc = src2.x;
+   acc = fmaf(a0, b0, acc);
+   acc = fmaf(a1, b1, acc);
+   acc = fmaf(a2, b2, acc);
+   acc = fmaf(a3, b3, acc);
+
+   dst.x = acc;
+""")
+
+opcode("e4m3fn_e5m2_dot4_fadd", 1, tfloat32, [1, 1, 1], [tuint32, tuint32, tfloat32],
+       False, "", """
+   const float a0 = _mesa_e4m3fn_to_float(src0.x);
+   const float a1 = _mesa_e4m3fn_to_float(src0.x >> 8);
+   const float a2 = _mesa_e4m3fn_to_float(src0.x >> 16);
+   const float a3 = _mesa_e4m3fn_to_float(src0.x >> 24);
+   const float b0 = _mesa_e5m2_to_float(src1.x);
+   const float b1 = _mesa_e5m2_to_float(src1.x >> 8);
+   const float b2 = _mesa_e5m2_to_float(src1.x >> 16);
+   const float b3 = _mesa_e5m2_to_float(src1.x >> 24);
+
+   float acc = src2.x;
+   acc = fmaf(a0, b0, acc);
+   acc = fmaf(a1, b1, acc);
+   acc = fmaf(a2, b2, acc);
+   acc = fmaf(a3, b3, acc);
+
+   dst.x = acc;
+""")
