@@ -2059,12 +2059,68 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
       emit_idot_instruction(ctx, instr, aco_opcode::v_dot2_u32_u16, dst, true);
       break;
    }
+   case nir_op_bfdot2_fadd: {
+      Temp src0 = as_vgpr(ctx, get_alu_src_vop3p(ctx, instr->src[0]));
+      Temp src1 = as_vgpr(ctx, get_alu_src_vop3p(ctx, instr->src[1]));
+      Temp src2 = get_alu_src(ctx, instr->src[2], 1);
+
+      unsigned opsel_lo = (instr->src[0].swizzle[0] & 1) | ((instr->src[1].swizzle[0] & 1) << 1);
+      unsigned opsel_hi = (instr->src[0].swizzle[1] & 1) | ((instr->src[1].swizzle[1] & 1) << 1) | 0x4;
+
+      bld.vop3p(aco_opcode::v_dot2_f32_bf16, Definition(dst), src0, src1, src2, opsel_lo, opsel_hi);
+      break;
+   }
    case nir_op_bfdot2_bfadd: {
       Temp src0 = as_vgpr(ctx, get_alu_src(ctx, instr->src[0], 2));
       Temp src1 = as_vgpr(ctx, get_alu_src(ctx, instr->src[1], 2));
       Temp src2 = get_alu_src(ctx, instr->src[2], 1);
 
       bld.vop3(aco_opcode::v_dot2_bf16_bf16, Definition(dst), src0, src1, src2);
+      break;
+   }
+   case nir_op_f16dot2_fadd: {
+      if (dst.regClass() == v2b) {
+         Temp src0 = as_vgpr(ctx, get_alu_src(ctx, instr->src[0], 2));
+         Temp src1 = as_vgpr(ctx, get_alu_src(ctx, instr->src[1], 2));
+         Temp src2 = get_alu_src(ctx, instr->src[2], 1);
+
+         bld.vop3(aco_opcode::v_dot2_f16_f16, Definition(dst), src0, src1, src2);
+      } else if (dst.regClass() == v1) {
+         Temp src0 = as_vgpr(ctx, get_alu_src_vop3p(ctx, instr->src[0]));
+         Temp src1 = as_vgpr(ctx, get_alu_src_vop3p(ctx, instr->src[1]));
+         Temp src2 = get_alu_src(ctx, instr->src[2], 1);
+
+         unsigned opsel_lo = (instr->src[0].swizzle[0] & 1) | ((instr->src[1].swizzle[0] & 1) << 1);
+         unsigned opsel_hi = (instr->src[0].swizzle[1] & 1) | ((instr->src[1].swizzle[1] & 1) << 1) | 0x4;
+
+         bld.vop3p(aco_opcode::v_dot2_f32_f16, Definition(dst), src0, src1, src2, opsel_lo, opsel_hi);
+      } else {
+         isel_err(&instr->instr, "Unimplemented NIR instr bit size");
+      }
+      break;
+   }
+   case nir_op_e4m3fn_dot4_fadd: {
+      Temp src0 = as_vgpr(ctx, get_alu_src(ctx, instr->src[0]));
+      Temp src1 = as_vgpr(ctx, get_alu_src(ctx, instr->src[1]));
+      Temp src2 = get_alu_src(ctx, instr->src[2]);
+
+      bld.vop3p(aco_opcode::v_dot4_f32_fp8_fp8, Definition(dst), src0, src1, src2, 0x0, 0x7);
+      break;
+   }
+   case nir_op_e5m2_dot4_fadd: {
+      Temp src0 = as_vgpr(ctx, get_alu_src(ctx, instr->src[0]));
+      Temp src1 = as_vgpr(ctx, get_alu_src(ctx, instr->src[1]));
+      Temp src2 = get_alu_src(ctx, instr->src[2]);
+
+      bld.vop3p(aco_opcode::v_dot4_f32_bf8_bf8, Definition(dst), src0, src1, src2, 0x0, 0x7);
+      break;
+   }
+   case nir_op_e4m3fn_e5m2_dot4_fadd: {
+      Temp src0 = as_vgpr(ctx, get_alu_src(ctx, instr->src[0]));
+      Temp src1 = as_vgpr(ctx, get_alu_src(ctx, instr->src[1]));
+      Temp src2 = get_alu_src(ctx, instr->src[2]);
+
+      bld.vop3p(aco_opcode::v_dot4_f32_fp8_bf8, Definition(dst), src0, src1, src2, 0x0, 0x7);
       break;
    }
    case nir_op_cube_amd: {
