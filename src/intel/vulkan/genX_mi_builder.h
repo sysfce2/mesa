@@ -21,3 +21,20 @@
 #define __gen_get_batch_address(b, a) anv_batch_address(b, a)
 #define __gen_get_write_fencing_status(b) (&(b)->write_fence_status)
 #include "common/mi_builder.h"
+
+/* We reserve this MI ALU register for the purpose of handling predication.
+ * Other code which uses the MI ALU should leave it alone.
+ */
+#define ANV_PREDICATE_RESULT_REG 0x2678 /* MI_ALU_REG15 */
+
+/* We reserve this MI ALU register to pass around an offset computed from
+ * VkPerformanceQuerySubmitInfoKHR::counterPassIndex VK_KHR_performance_query.
+ * Other code which uses the MI ALU should leave it alone.
+ */
+#define ANV_PERF_QUERY_OFFSET_REG 0x2670 /* MI_ALU_REG14 */
+
+/* We reserve this MI ALU register to hold the last programmed bindless
+ * surface state base address so that we can predicate STATE_BASE_ADDRESS
+ * emissions if the address doesn't change.
+ */
+#define ANV_BINDLESS_SURFACE_BASE_ADDR_REG 0x2668 /* MI_ALU_REG13 */

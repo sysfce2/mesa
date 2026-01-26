@@ -245,23 +245,6 @@ get_max_vbs(const struct intel_device_info *devinfo) {
 #define ANV_SVGS_VB_INDEX   (HW_MAX_VBS - 2)
 #define ANV_DRAWID_VB_INDEX (ANV_SVGS_VB_INDEX + 1)
 
-/* We reserve this MI ALU register for the purpose of handling predication.
- * Other code which uses the MI ALU should leave it alone.
- */
-#define ANV_PREDICATE_RESULT_REG 0x2678 /* MI_ALU_REG15 */
-
-/* We reserve this MI ALU register to pass around an offset computed from
- * VkPerformanceQuerySubmitInfoKHR::counterPassIndex VK_KHR_performance_query.
- * Other code which uses the MI ALU should leave it alone.
- */
-#define ANV_PERF_QUERY_OFFSET_REG 0x2670 /* MI_ALU_REG14 */
-
-/* We reserve this MI ALU register to hold the last programmed bindless
- * surface state base address so that we can predicate STATE_BASE_ADDRESS
- * emissions if the address doesn't change.
- */
-#define ANV_BINDLESS_SURFACE_BASE_ADDR_REG 0x2668 /* MI_ALU_REG13 */
-
 #define ANV_GRAPHICS_SHADER_STAGE_COUNT (MESA_SHADER_MESH + 1)
 #define ANV_RT_SHADER_STAGE_COUNT       (MESA_SHADER_CALLABLE - MESA_SHADER_RAYGEN + 1)
 
