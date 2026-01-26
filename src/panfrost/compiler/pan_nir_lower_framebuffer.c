@@ -453,12 +453,14 @@ static nir_def *pan_pack(nir_builder *b,
    case PIPE_FORMAT_B5G6R5_UNORM:
       return pan_pack_unorm(b, unpacked, 5, 6, 5, 0);
    case PIPE_FORMAT_R10G10B10A2_UNORM:
+   case PIPE_FORMAT_R10G10B10X2_UNORM:
    case PIPE_FORMAT_B10G10R10A2_UNORM:
       return pan_pack_unorm_1010102(b, unpacked);
    case PIPE_FORMAT_R10G10B10A2_UINT:
    case PIPE_FORMAT_B10G10R10A2_UINT:
       return pan_pack_int_1010102(b, unpacked, false);
    case PIPE_FORMAT_R10G10B10A2_SINT:
+   case PIPE_FORMAT_R10G10B10X2_SINT:
    case PIPE_FORMAT_B10G10R10A2_SINT:
       return pan_pack_int_1010102(b, unpacked, true);
    case PIPE_FORMAT_R11G11B10_FLOAT:
