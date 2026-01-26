@@ -37,7 +37,7 @@
 static VkResult
 panvk_cmd_prepare_fragment_job(struct panvk_cmd_buffer *cmdbuf, uint64_t fbd)
 {
-   const struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+   const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
    struct panvk_batch *batch = cmdbuf->cur_batch;
    struct pan_ptr job_ptr = panvk_cmd_alloc_desc(cmdbuf, FRAGMENT_JOB);
 
@@ -45,10 +45,12 @@ panvk_cmd_prepare_fragment_job(struct panvk_cmd_buffer *cmdbuf, uint64_t fbd)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
    pan_section_pack(job_ptr.cpu, FRAGMENT_JOB, PAYLOAD, payload) {
-      payload.bound_min_x = fbinfo->draw_extent.minx >> MALI_TILE_SHIFT;
-      payload.bound_min_y = fbinfo->draw_extent.miny >> MALI_TILE_SHIFT;
-      payload.bound_max_x = fbinfo->draw_extent.maxx >> MALI_TILE_SHIFT;
-      payload.bound_max_y = fbinfo->draw_extent.maxy >> MALI_TILE_SHIFT;
+      assert(pan_fb_bbox_is_valid(fb->tiling_area_px));
+      payload.bound_min_x = fb->tiling_area_px.min_x >> MALI_TILE_SHIFT;
+      payload.bound_min_y = fb->tiling_area_px.min_y >> MALI_TILE_SHIFT;
+      payload.bound_max_x = fb->tiling_area_px.max_x >> MALI_TILE_SHIFT;
+      payload.bound_max_y = fb->tiling_area_px.max_y >> MALI_TILE_SHIFT;
+
       payload.framebuffer = fbd;
    }
 
@@ -70,9 +72,6 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
 
    if (!batch)
       return;
-
-   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
-   struct pan_fb_info *fbinfo = &render->fb.info;
 
    assert(batch);
 
@@ -130,21 +129,32 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
    if (batch->fb.desc.cpu) {
       panvk_per_arch(cmd_select_tile_size)(cmdbuf);
 
-      /* At this point, we should know sample count and the tile size should have
-       * been calculated */
-      assert(fbinfo->nr_samples > 0 && fbinfo->tile_size > 0);
-
-      fbinfo->sample_positions =
-         dev->sample_positions->addr.dev +
-         pan_sample_positions_offset(pan_sample_pattern(fbinfo->nr_samples));
-      fbinfo->first_provoking_vertex =
-         cmdbuf->state.gfx.render.first_provoking_vertex != U_TRISTATE_NO;
+      /* At this point, we should know sample count and the tile size should
+       * have been calculated
+       */
+      const struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+      const struct pan_fb_info *fbinfo = &render->fb.info;
+      assert(render->fb.layout.sample_count > 0);
+      assert(render->fb.layout.tile_size_px > 0);
 
       struct pan_fb_frame_shaders fs;
       VkResult result = panvk_per_arch(cmd_fb_preload_fbinfo)(cmdbuf,
                                                               fbinfo, &fs);
       if (result != VK_SUCCESS)
          return;
+
+      const uint8_t sample_count = render->fb.layout.sample_count;
+      struct pan_fb_desc_info fbd_info = {
+         .fb = &render->fb.layout,
+         .load = &render->fb.load,
+         .store = &render->fb.store,
+         .sample_pos_array_pointer = dev->sample_positions->addr.dev +
+            pan_sample_positions_offset(pan_sample_pattern(sample_count)),
+         .provoking_vertex_first =
+            cmdbuf->state.gfx.render.first_provoking_vertex != U_TRISTATE_NO,
+         .tls = &batch->tlsinfo,
+         .tiler_ctx = &batch->tiler.ctx,
+      };
 
       uint32_t view_mask = cmdbuf->state.gfx.render.view_mask;
       assert(view_mask == 0 || util_bitcount(view_mask) <= batch->fb.layer_count);
@@ -164,11 +174,10 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
             pan_ptr_offset(batch->fb.desc, batch->fb.desc_stride * layer_id);
          uint64_t tagged_fbd_ptr = fbd.gpu;
 
-         fbinfo->bifrost = pan_fb_to_fbinfo_frame_shaders(fs, layer_id);
-
-         tagged_fbd_ptr |= GENX(pan_emit_fbd)(
-            &cmdbuf->state.gfx.render.fb.info, layer_id, &batch->tlsinfo,
-            &batch->tiler.ctx, fbd.cpu);
+         fbd_info.layer = layer_id;
+         fbd_info.frame_shaders = fs;
+         fbd_info.frame_shaders.dcd_pointer += layer_id * 3 * pan_size(DRAW);
+         tagged_fbd_ptr |= GENX(pan_emit_fb_desc)(&fbd_info, fbd.cpu);
 
          result = panvk_cmd_prepare_fragment_job(cmdbuf, tagged_fbd_ptr);
          if (result != VK_SUCCESS)
@@ -188,8 +197,8 @@ panvk_per_arch(cmd_alloc_fb_desc)(struct panvk_cmd_buffer *cmdbuf)
       return VK_SUCCESS;
 
    struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
-   const struct pan_fb_info *fbinfo = &render->fb.info;
-   bool has_zs_ext = fbinfo->zs.view.zs || fbinfo->zs.view.s;
+   const struct pan_fb_layout *fb = &render->fb.layout;
+   bool has_zs_ext = pan_fb_has_zs(fb);
    batch->fb.layer_count = render->layer_count;
    unsigned fbd_size = pan_size(FRAMEBUFFER);
 
@@ -198,7 +207,7 @@ panvk_per_arch(cmd_alloc_fb_desc)(struct panvk_cmd_buffer *cmdbuf)
                  pan_size(ZS_CRC_EXTENSION);
 
    fbd_size = ALIGN_POT(fbd_size, pan_alignment(RENDER_TARGET)) +
-              (MAX2(fbinfo->rt_count, 1) * pan_size(RENDER_TARGET));
+              (MAX2(fb->rt_count, 1) * pan_size(RENDER_TARGET));
 
    batch->fb.bo_count = cmdbuf->state.gfx.render.fb.bo_count;
    memcpy(batch->fb.bos, cmdbuf->state.gfx.render.fb.bos,
@@ -243,7 +252,7 @@ panvk_per_arch(cmd_prepare_tiler_context)(struct panvk_cmd_buffer *cmdbuf,
       goto out_set_layer_ctx;
    }
 
-   const struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+   const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
    uint32_t layer_count = cmdbuf->state.gfx.render.layer_count;
    batch->tiler.heap_desc = panvk_cmd_alloc_desc(cmdbuf, TILER_HEAP);
    batch->tiler.ctx_descs =
@@ -264,10 +273,10 @@ panvk_per_arch(cmd_prepare_tiler_context)(struct panvk_cmd_buffer *cmdbuf,
    pan_pack(&batch->tiler.ctx_templ, TILER_CONTEXT, cfg) {
       cfg.hierarchy_mask = panvk_select_tiler_hierarchy_mask(
          phys_dev, &cmdbuf->state.gfx, pan_kmod_bo_size(dev->tiler_heap->bo));
-      cfg.fb_width = fbinfo->width;
-      cfg.fb_height = fbinfo->height;
+      cfg.fb_width = fb->width_px;
+      cfg.fb_height = fb->height_px;
       cfg.heap = batch->tiler.heap_desc.gpu;
-      cfg.sample_pattern = pan_sample_pattern(fbinfo->nr_samples);
+      cfg.sample_pattern = pan_sample_pattern(fb->sample_count);
    }
 
    memcpy(batch->tiler.heap_desc.cpu, &batch->tiler.heap_templ,
