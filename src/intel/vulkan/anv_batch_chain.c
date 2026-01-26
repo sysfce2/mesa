@@ -457,7 +457,10 @@ anv_cmd_buffer_surface_base_address(struct anv_cmd_buffer *cmd_buffer)
    struct anv_state *bt_block = u_vector_head(&cmd_buffer->bt_block_states);
    return (struct anv_address) {
       .bo = pool->block_pool.bo,
-      .offset = bt_block->offset - pool->start_offset,
+      .offset = cmd_buffer->device->info->verx10 >= 125 ?
+                ROUND_DOWN_TO(bt_block->offset - pool->start_offset,
+                              BINDING_TABLE_VIEW_SIZE) :
+                (bt_block->offset - pool->start_offset),
    };
 }
 
@@ -721,15 +724,15 @@ anv_cmd_buffer_alloc_binding_table(struct anv_cmd_buffer *cmd_buffer,
    cmd_buffer->bt_next.map += bt_size;
    cmd_buffer->bt_next.alloc_size -= bt_size;
 
+   struct anv_state *bt_block = u_vector_head(&cmd_buffer->bt_block_states);
    if (cmd_buffer->device->info->verx10 >= 125) {
+      state.offset += bt_block->offset % BINDING_TABLE_VIEW_SIZE;
       /* We're using 3DSTATE_BINDING_TABLE_POOL_ALLOC to change the binding
        * table address independently from surface state base address.  We no
        * longer need any sort of offsetting.
        */
       *state_offset = 0;
    } else {
-      struct anv_state *bt_block = u_vector_head(&cmd_buffer->bt_block_states);
-
       assert(bt_block->offset < 0);
       *state_offset = -bt_block->offset;
    }

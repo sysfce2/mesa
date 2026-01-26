@@ -172,6 +172,8 @@ struct intel_perf_query_result;
 
 #define NSEC_PER_SEC 1000000000ull
 
+/* 3DSTATE_BINDING_TABLE_POINTERS_*::PointertoBindingTable resolution */
+#define BINDING_TABLE_VIEW_SIZE (1u << 20)
 #define BINDING_TABLE_POOL_BLOCK_SIZE (65536)
 
 #define HW_MAX_VBS 33

@@ -447,7 +447,7 @@ genX(cmd_buffer_emit_bt_pool_base_address)(struct anv_cmd_buffer *cmd_buffer)
       &cmd_buffer->batch, GENX(3DSTATE_BINDING_TABLE_POOL_ALLOC), btpa) {
       btpa.BindingTablePoolBaseAddress =
          anv_cmd_buffer_surface_base_address(cmd_buffer);
-      btpa.BindingTablePoolBufferSize = device->physical->va.binding_table_pool.size / 4096;
+      btpa.BindingTablePoolBufferSize = BINDING_TABLE_VIEW_SIZE / 4096;
       btpa.MOCS = mocs;
    }
    genX(batch_emit_pipe_control)(&cmd_buffer->batch,
