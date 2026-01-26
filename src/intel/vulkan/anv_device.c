@@ -712,7 +712,7 @@ VkResult anv_CreateDevice(
                                    &(struct anv_state_pool_params) {
                                       .name         = "binding table pool",
                                       .base_address = device->physical->va.binding_table_pool.addr,
-                                      .block_size   = BINDING_TABLE_POOL_BLOCK_SIZE,
+                                      .block_size   = device->physical->instance->binding_table_block_size,
                                       .max_size     = device->physical->va.binding_table_pool.size,
                                    });
    } else {
@@ -730,7 +730,7 @@ VkResult anv_CreateDevice(
                                       .name         = "binding table pool",
                                       .base_address = device->physical->va.internal_surface_state_pool.addr,
                                       .start_offset = bt_pool_offset,
-                                      .block_size   = BINDING_TABLE_POOL_BLOCK_SIZE,
+                                      .block_size   = 64 * 1024,
                                       .max_size     = device->physical->va.internal_surface_state_pool.size,
                                    });
    }

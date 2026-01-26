@@ -28,6 +28,8 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_ANV_GENERATED_INDIRECT_THRESHOLD(4)
       DRI_CONF_ANV_GENERATED_INDIRECT_RING_THRESHOLD(100)
       DRI_CONF_NO_16BIT(false)
+      DRI_CONF_INTEL_BINDING_TABLE_BLOCK_SIZE(BINDING_TABLE_POOL_DEFAULT_BLOCK_SIZE,
+                                              1024, 128 * 1024)
       DRI_CONF_INTEL_ENABLE_WA_14018912822(false)
       DRI_CONF_INTEL_ENABLE_WA_14024015672_MSAA(false)
       DRI_CONF_INTEL_SAMPLER_ROUTE_TO_LSC(false)
@@ -235,6 +237,8 @@ anv_init_dri_options(struct anv_instance *instance)
        driQueryOptionb(&instance->dri_options, "vk_lower_terminate_to_discard");
     instance->disable_xe2_drm_ccs_modifiers =
        driQueryOptionb(&instance->dri_options, "anv_disable_drm_ccs_modifiers");
+    instance->binding_table_block_size = util_next_power_of_two(
+       driQueryOptioni(&instance->dri_options, "intel_binding_table_block_size"));
 
     if (instance->vk.app_info.engine_name &&
         !strcmp(instance->vk.app_info.engine_name, "DXVK")) {

@@ -174,7 +174,7 @@ struct intel_perf_query_result;
 
 /* 3DSTATE_BINDING_TABLE_POINTERS_*::PointertoBindingTable resolution */
 #define BINDING_TABLE_VIEW_SIZE (1u << 20)
-#define BINDING_TABLE_POOL_BLOCK_SIZE (65536)
+#define BINDING_TABLE_POOL_DEFAULT_BLOCK_SIZE (4096)
 
 #define HW_MAX_VBS 33
 
@@ -1796,6 +1796,7 @@ struct anv_instance {
     bool                                        large_workgroup_non_coherent_image_workaround;
     bool                                        force_sampler_prefetch;
     bool                                        force_compute_surface_prefetch;
+    unsigned                                    binding_table_block_size;
 
     /* HW workarounds */
     bool                                        no_16bit;
