@@ -131,6 +131,11 @@ def define_tracepoints(args):
                  tp_args=[Arg(type='uint8_t', var='mode', c_format='%hhu'),],
                  end_pipelined=False)
 
+    # 3DSTATE_BINDING_TABLE_POOL_ALLOC emission, only for Anv
+    begin_end_tp('btp',
+                 tp_args=[Arg(type='uint64_t', var='addr', c_format='0x%" PRIx64 "'),],
+                 end_pipelined=False)
+
     # Dynamic rendering tracepoints, only for Anv
     begin_end_tp('render_pass',
                  tp_args=[Arg(type='uint64_t', var='command_buffer_handle', c_format='%" PRIu64 "',  perfetto_field=True),

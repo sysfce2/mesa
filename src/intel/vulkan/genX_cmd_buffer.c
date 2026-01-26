@@ -418,14 +418,31 @@ genX(cmd_buffer_emit_bt_pool_base_address)(struct anv_cmd_buffer *cmd_buffer)
    if (!anv_cmd_buffer_is_render_or_compute_queue(cmd_buffer))
       return;
 
-   /* If we are emitting a new state base address we probably need to re-emit
-    * binding tables.
-    */
-   cmd_buffer->state.descriptors_dirty |= ~0;
-
 #if GFX_VERx10 >= 125
+   struct anv_address btp = anv_cmd_buffer_surface_base_address(cmd_buffer);
+   if (anv_address_equals(cmd_buffer->state.btp, btp))
+      return;
+
    struct anv_device *device = cmd_buffer->device;
    const uint32_t mocs = isl_mocs(&device->isl_dev, 0, false);
+
+   trace_intel_begin_btp(cmd_buffer->batch.trace);
+
+   /* Disable stall tracing to avoid leaving a tracepoint with random
+    * timestamp if the STATE_BASE_ADDRESS instruction sequence is skipped
+    * over.
+    */
+   struct u_trace *tmp_trace = cmd_buffer->batch.trace;
+   cmd_buffer->batch.trace = NULL;
+
+   struct mi_builder b;
+   mi_builder_init(&b, device->info, &cmd_buffer->batch);
+   mi_builder_set_mocs(&b, isl_mocs(&device->isl_dev, 0, false));
+   struct mi_goto_target t = MI_GOTO_TARGET_INIT;
+   mi_goto_if(&b,
+              mi_ieq(&b, mi_reg64(ANV_BTP_ADDR_REG),
+                         mi_imm(anv_address_physical(btp))),
+              &t);
 
    /* We're changing base location of binding tables which affects the state
     * cache. We're adding texture cache invalidation following a
@@ -445,8 +462,7 @@ genX(cmd_buffer_emit_bt_pool_base_address)(struct anv_cmd_buffer *cmd_buffer)
                                  "pre BINDING_TABLE_POOL_ALLOC stall");
    anv_batch_emit(
       &cmd_buffer->batch, GENX(3DSTATE_BINDING_TABLE_POOL_ALLOC), btpa) {
-      btpa.BindingTablePoolBaseAddress =
-         anv_cmd_buffer_surface_base_address(cmd_buffer);
+      btpa.BindingTablePoolBaseAddress = btp;
       btpa.BindingTablePoolBufferSize = BINDING_TABLE_VIEW_SIZE / 4096;
       btpa.MOCS = mocs;
    }
@@ -457,9 +473,24 @@ genX(cmd_buffer_emit_bt_pool_base_address)(struct anv_cmd_buffer *cmd_buffer)
                                  ANV_PIPE_STATE_CACHE_INVALIDATE_BIT,
                                  "post BINDING_TABLE_POOL_ALLOC invalidate");
 
+   mi_store(&b, mi_reg64(ANV_BTP_ADDR_REG),
+                mi_imm(anv_address_physical(btp)));
+
+   mi_goto_target(&b, &t);
+
+   cmd_buffer->batch.trace = tmp_trace;
+   cmd_buffer->state.btp = btp;
+
+   trace_intel_end_btp(cmd_buffer->batch.trace, anv_address_physical(btp));
+
 #else /* GFX_VERx10 < 125 */
    genX(cmd_buffer_emit_state_base_address)(cmd_buffer);
 #endif
+
+   /* If we are emitting a new state base address we probably need to re-emit
+    * binding tables.
+    */
+   cmd_buffer->state.descriptors_dirty |= ~0;
 }
 
 static void

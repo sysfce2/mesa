@@ -5,11 +5,12 @@
 #pragma once
 
 /* We reserve :
+ *    - GPR 12 for 3DSTATE_BINDING_TABLE_POOL_ALLOC  address
  *    - GPR 13 for STATE_BASE_ADDRESS bindless surface base address
  *    - GPR 14 for perf queries
  *    - GPR 15 for conditional rendering
  */
-#define MI_BUILDER_NUM_ALLOC_GPRS 13
+#define MI_BUILDER_NUM_ALLOC_GPRS 12
 #ifndef MI_BUILDER_CAN_WRITE_BATCH
 #define MI_BUILDER_CAN_WRITE_BATCH true
 #endif
@@ -38,3 +39,9 @@
  * emissions if the address doesn't change.
  */
 #define ANV_BINDLESS_SURFACE_BASE_ADDR_REG 0x2668 /* MI_ALU_REG13 */
+
+/* We reserve this MI ALU register to hold the last programmed
+ * 3DSTATE_BINDING_TABLE_POOL_ALLOC address so that we can predicate
+ * 3DSTATE_BINDING_TABLE_POOL_ALLOC emissions if the address doesn't change.
+ */
+#define ANV_BTP_ADDR_REG 0x2660 /* MI_ALU_REG12 */

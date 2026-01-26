@@ -636,6 +636,13 @@ anv_address_physical(struct anv_address addr)
    return intel_canonical_address(address);
 }
 
+static inline bool
+anv_address_equals(struct anv_address addr1,
+                   struct anv_address addr2)
+{
+   return anv_address_physical(addr1) == anv_address_physical(addr2);
+}
+
 static inline struct u_trace_address
 anv_address_utrace(struct anv_address addr)
 {
@@ -4742,6 +4749,9 @@ struct anv_cmd_state {
       VkShaderStageFlags                        offsets_dirty;
       uint64_t                                  address[MAX_SETS];
    }                                            descriptor_buffers;
+
+   /* Last programmed 3DSTATE_BINDING_TABLE_POOL_ALLOC address */
+   struct anv_address                           btp;
 
    /* For Gen 9, this allocation is 2 greater than the maximum allowed
     * number of vertex buffers; see comment on get_max_vbs definition.
