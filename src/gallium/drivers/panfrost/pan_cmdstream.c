@@ -296,6 +296,20 @@ panfrost_emit_blend(struct panfrost_batch *batch, void *rts,
       enum pipe_format format = batch->key.cbufs[i].format;
       float cons =
          pan_blend_get_constant(info.constant_mask, ctx->blend_color.color);
+      const struct pipe_rt_blend_state *rtso = &so->base.rt[i];
+      /*
+       * a fixed function blend with DST_ALPHA on a destination without
+       * alpha will actually be opaque (since alpha=1). The fixed function
+       * hardware doesn't handle this correctly, so force it to be opaque.
+       */
+      if (!blend_shaders[i] && rtso->blend_enable &&
+          rtso->rgb_src_factor == PIPE_BLENDFACTOR_DST_ALPHA &&
+          rtso->rgb_dst_factor == PIPE_BLENDFACTOR_INV_DST_ALPHA &&
+          rtso->rgb_func == PIPE_BLEND_ADD &&
+          !util_format_has_alpha(format))
+      {
+         info.opaque = true;
+      }
 
       /* Word 0: Flags and constant */
       pan_pack(packed, BLEND, cfg) {
