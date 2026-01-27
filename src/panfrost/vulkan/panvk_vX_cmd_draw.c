@@ -595,20 +595,18 @@ panvk_per_arch(cmd_force_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
     * initial attachment clears are performed.
     */
    struct panvk_cmd_graphics_state *state = &cmdbuf->state.gfx;
-   struct pan_fb_info *fbinfo = &state->render.fb.info;
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
    VkClearAttachment clear_atts[MAX_RTS + 2];
    uint32_t clear_att_count = 0;
 
    if (!state->render.bound_attachments)
       return;
 
-   for (unsigned i = 0; i < fbinfo->rt_count; i++) {
-      if (!fbinfo->rts[i].view)
+   for (unsigned i = 0; i < render->fb.layout.rt_count; i++) {
+      if (render->fb.layout.rt_formats[i] == PIPE_FORMAT_NONE)
          continue;
 
-      fbinfo->rts[i].preload = true;
-
-      if (fbinfo->rts[i].clear) {
+      if (render->fb.load.rts[i].in_bounds_load == PAN_FB_LOAD_CLEAR) {
          if (render_info) {
             const VkRenderingAttachmentInfo *att =
                &render_info->pColorAttachments[i];
@@ -619,14 +617,15 @@ panvk_per_arch(cmd_force_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
                .clearValue = att->clearValue,
             };
          }
-         fbinfo->rts[i].clear = false;
       }
+
+      /* We always set image views, even if we don't use them */
+      assert(render->fb.load.rts[i].iview);
+      render->fb.load.rts[i].in_bounds_load = PAN_FB_LOAD_IMAGE;
    }
 
-   if (fbinfo->zs.view.zs) {
-      fbinfo->zs.preload.z = true;
-
-      if (fbinfo->zs.clear.z) {
+   if (render->fb.layout.z_format != PIPE_FORMAT_NONE) {
+      if (render->fb.load.z.in_bounds_load == PAN_FB_LOAD_CLEAR) {
          if (render_info) {
             const VkRenderingAttachmentInfo *att =
                render_info->pDepthAttachment;
@@ -636,16 +635,14 @@ panvk_per_arch(cmd_force_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
                .clearValue = att->clearValue,
             };
          }
-         fbinfo->zs.clear.z = false;
       }
+
+      assert(render->fb.load.z.iview);
+      render->fb.load.z.in_bounds_load = PAN_FB_LOAD_IMAGE;
    }
 
-   if (fbinfo->zs.view.s ||
-       (fbinfo->zs.view.zs &&
-        util_format_is_depth_and_stencil(fbinfo->zs.view.zs->format))) {
-      fbinfo->zs.preload.s = true;
-
-      if (fbinfo->zs.clear.s) {
+   if (render->fb.layout.s_format != PIPE_FORMAT_NONE) {
+      if (render->fb.load.s.in_bounds_load == PAN_FB_LOAD_CLEAR) {
          if (render_info) {
             const VkRenderingAttachmentInfo *att =
                render_info->pStencilAttachment;
@@ -655,10 +652,20 @@ panvk_per_arch(cmd_force_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
                .clearValue = att->clearValue,
             };
          }
-
-         fbinfo->zs.clear.s = false;
       }
+
+      assert(render->fb.load.s.iview);
+      render->fb.load.s.in_bounds_load = PAN_FB_LOAD_IMAGE;
    }
+
+   /* Re-generate the pan_fb_info now that we've modified the load */
+   struct pan_fb_desc_info fbd_info = {
+      .fb = &render->fb.layout,
+      .load = &render->fb.load,
+      .store = &render->fb.store,
+      .allow_hsr_prepass = PAN_ARCH >= 13 && PANVK_DEBUG(HSR_PREPASS),
+   };
+   GENX(pan_fill_fb_info)(&fbd_info, &render->fb.info);
 
 #if PAN_ARCH >= 10
    /* insert a barrier for preload */
