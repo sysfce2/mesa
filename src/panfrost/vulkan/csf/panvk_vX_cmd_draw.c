@@ -131,8 +131,8 @@ get_fn_set_fbds_provoking_vertex_idx(bool has_zs_ext, uint32_t rt_count)
 static uint32_t
 calc_fn_set_fbds_provoking_vertex_idx(struct panvk_cmd_buffer *cmdbuf)
 {
-   const struct pan_fb_info *fb = &cmdbuf->state.gfx.render.fb.info;
-   bool has_zs_ext = fb->zs.view.zs || fb->zs.view.s;
+   const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
+   const bool has_zs_ext = pan_fb_has_zs(fb);
    uint32_t rt_count = MAX2(fb->rt_count, 1);
 
    return get_fn_set_fbds_provoking_vertex_idx(has_zs_ext, rt_count);
@@ -925,8 +925,8 @@ calc_enabled_layer_count(struct panvk_cmd_buffer *cmdbuf)
 static uint32_t
 calc_fbd_size(struct panvk_cmd_buffer *cmdbuf)
 {
-   const struct pan_fb_info *fb = &cmdbuf->state.gfx.render.fb.info;
-   bool has_zs_ext = fb->zs.view.zs || fb->zs.view.s;
+   const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
+   const bool has_zs_ext = pan_fb_has_zs(fb);
    uint32_t rt_count = MAX2(fb->rt_count, 1);
 
    return get_fbd_size(has_zs_ext, rt_count);
@@ -1035,11 +1035,11 @@ get_tiler_desc(struct panvk_cmd_buffer *cmdbuf)
          return VK_ERROR_OUT_OF_DEVICE_MEMORY;
    }
 
-   const struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+   const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
 
    /* At this point, we should know sample count and the tile size should have
     * been calculated */
-   assert(fbinfo->nr_samples > 0 && fbinfo->tile_size > 0);
+   assert(fb->sample_count > 0 && fb->tile_size_px > 0);
 
    pan_pack(&tiler_tmpl, TILER_CONTEXT, cfg) {
       unsigned max_levels = tiler_features.max_levels;
@@ -1048,14 +1048,14 @@ get_tiler_desc(struct panvk_cmd_buffer *cmdbuf)
       /* The tiler chunk start with a header of 64 bytes */
       cfg.hierarchy_mask = panvk_select_tiler_hierarchy_mask(
          phys_dev, &cmdbuf->state.gfx, phys_dev->csf.tiler.chunk_size - 64);
-      cfg.fb_width = fbinfo->width;
-      cfg.fb_height = fbinfo->height;
+      cfg.fb_width = fb->width_px;
+      cfg.fb_height = fb->height_px;
 
 #if PAN_ARCH >= 12
-      cfg.effective_tile_size = fbinfo->tile_size;
+      cfg.effective_tile_size = fb->tile_size_px;
 #endif
 
-      cfg.sample_pattern = pan_sample_pattern(fbinfo->nr_samples);
+      cfg.sample_pattern = pan_sample_pattern(fb->sample_count);
 
       cfg.first_provoking_vertex = get_first_provoking_vertex(cmdbuf);
 
@@ -1216,9 +1216,8 @@ get_tiler_desc(struct panvk_cmd_buffer *cmdbuf)
    return VK_SUCCESS;
 }
 
-static uint8_t
-prepare_fb_desc(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
-                uint32_t layer, void *fbd)
+static struct pan_tiler_context
+get_tiler_context(struct panvk_cmd_buffer *cmdbuf, uint32_t layer)
 {
    struct pan_tiler_context tiler_ctx = {
       .valhall.layer_offset = layer - (layer % MAX_LAYERS_PER_TILER_DESC),
@@ -1232,43 +1231,7 @@ prepare_fb_desc(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
          cmdbuf->state.gfx.render.tiler + (td_idx * pan_size(TILER_CONTEXT));
    }
 
-   return GENX(pan_emit_fbd)(fbinfo, layer, NULL, &tiler_ctx, fbd);
-}
-
-static VkResult
-prepare_incremental_rendering_fbinfos(
-   struct panvk_cmd_buffer *cmdbuf, const struct pan_fb_info *fbinfo,
-   struct pan_fb_info ir_fbinfos[PANVK_IR_PASS_COUNT])
-{
-   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
-
-   for (uint32_t ir_pass = 0; ir_pass < PANVK_IR_PASS_COUNT; ir_pass++) {
-      struct pan_fb_desc_info fbd_info = {
-         .fb = &render->fb.layout,
-         .load = ir_pass == PANVK_IR_FIRST_PASS ? &render->fb.load
-                                                : &render->fb.spill.load,
-         .store = ir_pass == PANVK_IR_LAST_PASS ? &render->fb.store
-                                                : &render->fb.spill.store,
-         .allow_hsr_prepass = PAN_ARCH >= 13 && PANVK_DEBUG(HSR_PREPASS),
-      };
-      GENX(pan_fill_fb_info)(&fbd_info, &ir_fbinfos[ir_pass]);
-   }
-
-   /* Middle and last shaders have a different preload */
-   struct pan_fb_frame_shaders fs;
-   VkResult result = panvk_per_arch(cmd_fb_preload_fbinfo)(
-      cmdbuf, &ir_fbinfos[PANVK_IR_MIDDLE_PASS], &fs);
-   if (result != VK_SUCCESS)
-      return result;
-
-   struct pan_fb_bifrost_info spill_reload =
-      pan_fb_to_fbinfo_frame_shaders(fs, 0);
-
-   ir_fbinfos[PANVK_IR_FIRST_PASS].bifrost = fbinfo->bifrost;
-   ir_fbinfos[PANVK_IR_MIDDLE_PASS].bifrost = spill_reload;
-   ir_fbinfos[PANVK_IR_LAST_PASS].bifrost = spill_reload;
-
-   return VK_SUCCESS;
+   return tiler_ctx;
 }
 
 static VkResult
@@ -1293,11 +1256,12 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
 
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
-   struct pan_fb_info *fbinfo = &render->fb.info;
 
    /* At this point, we should know sample count and the tile size should have
     * been calculated */
-   assert(fbinfo->nr_samples > 0 && fbinfo->tile_size > 0);
+   assert(render->fb.layout.sample_count > 0);
+   assert(render->fb.layout.tile_size_px > 0);
+   const uint8_t sample_count = render->fb.layout.sample_count;
 
    bool simul_use =
       cmdbuf->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
@@ -1327,44 +1291,45 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
    struct pan_ptr fbds = cmdbuf->state.gfx.render.fbds;
    uint32_t fbd_flags = 0;
 
-   fbinfo->sample_positions =
-      dev->sample_positions->addr.dev +
-      pan_sample_positions_offset(pan_sample_pattern(fbinfo->nr_samples));
-   fbinfo->first_provoking_vertex = get_first_provoking_vertex(cmdbuf);
-
-   struct pan_fb_frame_shaders fs;
-   VkResult result = panvk_per_arch(cmd_fb_preload_fbinfo)(cmdbuf,
-                                                           fbinfo, &fs);
-   if (result != VK_SUCCESS)
-      return result;
-
-   fbinfo->bifrost = pan_fb_to_fbinfo_frame_shaders(fs, 0);
-
-   struct pan_fb_info ir_fbinfos[PANVK_IR_PASS_COUNT];
-   result = prepare_incremental_rendering_fbinfos(cmdbuf, fbinfo, ir_fbinfos);
-   if (result != VK_SUCCESS)
-      return result;
-
    /* We prepare all FB descriptors upfront. For multiview, only create FBDs
     * for enabled views. */
    uint32_t view_mask_temp = cmdbuf->state.gfx.render.view_mask;
    uint32_t enabled_layer_count = calc_enabled_layer_count(cmdbuf);
    bool multiview = cmdbuf->state.gfx.render.view_mask;
 
+   struct pan_tiler_context tiler_ctx;
+   struct pan_fb_desc_info fbd_info = {
+      .fb = &render->fb.layout,
+      .load = &render->fb.load,
+      .store = &render->fb.store,
+      .sample_pos_array_pointer = dev->sample_positions->addr.dev +
+         pan_sample_positions_offset(pan_sample_pattern(sample_count)),
+      .provoking_vertex_first = get_first_provoking_vertex(cmdbuf),
+      .allow_hsr_prepass = PAN_ARCH >= 13 && PANVK_DEBUG(HSR_PREPASS),
+      .tiler_ctx = &tiler_ctx,
+   };
+
+   VkResult result = panvk_per_arch(cmd_fb_preload)(
+      cmdbuf, fbd_info.fb, fbd_info.load, &fbd_info.frame_shaders);
+   if (result != VK_SUCCESS)
+      return result;
+
    for (uint32_t i = 0; i < enabled_layer_count; i++) {
       uint32_t layer_idx = multiview ? u_bit_scan(&view_mask_temp) : i;
 
-      uint32_t layer_offset = fbd_sz * i;
+      fbd_info.layer = layer_idx;
+      tiler_ctx = get_tiler_context(cmdbuf, layer_idx);
+
       uint32_t new_fbd_flags =
-         prepare_fb_desc(cmdbuf, fbinfo, layer_idx, fbds.cpu + layer_offset);
+         GENX(pan_emit_fb_desc)(&fbd_info, fbds.cpu + fbd_sz * i);
 
       /* Make sure all FBDs have the same flags. */
       assert(i == 0 || new_fbd_flags == fbd_flags);
       fbd_flags = new_fbd_flags;
    }
 
-   const bool has_zs_ext = fbinfo->zs.view.zs || fbinfo->zs.view.s;
-   const uint32_t rt_count = MAX2(fbinfo->rt_count, 1);
+   const bool has_zs_ext = pan_fb_has_zs(&render->fb.layout);
+   const uint32_t rt_count = MAX2(render->fb.layout.rt_count, 1);
 
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_FRAGMENT);
    for (uint32_t ir_pass = 0; ir_pass < PANVK_IR_PASS_COUNT; ir_pass++) {
@@ -1377,9 +1342,21 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
          TILER_OOM_CTX_FIELD_OFFSET(ir_desc_infos) +
          ir_pass * sizeof(struct panvk_ir_desc_info);
 
-      /* Construct our temporary full IR FBD */
-      uint32_t new_fbd_flags = prepare_fb_desc(cmdbuf, &ir_fbinfos[ir_pass], 0,
-                                               scratch_fbd_init_memory);
+      fbd_info.layer = 0;
+      tiler_ctx = get_tiler_context(cmdbuf, 0);
+      fbd_info.load = ir_pass == PANVK_IR_FIRST_PASS ?
+                      &render->fb.load : &render->fb.spill.load;
+      fbd_info.store = ir_pass == PANVK_IR_LAST_PASS ?
+                       &render->fb.store : &render->fb.spill.store;
+
+      VkResult result = panvk_per_arch(cmd_fb_preload)(
+         cmdbuf, fbd_info.fb, fbd_info.load, &fbd_info.frame_shaders);
+      if (result != VK_SUCCESS)
+         return result;
+
+      uint32_t new_fbd_flags =
+         GENX(pan_emit_fb_desc)(&fbd_info, scratch_fbd_init_memory);
+
       /* Make sure all FBDs have the same flags. */
       assert(new_fbd_flags == fbd_flags);
 
@@ -3354,8 +3331,8 @@ wait_finish_tiling(struct panvk_cmd_buffer *cmdbuf)
 static uint32_t
 calc_tiler_oom_handler_idx(struct panvk_cmd_buffer *cmdbuf)
 {
-   const struct pan_fb_info *fb = &cmdbuf->state.gfx.render.fb.info;
-   bool has_zs_ext = fb->zs.view.zs || fb->zs.view.s;
+   const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
+   const bool has_zs_ext = pan_fb_has_zs(fb);
    uint32_t rt_count = MAX2(fb->rt_count, 1);
 
    return get_tiler_oom_handler_idx(has_zs_ext, rt_count);
@@ -3398,22 +3375,30 @@ setup_tiler_oom_ctx(struct panvk_cmd_buffer *cmdbuf)
    cs_flush_stores(b);
 }
 
+static uint32_t
+pack_32_2x16(uint16_t lo, uint16_t hi)
+{
+   return (((uint32_t)hi) << 16) | (uint32_t)lo;
+}
+
 static VkResult
 issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    const struct cs_tracing_ctx *tracing_ctx =
       &cmdbuf->state.cs[PANVK_SUBQUEUE_FRAGMENT].tracing;
-   struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+   const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_FRAGMENT);
    bool has_oq_chain = cmdbuf->state.gfx.render.oq.chain != 0;
 
    /* Now initialize the fragment bits. */
    cs_update_frag_ctx(b) {
       cs_move32_to(b, cs_sr_reg32(b, FRAGMENT, BBOX_MIN),
-                   (fbinfo->draw_extent.miny << 16) | fbinfo->draw_extent.minx);
+                   pack_32_2x16(fb->tiling_area_px.min_x,
+                                fb->tiling_area_px.min_y));
       cs_move32_to(b, cs_sr_reg32(b, FRAGMENT, BBOX_MAX),
-                   (fbinfo->draw_extent.maxy << 16) | fbinfo->draw_extent.maxx);
+                   pack_32_2x16(fb->tiling_area_px.max_x,
+                                fb->tiling_area_px.max_y));
    }
 
    bool simul_use =
@@ -3498,8 +3483,7 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
       cs_wait_slot(b, SB_ID(IMM_FLUSH));
    }
 
-   const struct pan_fb_info *fb = &cmdbuf->state.gfx.render.fb.info;
-   const bool has_zs_ext = fb->zs.view.zs || fb->zs.view.s;
+   const bool has_zs_ext = pan_fb_has_zs(fb);
    const uint32_t rt_count = MAX2(fb->rt_count, 1);
 
    /* IR was hit: set up IR FBD */
