@@ -1240,70 +1240,33 @@ prepare_incremental_rendering_fbinfos(
    struct panvk_cmd_buffer *cmdbuf, const struct pan_fb_info *fbinfo,
    struct pan_fb_info ir_fbinfos[PANVK_IR_PASS_COUNT])
 {
-   /* First incremental rendering pass: don't discard result */
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
 
-   struct pan_fb_info *ir_fb = &ir_fbinfos[PANVK_IR_FIRST_PASS];
-
-   memcpy(ir_fb, fbinfo, sizeof(*ir_fb));
-   for (unsigned i = 0; i < fbinfo->rt_count; i++)
-      ir_fb->rts[i].discard = false;
-   ir_fb->zs.discard.z = false;
-   ir_fb->zs.discard.s = false;
-
-   /* Subsequent incremental rendering passes: preload old content and don't
-    * discard result */
-
-   struct pan_fb_info *prev_ir_fb = ir_fb;
-   ir_fb = &ir_fbinfos[PANVK_IR_MIDDLE_PASS];
-   memcpy(ir_fb, prev_ir_fb, sizeof(*ir_fb));
-
-   bool preload_changed = false;
-
-   for (unsigned i = 0; i < fbinfo->rt_count; i++) {
-      if (fbinfo->rts[i].view && !fbinfo->rts[i].preload) {
-         ir_fb->rts[i].preload = true;
-         preload_changed = true;
-      }
-
-      if (ir_fb->rts[i].clear) {
-         ir_fb->rts[i].clear = false;
-         preload_changed = true;
-      }
-   }
-   if (fbinfo->zs.view.zs && !fbinfo->zs.preload.z && !fbinfo->zs.preload.s) {
-      ir_fb->zs.preload.z = true;
-      ir_fb->zs.preload.s = true;
-      preload_changed = true;
-   } else if (fbinfo->zs.view.s && !fbinfo->zs.preload.s) {
-      ir_fb->zs.preload.s = true;
-      preload_changed = true;
+   for (uint32_t ir_pass = 0; ir_pass < PANVK_IR_PASS_COUNT; ir_pass++) {
+      struct pan_fb_desc_info fbd_info = {
+         .fb = &render->fb.layout,
+         .load = ir_pass == PANVK_IR_FIRST_PASS ? &render->fb.load
+                                                : &render->fb.spill.load,
+         .store = ir_pass == PANVK_IR_LAST_PASS ? &render->fb.store
+                                                : &render->fb.spill.store,
+         .allow_hsr_prepass = PAN_ARCH >= 13 && PANVK_DEBUG(HSR_PREPASS),
+      };
+      GENX(pan_fill_fb_info)(&fbd_info, &ir_fbinfos[ir_pass]);
    }
 
-   if (ir_fb->zs.clear.z || ir_fb->zs.clear.s) {
-      ir_fb->zs.clear.z = false;
-      ir_fb->zs.clear.s = false;
-      preload_changed = true;
-   }
+   /* Middle and last shaders have a different preload */
+   struct pan_fb_frame_shaders fs;
+   VkResult result = panvk_per_arch(cmd_fb_preload)(
+      cmdbuf, &ir_fbinfos[PANVK_IR_MIDDLE_PASS], &fs);
+   if (result != VK_SUCCESS)
+      return result;
 
-   if (preload_changed) {
-      struct pan_fb_frame_shaders fs;
-      VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf, ir_fb, &fs);
-      if (result != VK_SUCCESS)
-         return result;
-      ir_fb->bifrost = pan_fb_to_fbinfo_frame_shaders(fs, 0);
-   }
+   struct pan_fb_bifrost_info spill_reload =
+      pan_fb_to_fbinfo_frame_shaders(fs, 0);
 
-   /* Last incremental rendering pass: preload previous content and deal with
-    * results as specified by user */
-
-   prev_ir_fb = ir_fb;
-   ir_fb = &ir_fbinfos[PANVK_IR_LAST_PASS];
-   memcpy(ir_fb, prev_ir_fb, sizeof(*ir_fb));
-
-   for (unsigned i = 0; i < fbinfo->rt_count; i++)
-      ir_fb->rts[i].discard = fbinfo->rts[i].discard;
-   ir_fb->zs.discard.z = fbinfo->zs.discard.z;
-   ir_fb->zs.discard.s = fbinfo->zs.discard.s;
+   ir_fbinfos[PANVK_IR_FIRST_PASS].bifrost = fbinfo->bifrost;
+   ir_fbinfos[PANVK_IR_MIDDLE_PASS].bifrost = spill_reload;
+   ir_fbinfos[PANVK_IR_LAST_PASS].bifrost = spill_reload;
 
    return VK_SUCCESS;
 }
