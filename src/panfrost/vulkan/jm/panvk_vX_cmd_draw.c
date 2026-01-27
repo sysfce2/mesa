@@ -1210,25 +1210,17 @@ panvk_draw_prepare_fs_copy_desc_job(struct panvk_cmd_buffer *cmdbuf,
 void
 panvk_per_arch(cmd_preload_fb_after_batch_split)(struct panvk_cmd_buffer *cmdbuf)
 {
-   for (unsigned i = 0; i < cmdbuf->state.gfx.render.fb.info.rt_count; i++) {
-      if (cmdbuf->state.gfx.render.fb.info.rts[i].view) {
-         cmdbuf->state.gfx.render.fb.info.rts[i].clear = false;
-         cmdbuf->state.gfx.render.fb.info.rts[i].preload = true;
-      }
-   }
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
 
-   if (cmdbuf->state.gfx.render.fb.info.zs.view.zs) {
-      cmdbuf->state.gfx.render.fb.info.zs.clear.z = false;
-      cmdbuf->state.gfx.render.fb.info.zs.preload.z = true;
-   }
+   render->fb.load = render->fb.spill.load;
 
-   if (cmdbuf->state.gfx.render.fb.info.zs.view.s ||
-       (cmdbuf->state.gfx.render.fb.info.zs.view.zs &&
-        util_format_is_depth_and_stencil(
-           cmdbuf->state.gfx.render.fb.info.zs.view.zs->format))) {
-      cmdbuf->state.gfx.render.fb.info.zs.clear.s = false;
-      cmdbuf->state.gfx.render.fb.info.zs.preload.s = true;
-   }
+   /* Populate the pan_fb_info as best as we can */
+   struct pan_fb_desc_info fbd_info = {
+      .fb = &render->fb.layout,
+      .load = &render->fb.load,
+      .store = &render->fb.store,
+   };
+   GENX(pan_fill_fb_info)(&fbd_info, &render->fb.info);
 }
 
 static VkResult
