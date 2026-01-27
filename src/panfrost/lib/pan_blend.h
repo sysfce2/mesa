@@ -115,6 +115,8 @@ uint32_t pan_pack_blend(const struct pan_blend_equation equation);
 
 #ifdef PAN_ARCH
 
+enum pipe_format GENX(pan_blend_shader_fmt)(enum pipe_format format);
+
 nir_shader *GENX(pan_blend_create_shader)(const struct pan_blend_state *state,
                                           nir_alu_type src0_type,
                                           nir_alu_type src1_type, unsigned rt);

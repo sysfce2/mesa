@@ -30,10 +30,6 @@ afbcp-spec@arb_texture_query_levels@execution@vs-baselevel,Crash
 afbcp-spec@arb_texture_query_levels@execution@vs-maxlevel,Crash
 afbcp-spec@arb_texture_query_levels@execution@vs-miptree,Crash
 afbcp-spec@arb_texture_query_levels@execution@vs-nomips,Crash
-afbcp-spec@arb_texture_rg@fbo-blending-formats,Fail
-afbcp-spec@arb_texture_rg@fbo-blending-formats@GL_R8,Fail
-afbcp-spec@arb_texture_rg@fbo-blending-formats@GL_RG8,Fail
-afbcp-spec@arb_texture_rg@fbo-blending-formats@GL_RG,Fail
 afbcp-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread,Crash
 afbcp-spec@glsl-1.30@execution@tex-miplevel-selection texturegrad 1darray,Fail
 afbcp-spec@glsl-1.30@execution@tex-miplevel-selection texturegrad 1darrayshadow,Fail
@@ -112,10 +108,6 @@ spec@arb_texture_query_levels@execution@vs-baselevel,Crash
 spec@arb_texture_query_levels@execution@vs-maxlevel,Crash
 spec@arb_texture_query_levels@execution@vs-miptree,Crash
 spec@arb_texture_query_levels@execution@vs-nomips,Crash
-spec@arb_texture_rg@fbo-blending-formats,Fail
-spec@arb_texture_rg@fbo-blending-formats@GL_R8,Fail
-spec@arb_texture_rg@fbo-blending-formats@GL_RG8,Fail
-spec@arb_texture_rg@fbo-blending-formats@GL_RG,Fail
 spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
 spec@egl 1.4@egl-ext_egl_image_storage,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
@@ -143,16 +135,6 @@ spec@ext_framebuffer_multisample@draw-buffers-alpha-to-coverage 8,Fail
 spec@ext_framebuffer_multisample@sample-alpha-to-coverage 16 color,Fail
 spec@ext_framebuffer_multisample@sample-alpha-to-coverage 6 color,Fail
 spec@ext_framebuffer_multisample@sample-alpha-to-coverage 8 color,Fail
-spec@ext_framebuffer_object@fbo-blending-formats,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA4,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA8,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY4,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY8,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE4,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE8,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread,Crash
 spec@ext_shader_framebuffer_fetch@execution@gles3@discard-ms8,Fail
 spec@ext_shader_framebuffer_fetch_non_coherent@execution@gles3@discard-ms8,Fail

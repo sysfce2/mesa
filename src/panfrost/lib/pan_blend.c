@@ -773,6 +773,23 @@ get_equation_str(const struct pan_blend_rt_state *rt_state, char *str,
    }
 }
 
+enum pipe_format
+GENX(pan_blend_shader_fmt)(enum pipe_format format)
+{
+   switch (format) {
+#if PAN_ARCH < 6
+   case PIPE_FORMAT_R10G10B10A2_UNORM:
+   case PIPE_FORMAT_R10G10B10X2_UNORM:
+      return PIPE_FORMAT_R8G8B8A8_UNORM;
+#endif
+   case PIPE_FORMAT_A8_UNORM:
+   case PIPE_FORMAT_L8A8_UNORM:
+      return PIPE_FORMAT_R8G8B8A8_UNORM;
+   default:
+      return format;
+   }
+}
+
 nir_shader *
 GENX(pan_blend_create_shader)(const struct pan_blend_state *state,
                               nir_alu_type src0_type, nir_alu_type src1_type,
@@ -791,7 +808,7 @@ GENX(pan_blend_create_shader)(const struct pan_blend_state *state,
       state->logicop_enable ? logicop_str(state->logicop_func) : equation_str);
    nir_builder *b = &builder;
 
-   const enum pipe_format format = rt_state->format;
+   const enum pipe_format format = GENX(pan_blend_shader_fmt)(rt_state->format);
    const struct util_format_description *format_desc =
       util_format_description(format);
 

@@ -17,7 +17,6 @@ spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp,Crash
 spec@arb_texture_float@fbo-alphatest-formats,Crash
-spec@arb_texture_float@fbo-blending-formats,Crash
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R16I,Fail
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R16_SNORM,Fail
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R32I,Fail
@@ -52,26 +51,12 @@ spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect,Crash
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect_projvec4,Crash
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drectshadow,Crash
-spec@arb_texture_rg@fbo-blending-formats,Fail
-spec@arb_texture_rg@fbo-blending-formats@GL_R8,Fail
-spec@arb_texture_rg@fbo-blending-formats@GL_RG8,Fail
-spec@arb_texture_rg@fbo-blending-formats@GL_RG,Fail
 spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
-spec@ext_framebuffer_object@fbo-blending-formats,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA4,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA8,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY4,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY8,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE4,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE8,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE,Fail
 spec@ext_transform_feedback2@draw-auto,Fail
 spec@ext_transform_feedback@builtin-varyings gl_clipdistance,Fail
 spec@ext_transform_feedback@change-size base-shrink,Fail
@@ -271,7 +256,6 @@ afbcp-spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,F
 afbcp-spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
 afbcp-spec@arb_texture_buffer_object@texture-buffer-size-clamp,Crash
 afbcp-spec@arb_texture_float@fbo-alphatest-formats,Crash
-afbcp-spec@arb_texture_float@fbo-blending-formats,Crash
 afbcp-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R16I,Fail
 afbcp-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R16_SNORM,Fail
 afbcp-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R32I,Fail
@@ -306,10 +290,6 @@ afbcp-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Textur
 afbcp-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect,Crash
 afbcp-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect_projvec4,Crash
 afbcp-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drectshadow,Crash
-afbcp-spec@arb_texture_rg@fbo-blending-formats,Fail
-afbcp-spec@arb_texture_rg@fbo-blending-formats@GL_R8,Fail
-afbcp-spec@arb_texture_rg@fbo-blending-formats@GL_RG8,Fail
-afbcp-spec@arb_texture_rg@fbo-blending-formats@GL_RG,Fail
 afbcp-spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
 afbcp-spec@egl 1.4@eglterminate then unbind context,Fail
 afbcp-spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
@@ -317,16 +297,6 @@ afbcp-spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_
 afbcp-spec@egl_khr_surfaceless_context@viewport,Fail
 afbcp-spec@egl_mesa_configless_context@basic,Fail
 afbcp-spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
-afbcp-spec@ext_framebuffer_object@fbo-blending-formats,Fail
-afbcp-spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA4,Fail
-afbcp-spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA8,Fail
-afbcp-spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA,Fail
-afbcp-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY4,Fail
-afbcp-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY8,Fail
-afbcp-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY,Fail
-afbcp-spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE4,Fail
-afbcp-spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE8,Fail
-afbcp-spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE,Fail
 afbcp-spec@ext_transform_feedback2@draw-auto,Fail
 afbcp-spec@ext_transform_feedback@builtin-varyings gl_clipdistance,Fail
 afbcp-spec@ext_transform_feedback@change-size base-shrink,Fail
