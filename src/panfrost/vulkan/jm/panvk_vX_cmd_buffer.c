@@ -133,13 +133,13 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
        * have been calculated
        */
       const struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
-      const struct pan_fb_info *fbinfo = &render->fb.info;
       assert(render->fb.layout.sample_count > 0);
       assert(render->fb.layout.tile_size_px > 0);
 
       struct pan_fb_frame_shaders fs;
-      VkResult result = panvk_per_arch(cmd_fb_preload_fbinfo)(cmdbuf,
-                                                              fbinfo, &fs);
+      VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf,
+                                                       &render->fb.layout,
+                                                       &render->fb.load, &fs);
       if (result != VK_SUCCESS)
          return;
 
