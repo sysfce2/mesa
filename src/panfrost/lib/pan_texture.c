@@ -1272,8 +1272,6 @@ GENX(pan_storage_texture_emit)(const struct pan_image_view *iview,
 {
    pan_image_view_check(iview);
 
-   const struct util_format_description *desc =
-      util_format_description(iview->format);
    const struct pan_image_plane_ref first_plane =
       pan_image_view_get_first_plane(iview);
    const struct pan_image_props *props = &first_plane.image->props;
@@ -1282,12 +1280,11 @@ GENX(pan_storage_texture_emit)(const struct pan_image_view *iview,
    assert(!drm_is_afbc(props->modifier));
    assert(!drm_is_afrc(props->modifier));
 
+   /* Compressed formats can't be used with storage operations */
+   assert(!util_format_is_compressed(iview->format));
+
    uint32_t mali_format =
       GENX(pan_format_from_pipe_format)(iview->format)->hw;
-   if (desc->layout == UTIL_FORMAT_LAYOUT_ASTC && iview->astc.narrow &&
-       desc->colorspace != UTIL_FORMAT_COLORSPACE_SRGB) {
-      mali_format = MALI_PACK_FMT(RGBA8_UNORM, RGBA, L);
-   }
 
    pan_emit_iview_texture_payload(iview, payload->cpu);
 
