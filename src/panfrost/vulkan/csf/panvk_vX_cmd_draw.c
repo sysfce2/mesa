@@ -1256,7 +1256,7 @@ prepare_incremental_rendering_fbinfos(
 
    /* Middle and last shaders have a different preload */
    struct pan_fb_frame_shaders fs;
-   VkResult result = panvk_per_arch(cmd_fb_preload)(
+   VkResult result = panvk_per_arch(cmd_fb_preload_fbinfo)(
       cmdbuf, &ir_fbinfos[PANVK_IR_MIDDLE_PASS], &fs);
    if (result != VK_SUCCESS)
       return result;
@@ -1333,7 +1333,8 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
    fbinfo->first_provoking_vertex = get_first_provoking_vertex(cmdbuf);
 
    struct pan_fb_frame_shaders fs;
-   VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf, fbinfo, &fs);
+   VkResult result = panvk_per_arch(cmd_fb_preload_fbinfo)(cmdbuf,
+                                                           fbinfo, &fs);
    if (result != VK_SUCCESS)
       return result;
 

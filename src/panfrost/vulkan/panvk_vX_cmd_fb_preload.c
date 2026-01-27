@@ -827,9 +827,9 @@ cmd_preload_color_attachments(struct panvk_cmd_buffer *cmdbuf,
 }
 
 VkResult
-panvk_per_arch(cmd_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
-                               const struct pan_fb_info *fbinfo,
-                               struct pan_fb_frame_shaders *fs_out)
+panvk_per_arch(cmd_fb_preload_fbinfo)(struct panvk_cmd_buffer *cmdbuf,
+                                      const struct pan_fb_info *fbinfo,
+                                      struct pan_fb_frame_shaders *fs_out)
 {
    *fs_out = (struct pan_fb_frame_shaders) { .dcd_pointer = 0 };
    struct mali_draw_packed *dcds = NULL;
@@ -840,4 +840,32 @@ panvk_per_arch(cmd_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
       return result;
 
    return cmd_preload_zs_attachments(cmdbuf, fbinfo, fs_out, &dcds);
+}
+
+VkResult
+panvk_per_arch(cmd_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
+                               const struct pan_fb_layout *fb,
+                               const struct pan_fb_load *load,
+                               struct pan_fb_frame_shaders *fs_out)
+{
+   /* We only really care about the formats here */
+   struct pan_fb_store store = { };
+   for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
+      if (load->rts[rt].iview)
+         store.rts[rt] = pan_fb_store_iview(load->rts[rt].iview);
+   }
+   if (load->z.iview)
+      store.zs = pan_fb_store_iview(load->z.iview);
+   if (load->s.iview)
+      store.s = pan_fb_store_iview(load->s.iview);
+
+   struct pan_fb_desc_info fbd_info = {
+      .fb = fb,
+      .load = load,
+      .store = &store,
+   };
+   struct pan_fb_info fbinfo;
+   GENX(pan_fill_fb_info)(&fbd_info, &fbinfo);
+
+   return panvk_per_arch(cmd_fb_preload_fbinfo)(cmdbuf, &fbinfo, fs_out);
 }

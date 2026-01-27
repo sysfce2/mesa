@@ -10,8 +10,14 @@
 #include "pan_desc.h"
 #include "pan_fb.h"
 
+VkResult
+panvk_per_arch(cmd_fb_preload_fbinfo)(struct panvk_cmd_buffer *cmdbuf,
+                                      const struct pan_fb_info *fbinfo,
+                                      struct pan_fb_frame_shaders *fs_out);
+
 VkResult panvk_per_arch(cmd_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
-                                        const struct pan_fb_info *fbinfo,
+                                        const struct pan_fb_layout *fb,
+                                        const struct pan_fb_load *load,
                                         struct pan_fb_frame_shaders *fs_out);
 
 static inline struct pan_fb_bifrost_info

@@ -141,7 +141,8 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
          cmdbuf->state.gfx.render.first_provoking_vertex != U_TRISTATE_NO;
 
       struct pan_fb_frame_shaders fs;
-      VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf, fbinfo, &fs);
+      VkResult result = panvk_per_arch(cmd_fb_preload_fbinfo)(cmdbuf,
+                                                              fbinfo, &fs);
       if (result != VK_SUCCESS)
          return;
 
