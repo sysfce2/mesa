@@ -1134,6 +1134,8 @@ anv_descriptor_pool_heap_init(struct anv_device *device,
       ANV_DMR_BO_ALLOC(&pool->base, heap->bo, result);
       if (result != VK_SUCCESS)
          return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+
+      ANV_ADDR_BINDING_REPORT_BO_BIND(device, &pool->base, heap->bo);
    }
 
    util_vma_heap_init(&heap->heap, POOL_HEAP_OFFSET, heap->size);
@@ -1151,6 +1153,7 @@ anv_descriptor_pool_heap_fini(struct anv_device *device, struct anv_descriptor_p
    util_vma_heap_finish(&heap->heap);
 
    if (heap->bo) {
+      ANV_ADDR_BINDING_REPORT_BO_UNBIND(device, &pool->base, heap->bo);
       ANV_DMR_BO_FREE(&pool->base, heap->bo);
       anv_device_release_bo(device, heap->bo);
    }
