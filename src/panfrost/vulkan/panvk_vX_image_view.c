@@ -93,6 +93,10 @@ prepare_tex_descs(struct panvk_image_view *view)
       (view->vk.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) &&
       (img_combined_ds &&
        (view_combined_ds || panvk_image_is_interleaved_depth_stencil(image)));
+#if PAN_ARCH >= 9
+   bool has_storage = (view->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+                      !vk_format_is_compressed(view->vk.format);
+#endif
 
    if (util_format_is_depth_or_stencil(view->pview.format)) {
       /* Vulkan wants R001, where the depth/stencil is stored in the red
@@ -143,7 +147,7 @@ prepare_tex_descs(struct panvk_image_view *view)
 
 #if PAN_ARCH >= 9
    uint32_t storage_payload_size = 0;
-   if (view->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) {
+   if (has_storage) {
       /* We'll need a second set of Texture Descriptors for storage use. */
       storage_payload_size = tex_payload_size * plane_count;
       alloc_info.size += storage_payload_size;
@@ -162,7 +166,7 @@ prepare_tex_descs(struct panvk_image_view *view)
 
 #if PAN_ARCH >= 9
       struct pan_ptr storage_ptr = ptr;
-      if (view->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) {
+      if (has_storage) {
          uint32_t storage_payload_offset =
             alloc_info.size - storage_payload_size;
          storage_ptr.gpu += storage_payload_offset;
@@ -184,7 +188,7 @@ prepare_tex_descs(struct panvk_image_view *view)
             GENX(pan_sampled_texture_emit)(&pview, &view->descs.tex[plane],
                                            &ptr);
 #if PAN_ARCH >= 9
-            if (view->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) {
+            if (has_storage) {
                GENX(pan_storage_texture_emit)(
                   &pview, &view->descs.storage_tex[plane], &storage_ptr);
                storage_ptr.cpu += tex_payload_size;
@@ -198,7 +202,7 @@ prepare_tex_descs(struct panvk_image_view *view)
       } else {
          GENX(pan_sampled_texture_emit)(&pview, &view->descs.tex[0], &ptr);
 #if PAN_ARCH >= 9
-         if (view->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT)
+         if (has_storage)
             GENX(pan_storage_texture_emit)(&pview, &view->descs.storage_tex[0],
                                            &storage_ptr);
 #endif
