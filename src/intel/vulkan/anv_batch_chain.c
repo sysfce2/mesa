@@ -270,6 +270,9 @@ anv_batch_bo_create(struct anv_cmd_buffer *cmd_buffer,
    if (result != VK_SUCCESS)
       goto fail_bo_alloc;
 
+   ANV_ADDR_BINDING_REPORT_BO_BIND(cmd_buffer->device, &cmd_buffer->vk.base,
+                                   bbo->bo);
+
    *bbo_out = bbo;
 
    return VK_SUCCESS;
@@ -379,6 +382,8 @@ anv_batch_bo_destroy(struct anv_batch_bo *bbo,
                      struct anv_cmd_buffer *cmd_buffer)
 {
    anv_reloc_list_finish(&bbo->relocs);
+   ANV_ADDR_BINDING_REPORT_BO_UNBIND(cmd_buffer->device, &cmd_buffer->vk.base,
+                                     bbo->bo);
    ANV_DMR_BO_FREE(&cmd_buffer->vk.base, bbo->bo);
    anv_bo_pool_free(&cmd_buffer->device->batch_bo_pool, bbo->bo);
    vk_free(&cmd_buffer->vk.pool->alloc, bbo);
