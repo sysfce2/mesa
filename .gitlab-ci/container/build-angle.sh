@@ -13,7 +13,7 @@ section_start angle "Building ANGLE"
 # setting up the environment variables locally
 ci_tag_build_time_check "ANGLE_TAG"
 
-ANGLE_REV="63d1dd7c2dfccf6acbd92af224b48aa6ada45f1c"
+ANGLE_REV="b90b9ee1a4f901e6ba9e649d8f6cf9098a944f50"
 DEPOT_REV="5982a1aeb33dc36382ed8c62eddf52a6135e7dd3"
 
 # Set ANGLE_ARCH based on DEBIAN_ARCH if it hasn't been explicitly defined
@@ -140,6 +140,13 @@ if [[ "$DEBIAN_ARCH" = "arm64" ]]; then
 arm_control_flow_integrity="none"
 EOF
 fi
+
+# The Chromium build system hardcodes these flags, and they're not compatible
+# with our clang19 'unbundled' toolchain. See:
+# https://chromium.googlesource.com/chromium/src/build/+/39d42026/config/compiler/BUILD.gn#619
+# https://chromium.googlesource.com/chromium/src/build/+/39d42026/config/compiler/BUILD.gn#1882
+sed -i 's/-fno-lifetime-dse//g' build/config/compiler/BUILD.gn
+sed -i 's/-fsanitize-ignore-for-ubsan-feature=array-bounds//g' build/config/compiler/BUILD.gn
 
 (
   # The 'unbundled' toolchain configuration requires clang, and it also needs to
