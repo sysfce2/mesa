@@ -4309,12 +4309,12 @@ panfrost_create_blend_state(struct pipe_context *pipe,
          /* Could this possibly be fixed-function? */
          .fixed_function =
             !blend->logicop_enable &&
-            pan_blend_can_fixed_function(equation, supports_2src) &&
+            pan_blend_can_fixed_function(PAN_ARCH, equation, supports_2src) &&
             (!constant_mask || pan_blend_supports_constant(PAN_ARCH, c)),
 
          .fixed_function_float =
             !blend->logicop_enable &&
-            pan_blend_can_fixed_function(float_equation, supports_2src) &&
+            pan_blend_can_fixed_function(PAN_ARCH, float_equation, supports_2src) &&
             (!constant_mask || pan_blend_supports_constant(PAN_ARCH, c)),
 
          .alpha_zero_nop = pan_blend_alpha_zero_nop(equation),

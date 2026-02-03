@@ -109,7 +109,7 @@ GENX(pan_blend_get_shader_locked)(struct pan_blend_shader_cache *cache,
 
 #if PAN_ARCH < 6
    enum pipe_format rt_formats[8] = {0};
-   rt_formats[rt] = key.format;
+   rt_formats[rt] = GENX(pan_blend_shader_fmt)(key.format);
    NIR_PASS(_, nir, pan_nir_lower_framebuffer, rt_formats,
             pan_raw_format_mask_midgard(rt_formats), MAX2(key.nr_samples, 1),
             (cache->gpu_id >> 16) < 0x700);

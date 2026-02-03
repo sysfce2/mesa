@@ -230,7 +230,7 @@ blend_needs_shader(const struct pan_blend_state *state, unsigned rt_idx,
       return true;
 
    bool supports_2src = pan_blend_supports_2src(PAN_ARCH);
-   if (!pan_blend_can_fixed_function(rt->equation, supports_2src))
+   if (!pan_blend_can_fixed_function(PAN_ARCH, rt->equation, supports_2src))
       return true;
 
    unsigned constant_mask = pan_blend_constant_mask(rt->equation);

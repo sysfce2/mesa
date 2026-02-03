@@ -60,7 +60,8 @@ struct pan_blend_shader_key {
 
 bool pan_blend_reads_dest(const struct pan_blend_equation eq);
 
-bool pan_blend_can_fixed_function(const struct pan_blend_equation equation,
+bool pan_blend_can_fixed_function(unsigned arch,
+                                  const struct pan_blend_equation equation,
                                   bool supports_2src);
 
 bool pan_blend_is_opaque(const struct pan_blend_equation eq);
