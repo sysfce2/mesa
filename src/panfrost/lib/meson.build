@@ -29,6 +29,7 @@ foreach ver : ['4', '5', '6', '7', '9', '10', '12', '13']
       'pan_blend.c',
       'pan_desc.c',
       'pan_fb.c',
+      'pan_fb_nir.c',
       'pan_mod.c',
       'pan_texture.c',
     ],

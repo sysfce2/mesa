@@ -8,7 +8,10 @@
 
 #include "genxml/gen_macros.h"
 #include "util/format/u_formats.h"
+#include "compiler/shader_enums.h"
 
+struct nir_shader;
+struct nir_shader_compiler_options;
 struct pan_image_view;
 
 #define PAN_MAX_RTS 8
@@ -352,6 +355,51 @@ struct pan_fb_store {
 #ifdef PAN_ARCH
 void GENX(pan_align_fb_tiling_area)(struct pan_fb_layout *fb,
                                     const struct pan_fb_store *store);
+#endif
+
+static_assert(PAN_FB_LOAD_OP_COUNT <= (1 << 2),
+              "pan_fb_load_op fits in 2 bits");
+static_assert(PAN_FB_MSAA_COPY_OP_COUNT <= (1 << 2),
+              "pan_fb_msaa_copy_op fits in 2 bits");
+
+/* Asserts for glsl_sampler_dim glsl_base_type have to be runtime because
+ * there is no MAX value we can use.
+ */
+
+PRAGMA_DIAGNOSTIC_PUSH
+PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
+struct pan_fb_shader_load_key_target {
+   uint16_t in_bounds_load : 2;
+   uint16_t border_load : 2;
+   uint16_t msaa : 2;
+   uint16_t dim : 2;
+   uint16_t is_array : 1;
+   uint16_t glsl_type : 5;
+   uint16_t _pad : 2;
+};
+PRAGMA_DIAGNOSTIC_POP
+static_assert(sizeof(struct pan_fb_shader_load_key_target) == 2,
+              "This struct has no holes");
+
+PRAGMA_DIAGNOSTIC_PUSH
+PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
+struct pan_fb_load_shader_key {
+   struct pan_fb_shader_load_key_target rts[PAN_MAX_RTS];
+   struct pan_fb_shader_load_key_target z, s;
+};
+PRAGMA_DIAGNOSTIC_POP
+static_assert(sizeof(struct pan_fb_load_shader_key) == 2 * (PAN_MAX_RTS + 2),
+              "This struct has no holes");
+
+#ifdef PAN_ARCH
+bool GENX(pan_fb_load_shader_key_fill)(struct pan_fb_load_shader_key *key,
+                                       const struct pan_fb_layout *fb,
+                                       const struct pan_fb_load *load,
+                                       bool zs_prepass);
+
+struct nir_shader *
+GENX(pan_get_fb_load_shader)(const struct pan_fb_load_shader_key *key,
+                             const struct nir_shader_compiler_options *nir_options);
 #endif
 
 #endif /* __PAN_FB_H */

@@ -1748,6 +1748,14 @@ system_value("multisampled_pan", 1, bit_sizes=[32])
 # noperspective, this is 32 bits and starts from VARYING_SLOT_VAR0.
 system_value("noperspective_varyings_pan", 1, bit_sizes=[32])
 
+# Render area of the framebuffer.  Used by framebuffer load shaders.
+# The returned vector is (min_x, min_y, max_x, max_y)
+system_value("fb_render_area_pan", 4, bit_sizes=[16])
+
+# Loads the clear color for the given render target
+load("clear_value_pan", [], [IO_SEMANTICS, DEST_TYPE],
+     [CAN_ELIMINATE, CAN_REORDER])
+
 # Cumulative coverage mask, the start of the atest/zt/blend chain
 system_value("cumulative_coverage_pan", 1, bit_sizes=[32])
 system_value("blend_descriptor_pan", 1, bit_sizes=[64], indices=[BASE])

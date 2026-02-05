@@ -1489,6 +1489,7 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
          case nir_intrinsic_blend_pan:
          case nir_intrinsic_blend2_pan:
          case nir_intrinsic_load_blend_input_pan:
+         case nir_intrinsic_load_clear_value_pan:
          case nir_intrinsic_load_tile_pan:
          case nir_intrinsic_load_tile_res_pan:
          case nir_intrinsic_store_tile_pan:
