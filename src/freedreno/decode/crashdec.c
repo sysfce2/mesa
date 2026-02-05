@@ -1276,6 +1276,10 @@ main(int argc, char **argv)
          break;
       case 'f':
          in = fopen(optarg, "r");
+         if (!in) {
+            perror("fopen");
+            return 1;
+         }
          break;
       case 'l':
          lookback = atoi(optarg);
