@@ -539,8 +539,13 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
    render->fb.layout.render_area_px = ra_px;
    render->fb.layout.tiling_area_px = ra_px;
 
+   GENX(pan_align_fb_tiling_area)(&render->fb.layout, &render->fb.store);
+   GENX(pan_align_fb_tiling_area)(&render->fb.layout, &render->fb.spill.store);
+
+   const bool has_partial_tiles =
+      pan_fb_has_partial_tiles(&render->fb.layout);
    if (!(pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT) &&
-       pan_fb_has_image_load(&render->fb.load, false)) {
+       pan_fb_has_image_load(&render->fb.load, has_partial_tiles)) {
       /* Loads happen through the texture unit so, if we're going to do a
        * load, we need a barrier to ensure that the texture cache gets
        * invalidated prior to the load.
@@ -589,137 +594,6 @@ panvk_per_arch(cmd_select_tile_size)(struct panvk_cmd_buffer *cmdbuf)
        * that the sample count didn't change (this should never happen) */
       assert(fb->sample_count == render->fb.nr_samples);
    }
-}
-
-void
-panvk_per_arch(cmd_force_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
-                                     const VkRenderingInfo *render_info)
-{
-   /* We force preloading for all active attachments when the render area is
-    * unaligned or when a barrier flushes prior draw calls in the middle of a
-    * render pass.  The two cases can be distinguished by whether a
-    * render_info is provided.
-    *
-    * When the render area is unaligned, we force preloading to preserve
-    * contents falling outside of the render area.  We also make sure the
-    * initial attachment clears are performed.
-    */
-   struct panvk_cmd_graphics_state *state = &cmdbuf->state.gfx;
-   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
-   VkClearAttachment clear_atts[MAX_RTS + 2];
-   uint32_t clear_att_count = 0;
-
-   if (!state->render.bound_attachments)
-      return;
-
-   for (unsigned i = 0; i < render->fb.layout.rt_count; i++) {
-      if (render->fb.layout.rt_formats[i] == PIPE_FORMAT_NONE)
-         continue;
-
-      if (render->fb.load.rts[i].in_bounds_load == PAN_FB_LOAD_CLEAR) {
-         if (render_info) {
-            const VkRenderingAttachmentInfo *att =
-               &render_info->pColorAttachments[i];
-
-            clear_atts[clear_att_count++] = (VkClearAttachment){
-               .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-               .colorAttachment = i,
-               .clearValue = att->clearValue,
-            };
-         }
-      }
-
-      /* We always set image views, even if we don't use them */
-      assert(render->fb.load.rts[i].iview);
-      render->fb.load.rts[i].in_bounds_load = PAN_FB_LOAD_IMAGE;
-   }
-
-   if (render->fb.layout.z_format != PIPE_FORMAT_NONE) {
-      if (render->fb.load.z.in_bounds_load == PAN_FB_LOAD_CLEAR) {
-         if (render_info) {
-            const VkRenderingAttachmentInfo *att =
-               render_info->pDepthAttachment;
-
-            clear_atts[clear_att_count++] = (VkClearAttachment){
-               .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-               .clearValue = att->clearValue,
-            };
-         }
-      }
-
-      assert(render->fb.load.z.iview);
-      render->fb.load.z.in_bounds_load = PAN_FB_LOAD_IMAGE;
-   }
-
-   if (render->fb.layout.s_format != PIPE_FORMAT_NONE) {
-      if (render->fb.load.s.in_bounds_load == PAN_FB_LOAD_CLEAR) {
-         if (render_info) {
-            const VkRenderingAttachmentInfo *att =
-               render_info->pStencilAttachment;
-
-            clear_atts[clear_att_count++] = (VkClearAttachment){
-               .aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT,
-               .clearValue = att->clearValue,
-            };
-         }
-      }
-
-      assert(render->fb.load.s.iview);
-      render->fb.load.s.in_bounds_load = PAN_FB_LOAD_IMAGE;
-   }
-
-#if PAN_ARCH >= 10
-   /* insert a barrier for preload */
-   const VkMemoryBarrier2 mem_barrier = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
-      .srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-                      VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT |
-                      VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-      .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
-                       VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-      .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-      .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-   };
-   const VkDependencyInfo dep_info = {
-      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-      .memoryBarrierCount = 1,
-      .pMemoryBarriers = &mem_barrier,
-   };
-   panvk_per_arch(CmdPipelineBarrier2)(panvk_cmd_buffer_to_handle(cmdbuf),
-                                       &dep_info);
-#endif
-
-   if (clear_att_count && render_info) {
-      VkClearRect clear_rect = {
-         .rect = render_info->renderArea,
-         .baseArrayLayer = 0,
-         .layerCount = render_info->viewMask ? 1 : render_info->layerCount,
-      };
-
-      panvk_per_arch(CmdClearAttachments)(panvk_cmd_buffer_to_handle(cmdbuf),
-                                          clear_att_count, clear_atts, 1,
-                                          &clear_rect);
-   }
-}
-
-void
-panvk_per_arch(cmd_preload_render_area_border)(
-   struct panvk_cmd_buffer *cmdbuf, const VkRenderingInfo *render_info)
-{
-   struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
-   const unsigned meta_tile_size = pan_meta_tile_size(PAN_ARCH);
-
-   bool render_area_is_aligned =
-      ((fb->render_area_px.min_x | fb->render_area_px.min_y) %
-       meta_tile_size) == 0 &&
-      (fb->render_area_px.max_x + 1 == fb->width_px ||
-       (fb->render_area_px.max_x % meta_tile_size) == (meta_tile_size - 1)) &&
-      (fb->render_area_px.max_y + 1 == fb->height_px ||
-       (fb->render_area_px.max_y % meta_tile_size) == (meta_tile_size - 1));
-
-   /* If the render area is aligned on the meta tile size, we're good. */
-   if (!render_area_is_aligned)
-      panvk_per_arch(cmd_force_fb_preload)(cmdbuf, render_info);
 }
 
 static void

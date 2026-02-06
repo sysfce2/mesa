@@ -3057,9 +3057,6 @@ panvk_per_arch(CmdBeginRendering)(VkCommandBuffer commandBuffer,
                                           PANVK_INSTR_WORK_TYPE_RENDER);
    panvk_per_arch(panvk_instr_begin_work)(PANVK_SUBQUEUE_FRAGMENT, cmdbuf,
                                           PANVK_INSTR_WORK_TYPE_RENDER);
-
-   if (!resuming)
-      panvk_per_arch(cmd_preload_render_area_border)(cmdbuf, pRenderingInfo);
 }
 
 static void

@@ -1935,9 +1935,6 @@ panvk_per_arch(CmdBeginRendering)(VkCommandBuffer commandBuffer,
 
    if (!cmdbuf->cur_batch)
       panvk_per_arch(cmd_open_batch)(cmdbuf);
-
-   if (!resuming)
-      panvk_per_arch(cmd_preload_render_area_border)(cmdbuf, pRenderingInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
