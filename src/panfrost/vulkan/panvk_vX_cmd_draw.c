@@ -21,7 +21,6 @@ get_att_fb_load_op(const VkRenderingAttachmentInfo *att)
    case VK_ATTACHMENT_LOAD_OP_LOAD:
       return PAN_FB_LOAD_IMAGE;
    case VK_ATTACHMENT_LOAD_OP_NONE:
-      return PAN_FB_LOAD_NONE;
    case VK_ATTACHMENT_LOAD_OP_DONT_CARE:
       /* This is a very frustrating corner case. From the spec:
        *
