@@ -241,7 +241,7 @@ panvk_draw_prepare_fs_rsd(struct panvk_cmd_buffer *cmdbuf,
    const struct panvk_shader_variant *fs =
       panvk_shader_only_variant(get_fs(cmdbuf));
    const struct pan_shader_info *fs_info = fs ? &fs->info : NULL;
-   uint32_t bd_count = MAX2(cmdbuf->state.gfx.render.fb.info.rt_count, 1);
+   uint32_t bd_count = MAX2(cmdbuf->state.gfx.render.fb.layout.rt_count, 1);
    bool test_s = has_stencil_att(cmdbuf) && ds->stencil.test_enable;
    bool test_z = has_depth_att(cmdbuf) && ds->depth.test_enable;
    bool writes_z = writes_depth(cmdbuf);
@@ -1213,14 +1213,6 @@ panvk_per_arch(cmd_preload_fb_after_batch_split)(struct panvk_cmd_buffer *cmdbuf
    struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
 
    render->fb.load = render->fb.spill.load;
-
-   /* Populate the pan_fb_info as best as we can */
-   struct pan_fb_desc_info fbd_info = {
-      .fb = &render->fb.layout,
-      .load = &render->fb.load,
-      .store = &render->fb.store,
-   };
-   GENX(pan_fill_fb_info)(&fbd_info, &render->fb.info);
 }
 
 static VkResult

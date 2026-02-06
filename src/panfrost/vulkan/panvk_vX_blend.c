@@ -284,7 +284,7 @@ panvk_per_arch(blend_emit_descs)(struct panvk_cmd_buffer *cmdbuf,
       .alpha_to_one = dyns->ms.alpha_to_one_enable,
       .logicop_enable = cb->logic_op_enable,
       .logicop_func = vk_logic_op_to_pipe(cb->logic_op),
-      .rt_count = cmdbuf->state.gfx.render.fb.info.rt_count,
+      .rt_count = cmdbuf->state.gfx.render.fb.layout.rt_count,
       .constants =
          {
             cb->blend_constants[0],
@@ -296,7 +296,7 @@ panvk_per_arch(blend_emit_descs)(struct panvk_cmd_buffer *cmdbuf,
    uint64_t blend_shaders[8] = {};
    /* All bits set to one encodes unused fixed-function blend constant. */
    unsigned ff_blend_constant = ~0;
-   uint32_t blend_count = MAX2(cmdbuf->state.gfx.render.fb.info.rt_count, 1);
+   uint32_t blend_count = MAX2(cmdbuf->state.gfx.render.fb.layout.rt_count, 1);
 
    uint8_t loc_rt[MAX_RTS], rt_loc[MAX_RTS];
    memset(loc_rt, MESA_VK_ATTACHMENT_UNUSED, sizeof(loc_rt));

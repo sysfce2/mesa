@@ -539,15 +539,6 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
 
    render->fb.layout.render_area_px = ra_px;
    render->fb.layout.tiling_area_px = ra_px;
-
-   /* Populate the pan_fb_info as best as we can */
-   struct pan_fb_desc_info fbd_info = {
-      .fb = &render->fb.layout,
-      .load = &render->fb.load,
-      .store = &render->fb.store,
-      .allow_hsr_prepass = PAN_ARCH >= 13 && PANVK_DEBUG(HSR_PREPASS),
-   };
-   GENX(pan_fill_fb_info)(&fbd_info, &render->fb.info);
 }
 
 void
@@ -558,10 +549,8 @@ panvk_per_arch(cmd_select_tile_size)(struct panvk_cmd_buffer *cmdbuf)
 
    /* In case we never emitted tiler/framebuffer descriptors, we emit the
     * current sample count and compute tile size */
-   assert(fb->sample_count == render->fb.info.nr_samples);
    if (fb->sample_count == 0) {
       fb->sample_count = render->fb.nr_samples;
-      render->fb.info.nr_samples = render->fb.nr_samples;
 
       GENX(pan_select_fb_tile_size)(fb);
 
@@ -571,9 +560,6 @@ panvk_per_arch(cmd_select_tile_size)(struct panvk_cmd_buffer *cmdbuf)
                  "Using too much tile-memory, disabling pipelining");
       }
 #endif
-
-      render->fb.info.tile_size = fb->tile_size_px;
-      render->fb.info.cbuf_allocation = fb->tile_rt_alloc_B;
    } else {
       /* In case we already emitted tiler/framebuffer descriptors, we ensure
        * that the sample count didn't change (this should never happen) */
@@ -657,15 +643,6 @@ panvk_per_arch(cmd_force_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
       assert(render->fb.load.s.iview);
       render->fb.load.s.in_bounds_load = PAN_FB_LOAD_IMAGE;
    }
-
-   /* Re-generate the pan_fb_info now that we've modified the load */
-   struct pan_fb_desc_info fbd_info = {
-      .fb = &render->fb.layout,
-      .load = &render->fb.load,
-      .store = &render->fb.store,
-      .allow_hsr_prepass = PAN_ARCH >= 13 && PANVK_DEBUG(HSR_PREPASS),
-   };
-   GENX(pan_fill_fb_info)(&fbd_info, &render->fb.info);
 
 #if PAN_ARCH >= 10
    /* insert a barrier for preload */

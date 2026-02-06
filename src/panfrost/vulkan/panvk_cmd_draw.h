@@ -70,7 +70,6 @@ struct panvk_rendering_state {
    } z_pview, s_pview;
 
    struct {
-      struct pan_fb_info info;
       struct pan_fb_layout layout;
       struct pan_fb_load load;
       struct pan_fb_store store;
@@ -272,8 +271,8 @@ panvk_select_tiler_hierarchy_mask(const struct panvk_physical_device *phys_dev,
       pan_query_tiler_features(&phys_dev->kmod.dev->props);
 
    uint32_t hierarchy_mask = GENX(pan_select_tiler_hierarchy_mask)(
-      state->render.fb.info.width, state->render.fb.info.height,
-      tiler_features.max_levels, state->render.fb.info.tile_size,
+      state->render.fb.layout.width_px, state->render.fb.layout.height_px,
+      tiler_features.max_levels, state->render.fb.layout.tile_size_px,
       bin_ptr_mem_budget);
 
    return hierarchy_mask;

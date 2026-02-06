@@ -663,7 +663,7 @@ prepare_blend(struct panvk_cmd_buffer *cmdbuf)
 
    const struct panvk_shader_variant *fs =
       panvk_shader_only_variant(get_fs(cmdbuf));
-   uint32_t bd_count = MAX2(cmdbuf->state.gfx.render.fb.info.rt_count, 1);
+   uint32_t bd_count = MAX2(cmdbuf->state.gfx.render.fb.layout.rt_count, 1);
    struct cs_builder *b =
       panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER);
    struct pan_ptr ptr = panvk_cmd_alloc_desc_array(cmdbuf, bd_count, BLEND);
@@ -3026,12 +3026,6 @@ panvk_per_arch(cmd_inherit_render_state)(
       render->fb.layout.s_format =
          vk_format_to_pipe_format(inheritance_info->stencilAttachmentFormat);
    }
-
-   /* Populate the pan_fb_info as best as we can */
-   struct pan_fb_desc_info fbd_info = {
-      .fb = &render->fb.layout,
-   };
-   GENX(pan_fill_fb_info)(&fbd_info, &render->fb.info);
 
    const VkRenderingAttachmentLocationInfoKHR att_loc_info_default = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_LOCATION_INFO_KHR,

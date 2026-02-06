@@ -236,7 +236,7 @@ panvk_per_arch(CmdClearAttachments)(VkCommandBuffer commandBuffer,
    struct vk_meta_rendering_info render = {
       .view_mask = cmdbuf->state.gfx.render.view_mask,
       .samples = cmdbuf->state.gfx.render.fb.nr_samples,
-      .color_attachment_count = cmdbuf->state.gfx.render.fb.info.rt_count,
+      .color_attachment_count = cmdbuf->state.gfx.render.fb.layout.rt_count,
       .depth_attachment_format = cmdbuf->state.gfx.render.z_attachment.fmt,
       .stencil_attachment_format = cmdbuf->state.gfx.render.s_attachment.fmt,
    };
@@ -646,7 +646,7 @@ panvk_per_arch(cmd_transition_image_layout)(
 void
 panvk_per_arch(cmd_meta_resolve_attachments)(struct panvk_cmd_buffer *cmdbuf)
 {
-   struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+   struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
    bool needs_resolve = false;
 
    unsigned bound_atts = cmdbuf->state.gfx.render.bound_attachments;
@@ -738,12 +738,12 @@ panvk_per_arch(cmd_meta_resolve_attachments)(struct panvk_cmd_buffer *cmdbuf)
       .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
       .renderArea =
          {
-            .offset.x = fbinfo->draw_extent.minx,
-            .offset.y = fbinfo->draw_extent.miny,
+            .offset.x = fb->render_area_px.min_x,
+            .offset.y = fb->render_area_px.min_y,
             .extent.width =
-               fbinfo->draw_extent.maxx - fbinfo->draw_extent.minx + 1,
+               fb->render_area_px.max_x - fb->render_area_px.min_x + 1,
             .extent.height =
-               fbinfo->draw_extent.maxy - fbinfo->draw_extent.miny + 1,
+               fb->render_area_px.max_y - fb->render_area_px.min_y + 1,
          },
       .layerCount = cmdbuf->state.gfx.render.layer_count,
       .viewMask = cmdbuf->state.gfx.render.view_mask,
