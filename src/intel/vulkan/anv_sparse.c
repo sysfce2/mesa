@@ -1372,8 +1372,27 @@ vk_bind_to_anv_vm_bind(struct anv_sparse_binding_data *sparse,
    return anv_bind;
 }
 
+static void
+anv_sparse_addr_bind_report(struct anv_device *device,
+                            struct vk_object_base *obj_base,
+                            struct anv_vm_bind *bind_op)
+{
+   struct anv_address addr = {
+      .bo = NULL,
+      .offset = bind_op->address
+   };
+
+   if (bind_op->bo != NULL)
+      ANV_ADDR_BINDING_REPORT_ADDR_BIND(device, obj_base, addr, bind_op->size);
+   else
+      ANV_ADDR_BINDING_REPORT_ADDR_UNBIND(device, obj_base, addr,
+                                          bind_op->size);
+
+}
+
 static VkResult
 anv_sparse_bind_resource_memory(struct anv_device *device,
+                                struct vk_object_base *obj_base,
                                 struct anv_sparse_binding_data *sparse,
                                 uint64_t resource_size,
                                 const VkSparseMemoryBind *vk_bind,
@@ -1381,6 +1400,7 @@ anv_sparse_bind_resource_memory(struct anv_device *device,
 {
    struct anv_vm_bind bind = vk_bind_to_anv_vm_bind(sparse, 0, vk_bind);
    uint64_t rem = vk_bind->size % ANV_SPARSE_BLOCK_SIZE;
+   VkResult res;
 
    if (rem != 0) {
       if (vk_bind->resourceOffset + vk_bind->size == resource_size)
@@ -1389,7 +1409,10 @@ anv_sparse_bind_resource_memory(struct anv_device *device,
          return vk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
    }
 
-   return anv_sparse_submission_add(device, submit, &bind);
+   res = anv_sparse_submission_add(device, submit, &bind);
+   anv_sparse_addr_bind_report(device, obj_base, &bind);
+
+   return res;
 }
 
 VkResult
@@ -1398,7 +1421,8 @@ anv_sparse_bind_buffer(struct anv_device *device,
                        const VkSparseMemoryBind *vk_bind,
                        struct anv_sparse_submission *submit)
 {
-   return anv_sparse_bind_resource_memory(device, &buffer->sparse_data,
+   return anv_sparse_bind_resource_memory(device, &buffer->vk.base,
+                                          &buffer->sparse_data,
                                           buffer->vk.size,
                                           vk_bind, submit);
 }
@@ -1426,7 +1450,8 @@ anv_sparse_bind_image_opaque(struct anv_device *device,
       sparse_debug("\n");
    }
 
-   return anv_sparse_bind_resource_memory(device, &image->sparse_data,
+   return anv_sparse_bind_resource_memory(device, &image->vk.base,
+                                          &image->sparse_data,
                                           b->memory_range.size,
                                           vk_bind, submit);
 }
@@ -1554,6 +1579,8 @@ anv_sparse_bind_image_memory(struct anv_queue *queue,
                                                      &anv_bind);
          if (result != VK_SUCCESS)
             return result;
+
+         anv_sparse_addr_bind_report(device, &image->vk.base, &anv_bind);
       }
    }
 
