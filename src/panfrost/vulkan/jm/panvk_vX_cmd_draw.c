@@ -1972,10 +1972,13 @@ panvk_per_arch(CmdEndRendering)(VkCommandBuffer commandBuffer)
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
 
    if (!(cmdbuf->state.gfx.render.flags & VK_RENDERING_SUSPENDING_BIT)) {
-      struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
-      bool clear = fbinfo->zs.clear.z | fbinfo->zs.clear.s;
-      for (unsigned i = 0; i < fbinfo->rt_count; i++)
-         clear |= fbinfo->rts[i].clear;
+      const struct pan_fb_load *fb_load = &cmdbuf->state.gfx.render.fb.load;
+      bool clear = fb_load->z.in_bounds_load == PAN_FB_LOAD_CLEAR ||
+                   fb_load->s.in_bounds_load == PAN_FB_LOAD_CLEAR;
+      for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
+         if (fb_load->rts[rt].in_bounds_load == PAN_FB_LOAD_CLEAR)
+            clear = true;
+      }
 
       if (clear)
          panvk_per_arch(cmd_alloc_fb_desc)(cmdbuf);

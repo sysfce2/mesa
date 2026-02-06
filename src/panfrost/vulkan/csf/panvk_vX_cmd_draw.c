@@ -3759,14 +3759,16 @@ panvk_per_arch(CmdEndRendering)(VkCommandBuffer commandBuffer)
    VkResult result;
 
    if (!suspending) {
-      struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
-
       /* If no draw was performed, we should ensure sample count is valid and that we emit tile size */
       panvk_per_arch(cmd_select_tile_size)(cmdbuf);
 
-      bool clear = fbinfo->zs.clear.z | fbinfo->zs.clear.s;
-      for (unsigned i = 0; i < fbinfo->rt_count; i++)
-         clear |= fbinfo->rts[i].clear;
+      const struct pan_fb_load *fb_load = &cmdbuf->state.gfx.render.fb.load;
+      bool clear = fb_load->z.in_bounds_load == PAN_FB_LOAD_CLEAR ||
+                   fb_load->s.in_bounds_load == PAN_FB_LOAD_CLEAR;
+      for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
+         if (fb_load->rts[rt].in_bounds_load == PAN_FB_LOAD_CLEAR)
+            clear = true;
+      }
 
       if (clear && !inherits_render_ctx(cmdbuf)) {
          result = get_fb_descs(cmdbuf);
