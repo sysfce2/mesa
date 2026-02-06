@@ -3816,7 +3816,7 @@ panvk_per_arch(CmdEndRendering)(VkCommandBuffer commandBuffer)
    struct panvk_instr_end_args instr_info = {
       .render = {
          .flags = cmdbuf->state.gfx.render.flags,
-         .fb = &cmdbuf->state.gfx.render.fb.info,
+         .fb = &cmdbuf->state.gfx.render.fb.layout,
       }};
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    panvk_per_arch(panvk_instr_end_work_async)(
