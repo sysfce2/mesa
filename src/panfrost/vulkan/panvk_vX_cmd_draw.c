@@ -539,6 +539,31 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
 
    render->fb.layout.render_area_px = ra_px;
    render->fb.layout.tiling_area_px = ra_px;
+
+   if (!(pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT) &&
+       pan_fb_has_image_load(&render->fb.load, false)) {
+      /* Loads happen through the texture unit so, if we're going to do a
+       * load, we need a barrier to ensure that the texture cache gets
+       * invalidated prior to the load.
+       */
+      const VkMemoryBarrier2 mem_barrier = {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+         .srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                         VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT |
+                         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+         .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+                          VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+         .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+         .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+      };
+      const VkDependencyInfo dep_info = {
+         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+         .memoryBarrierCount = 1,
+         .pMemoryBarriers = &mem_barrier,
+      };
+      panvk_per_arch(CmdPipelineBarrier2)(panvk_cmd_buffer_to_handle(cmdbuf),
+                                          &dep_info);
+   }
 }
 
 void
