@@ -133,9 +133,8 @@ calc_fn_set_fbds_provoking_vertex_idx(struct panvk_cmd_buffer *cmdbuf)
 {
    const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
    const bool has_zs_ext = pan_fb_has_zs(fb);
-   uint32_t rt_count = MAX2(fb->rt_count, 1);
 
-   return get_fn_set_fbds_provoking_vertex_idx(has_zs_ext, rt_count);
+   return get_fn_set_fbds_provoking_vertex_idx(has_zs_ext, fb->rt_count);
 }
 
 VkResult
@@ -663,7 +662,7 @@ prepare_blend(struct panvk_cmd_buffer *cmdbuf)
 
    const struct panvk_shader_variant *fs =
       panvk_shader_only_variant(get_fs(cmdbuf));
-   uint32_t bd_count = MAX2(cmdbuf->state.gfx.render.fb.layout.rt_count, 1);
+   uint32_t bd_count = cmdbuf->state.gfx.render.fb.layout.rt_count;
    struct cs_builder *b =
       panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER);
    struct pan_ptr ptr = panvk_cmd_alloc_desc_array(cmdbuf, bd_count, BLEND);
@@ -927,9 +926,8 @@ calc_fbd_size(struct panvk_cmd_buffer *cmdbuf)
 {
    const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
    const bool has_zs_ext = pan_fb_has_zs(fb);
-   uint32_t rt_count = MAX2(fb->rt_count, 1);
 
-   return get_fbd_size(has_zs_ext, rt_count);
+   return get_fbd_size(has_zs_ext, fb->rt_count);
 }
 
 static uint32_t
@@ -1329,7 +1327,7 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
    }
 
    const bool has_zs_ext = pan_fb_has_zs(&render->fb.layout);
-   const uint32_t rt_count = MAX2(render->fb.layout.rt_count, 1);
+   const uint32_t rt_count = render->fb.layout.rt_count;
 
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_FRAGMENT);
    for (uint32_t ir_pass = 0; ir_pass < PANVK_IR_PASS_COUNT; ir_pass++) {
@@ -2990,7 +2988,7 @@ panvk_per_arch(cmd_inherit_render_state)(
           render->fb.layout.sample_count == sample_count);
    render->fb.layout = (struct pan_fb_layout) {
       .sample_count = sample_count,
-      .rt_count = inheritance_info->colorAttachmentCount,
+      .rt_count = MAX2(inheritance_info->colorAttachmentCount, 1),
 
       .tile_size_px = render->fb.layout.tile_size_px,
       .tile_rt_alloc_B = render->fb.layout.tile_rt_alloc_B,
@@ -3324,9 +3322,8 @@ calc_tiler_oom_handler_idx(struct panvk_cmd_buffer *cmdbuf)
 {
    const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
    const bool has_zs_ext = pan_fb_has_zs(fb);
-   uint32_t rt_count = MAX2(fb->rt_count, 1);
 
-   return get_tiler_oom_handler_idx(has_zs_ext, rt_count);
+   return get_tiler_oom_handler_idx(has_zs_ext, fb->rt_count);
 }
 
 static void
@@ -3475,7 +3472,7 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
    }
 
    const bool has_zs_ext = pan_fb_has_zs(fb);
-   const uint32_t rt_count = MAX2(fb->rt_count, 1);
+   const uint32_t rt_count = fb->rt_count;
 
    /* IR was hit: set up IR FBD */
    cs_if(b, MALI_CS_CONDITION_GREATER, counter) {

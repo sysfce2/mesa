@@ -349,9 +349,7 @@ fill_bds(const struct pan_fb_layout *fb,
          const struct panvk_fb_preload_shader_key *key,
          struct mali_blend_packed *bds)
 {
-   uint32_t bd_count = MAX2(fb->rt_count, 1);
-
-   for (unsigned i = 0; i < bd_count; i++) {
+   for (unsigned i = 0; i < fb->rt_count; i++) {
       pan_pack(&bds[i], BLEND, cfg) {
          if (!pan_fb_shader_key_target_written(&key->key.rts[i]) ||
              fb->rt_formats[i] == PIPE_FORMAT_NONE) {
@@ -421,7 +419,7 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
    assert(preload_color != (preload_z || preload_s));
 
    uint32_t tex_count = util_bitcount(locations_written);
-   uint32_t bd_count = MAX2(fb->rt_count, 1);
+   uint32_t bd_count = fb->rt_count;
 
    struct pan_ptr rsd = panvk_cmd_alloc_desc_aggregate(
       cmdbuf, PAN_DESC(RENDERER_STATE),

@@ -429,8 +429,6 @@ GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info, void *out)
    const struct pan_fb_store *store = info->store;
 
    const bool has_zs_crc_ext = pan_fb_has_zs(fb);
-   assert(fb->rt_count > 0 || fb->rt_formats[0] == PIPE_FORMAT_NONE);
-   const unsigned rt_count = MAX2(fb->rt_count, 1);
 
    struct mali_framebuffer_packed fbd = {};
 
@@ -502,7 +500,8 @@ GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info, void *out)
       cfg.first_provoking_vertex = info->provoking_vertex_first;
 #endif
 
-      cfg.render_target_count = rt_count;
+      assert(fb->rt_count > 0);
+      cfg.render_target_count = fb->rt_count;
       cfg.color_buffer_allocation = fb->tile_rt_alloc_B;
 
       if (fb->s_format != PIPE_FORMAT_NONE) {
@@ -553,7 +552,7 @@ GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info, void *out)
    }
 
    uint32_t tile_rt_offset_B = 0;
-   for (unsigned rt = 0; rt < rt_count; rt++) {
+   for (unsigned rt = 0; rt < fb->rt_count; rt++) {
       struct mali_rgb_render_target_packed rgb_rt;
       emit_rgb_rt_desc(info, rt, tile_rt_offset_B, &rgb_rt);
       memcpy(out, &rgb_rt, sizeof(rgb_rt));
@@ -569,7 +568,7 @@ GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info, void *out)
    struct mali_framebuffer_pointer_packed tag;
    pan_pack(&tag, FRAMEBUFFER_POINTER, cfg) {
       cfg.zs_crc_extension_present = has_zs_crc_ext;
-      cfg.render_target_count = rt_count;
+      cfg.render_target_count = fb->rt_count;
    }
    return tag.opaque[0];
 }

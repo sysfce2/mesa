@@ -296,7 +296,6 @@ panvk_per_arch(blend_emit_descs)(struct panvk_cmd_buffer *cmdbuf,
    uint64_t blend_shaders[8] = {};
    /* All bits set to one encodes unused fixed-function blend constant. */
    unsigned ff_blend_constant = ~0;
-   uint32_t blend_count = MAX2(cmdbuf->state.gfx.render.fb.layout.rt_count, 1);
 
    uint8_t loc_rt[MAX_RTS], rt_loc[MAX_RTS];
    memset(loc_rt, MESA_VK_ATTACHMENT_UNUSED, sizeof(loc_rt));
@@ -380,13 +379,13 @@ panvk_per_arch(blend_emit_descs)(struct panvk_cmd_buffer *cmdbuf,
       ff_blend_constant = 0;
 
    struct mali_blend_packed packed[MAX_RTS];
-   for (uint8_t rt = 0; rt < blend_count; rt++) {
+   for (uint8_t rt = 0; rt < bs.rt_count; rt++) {
       emit_blend_desc(&bs, rt, fs_info, rt_loc[rt], fs_code,
                       blend_shaders[rt], ff_blend_constant, &packed[rt]);
    }
 
    /* Copy into the GPU descriptor array */
-   typed_memcpy(bds, packed, blend_count);
+   typed_memcpy(bds, packed, bs.rt_count);
 
    /* Re-order blend descriptors for the shader
     *

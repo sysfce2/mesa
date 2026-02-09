@@ -471,7 +471,11 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
        * value if we don't set it here already.
        */
       .sample_count = 0,
-      .rt_count = pRenderingInfo->colorAttachmentCount,
+
+      /* The hardware requires us to have at least one color target, even if
+       * it's a dummy.
+       */
+      .rt_count = MAX2(pRenderingInfo->colorAttachmentCount, 1),
 
       .tile_rt_budget_B =
          pan_query_optimal_tib_size(PAN_ARCH, phys_dev->model),
