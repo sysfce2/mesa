@@ -114,13 +114,13 @@ a618-angle:
 a618-vk:
   extends:
     - .lava-arm64-test-vk
-    - .lava-sc7180-trogdor-kingoftown:arm64
+    - .lava-sc7180-trogdor-wormdingler-rev1-boe:arm64
     - .collabora-turnip-rules
-  parallel: 8
+  parallel: 11
   variables:
     DEQP_SUITE: freedreno-a618-vk
     FLAKES_CHANNEL: "#freedreno-ci"
-    FDO_CI_CONCURRENT: 6  # We get OOMkills if we go too wide since VKCTS 1.4.4.0
+    FDO_CI_CONCURRENT: 7  # We get OOMkills if we go too wide since VKCTS 1.4.4.0
 
 a618-vk-full:
   extends:
