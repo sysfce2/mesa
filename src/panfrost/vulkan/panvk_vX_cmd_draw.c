@@ -718,9 +718,12 @@ prepare_iam_sysvals(struct panvk_cmd_buffer *cmdbuf, BITSET_WORD *dirty_sysvals)
 
       iam[ia_idx].target = PANVK_COLOR_ATTACHMENT(i);
 
+      bool dithered = cmdbuf->state.gfx.render.flags &
+                      VK_RENDERING_ENABLE_LEGACY_DITHERING_BIT_EXT;
+
       pan_pack(&conv, INTERNAL_CONVERSION, cfg) {
          cfg.memory_format =
-            GENX(pan_dithered_format_from_pipe_format)(pfmt, false);
+            GENX(pan_dithered_format_from_pipe_format)(pfmt, dithered);
 #if PAN_ARCH < 9
          cfg.register_format =
             vk_format_is_uint(fmt)   ? MALI_REGISTER_FILE_FORMAT_U32

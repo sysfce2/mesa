@@ -161,6 +161,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_image_robustness = true,
       .EXT_image_view_min_lod = true,
       .EXT_index_type_uint8 = true,
+      .EXT_legacy_dithering = true,
       .EXT_line_rasterization = true,
       .EXT_load_store_op_none = true,
       .EXT_non_seamless_cube_map = true,
@@ -552,6 +553,9 @@ panvk_per_arch(get_physical_device_features)(
 
       /* VK_EXT_ycbcr_image_arrays */
       .ycbcrImageArrays = PAN_ARCH >= 10,
+
+      /* VK_EXT_legacy_dithering */
+      .legacyDithering = true,
 
       /* VK_EXT_non_seamless_cube_map */
       .nonSeamlessCubeMap = true,
