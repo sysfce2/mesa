@@ -230,7 +230,6 @@ GENX(pan_emit_linear_s_attachment)(const struct pan_image_view *s,
                                      s->first_level, layer_or_z_slice, &base,
                                      &row_stride, &surf_stride);
    pan_cast_and_pack(payload, S_TARGET, cfg) {
-      cfg.msaa = mali_sampling_mode(s);
       cfg.write_format = translate_s_format(s->format);
       cfg.block_format = MALI_BLOCK_FORMAT_LINEAR;
       cfg.base = base;
@@ -252,7 +251,6 @@ GENX(pan_emit_afbc_s_attachment)(const struct pan_image_view *s,
    get_afbc_att_mem_props(pref, s->first_level, layer_or_z_slice, &header,
                           &body_offset, &hdr_row_stride);
    pan_cast_and_pack(payload, AFBC_S_TARGET, cfg) {
-      cfg.msaa = mali_sampling_mode(s);
       cfg.write_format = translate_s_format(s->format);
       cfg.block_format = get_afbc_block_format(pref.image->props.modifier);
       cfg.header = header;
@@ -272,7 +270,6 @@ GENX(pan_emit_u_tiled_s_attachment)(const struct pan_image_view *s,
                                      s->first_level, layer_or_z_slice, &base,
                                      &row_stride, &surf_stride);
    pan_cast_and_pack(payload, S_TARGET, cfg) {
-      cfg.msaa = mali_sampling_mode(s);
       cfg.write_format = translate_s_format(s->format);
       cfg.block_format = MALI_BLOCK_FORMAT_TILED_U_INTERLEAVED;
       cfg.base = base;
@@ -291,7 +288,6 @@ GENX(pan_emit_linear_zs_attachment)(const struct pan_image_view *zs,
                                      zs->first_level, layer_or_z_slice, &base,
                                      &row_stride, &surf_stride);
    pan_cast_and_pack(payload, ZS_TARGET, cfg) {
-      cfg.msaa = mali_sampling_mode(zs);
       cfg.write_format = translate_zs_format(zs->format);
       cfg.block_format = MALI_BLOCK_FORMAT_LINEAR;
       cfg.base = base;
@@ -310,7 +306,6 @@ GENX(pan_emit_u_tiled_zs_attachment)(const struct pan_image_view *zs,
                                      zs->first_level, layer_or_z_slice, &base,
                                      &row_stride, &surf_stride);
    pan_cast_and_pack(payload, ZS_TARGET, cfg) {
-      cfg.msaa = mali_sampling_mode(zs);
       cfg.write_format = translate_zs_format(zs->format);
       cfg.block_format = MALI_BLOCK_FORMAT_TILED_U_INTERLEAVED;
       cfg.base = base;
@@ -330,7 +325,6 @@ GENX(pan_emit_afbc_zs_attachment)(const struct pan_image_view *zs,
                           &body_offset, &hdr_row_stride);
 
    pan_cast_and_pack(payload, AFBC_ZS_TARGET, cfg) {
-      cfg.msaa = mali_sampling_mode(zs);
       cfg.write_format = translate_zs_format(zs->format);
       cfg.block_format = get_afbc_block_format(pref.image->props.modifier);
 
@@ -366,7 +360,6 @@ GENX(pan_emit_interleaved_64k_s_attachment)(const struct pan_image_view *s,
                                      s->first_level, layer_or_z_slice, &base,
                                      &row_stride, &surf_stride);
    pan_cast_and_pack(payload, S_TARGET, cfg) {
-      cfg.msaa = mali_sampling_mode(s);
       cfg.write_format = translate_s_format(s->format);
       cfg.block_format = MALI_BLOCK_FORMAT_INTERLEAVED_64K;
       cfg.base = base;
@@ -385,7 +378,6 @@ GENX(pan_emit_interleaved_64k_zs_attachment)(const struct pan_image_view *zs,
                                      zs->first_level, layer_or_z_slice, &base,
                                      &row_stride, &surf_stride);
    pan_cast_and_pack(payload, ZS_TARGET, cfg) {
-      cfg.msaa = mali_sampling_mode(zs);
       cfg.write_format = translate_zs_format(zs->format);
       cfg.block_format = MALI_BLOCK_FORMAT_INTERLEAVED_64K;
       cfg.base = base;
@@ -442,6 +434,11 @@ pan_emit_zs_crc_ext(const struct pan_fb_info *fb, unsigned layer_idx,
       cfg.zs.clean_tile_write_enable =
          pan_clean_tile_write_zs_enabled(clean_tile);
 #endif
+
+      cfg.zs.msaa = fb->zs.view.zs ? mali_sampling_mode(fb->zs.view.zs)
+                                   : MALI_MSAA_SINGLE;
+      cfg.s.msaa = fb->zs.view.s ? mali_sampling_mode(fb->zs.view.s)
+                                 : MALI_MSAA_SINGLE;
    }
 
    if (fb->zs.view.zs) {
