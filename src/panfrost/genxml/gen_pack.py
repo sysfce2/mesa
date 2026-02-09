@@ -603,9 +603,29 @@ class Parser(object):
 
     def emit_aggregate(self):
         aggregate = self.aggregate
-        print("struct %s_packed {" % aggregate.name.lower())
-        print("   uint32_t opaque[{}];".format(aggregate.get_size() // 4))
-        print("};\n")
+        if aggregate.sections:
+            print("struct %s_packed {" % aggregate.name.lower())
+            print("   union {")
+            print("      uint32_t opaque[{}];".format(aggregate.get_size() // 4))
+            print("      struct {")
+            sec_start = 0;
+            for section in aggregate.sections:
+                while sec_start < section.offset:
+                    print("         uint32_t __pad{};".format(sec_start))
+                    sec_start += 4
+                assert sec_start == section.offset
+                print("         struct {}_packed {};".format(section.type_name.lower(), section.name.upper()))
+                sec_start += section.type.get_length()
+            print("      };")
+            print("   };")
+            print("};")
+            for section in aggregate.sections:
+                print('static_assert(offsetof(struct {}_packed, {}) == {}, "");'.format(aggregate.name.lower(), section.name.upper(), section.offset))
+            print("")
+        else:
+            print("struct %s_packed {" % aggregate.name.lower())
+            print("   uint32_t opaque[{}];".format(aggregate.get_size() // 4))
+            print("};\n")
         print('#define {}_PACKED_T struct {}_packed'.format(aggregate.name.upper(), aggregate.name.lower()))
         print('#define {}_LENGTH {}'.format(aggregate.name.upper(), aggregate.size))
         if aggregate.align != None:
