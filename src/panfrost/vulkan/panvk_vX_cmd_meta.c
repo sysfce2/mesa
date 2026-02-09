@@ -236,16 +236,21 @@ panvk_per_arch(CmdClearAttachments)(VkCommandBuffer commandBuffer,
    struct vk_meta_rendering_info render = {
       .view_mask = cmdbuf->state.gfx.render.view_mask,
       .samples = cmdbuf->state.gfx.render.fb.nr_samples,
-      .color_attachment_count = cmdbuf->state.gfx.render.fb.layout.rt_count,
       .depth_attachment_format = cmdbuf->state.gfx.render.z_attachment.fmt,
       .stencil_attachment_format = cmdbuf->state.gfx.render.s_attachment.fmt,
    };
-   for (uint32_t i = 0; i < render.color_attachment_count; i++) {
-       render.color_attachment_formats[i] =
-          cmdbuf->state.gfx.render.color_attachments.fmts[i];
-       render.color_attachment_write_masks[i] =
-          VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+   for (uint32_t i = 0; i < MAX_RTS; i++) {
+      if (!(cmdbuf->state.gfx.render.bound_attachments &
+            MESA_VK_RP_ATTACHMENT_COLOR_BIT(i)))
+         continue;
+
+      render.color_attachment_count =
+         MAX2(render.color_attachment_count, i + 1);
+      render.color_attachment_formats[i] =
+         cmdbuf->state.gfx.render.color_attachments.fmts[i];
+      render.color_attachment_write_masks[i] =
+         VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
    }
 
    meta_gfx_start(cmdbuf, &save);
