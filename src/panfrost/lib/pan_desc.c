@@ -649,7 +649,7 @@ get_rt_formats(enum pipe_format pfmt, uint32_t *writeback, uint32_t *internal,
 void
 GENX(pan_emit_afbc_color_attachment)(const struct pan_image_view *iview,
                                      unsigned layer_or_z_slice,
-                                     unsigned cbuf_offset, void *payload)
+                                     void *payload)
 {
    const struct pan_image_plane_ref pref = pan_image_view_get_color_plane(iview);
    const struct pan_image *image = pref.image;
@@ -711,7 +711,7 @@ GENX(pan_emit_afbc_color_attachment)(const struct pan_image_view *iview,
 void
 GENX(pan_emit_u_tiled_color_attachment)(const struct pan_image_view *iview,
                                         unsigned layer_or_z_slice,
-                                        unsigned cbuf_offset, void *payload)
+                                        void *payload)
 {
    uint64_t base, row_stride, surf_stride;
 
@@ -736,7 +736,7 @@ GENX(pan_emit_u_tiled_color_attachment)(const struct pan_image_view *iview,
 void
 GENX(pan_emit_linear_color_attachment)(const struct pan_image_view *iview,
                                        unsigned layer_or_z_slice,
-                                       unsigned cbuf_offset, void *payload)
+                                       void *payload)
 {
    uint64_t base, row_stride, surf_stride;
 
@@ -762,7 +762,7 @@ GENX(pan_emit_linear_color_attachment)(const struct pan_image_view *iview,
 void
 GENX(pan_emit_interleaved_64k_color_attachment)(const struct pan_image_view *iview,
                                                 unsigned layer_or_z_slice,
-                                                unsigned cbuf_offset, void *payload)
+                                                void *payload)
 {
    uint64_t base, row_stride, surf_stride;
 
@@ -787,7 +787,7 @@ GENX(pan_emit_interleaved_64k_color_attachment)(const struct pan_image_view *ivi
 void
 GENX(pan_emit_afrc_color_attachment)(const struct pan_image_view *iview,
                                      unsigned layer_or_z_slice,
-                                     unsigned cbuf_offset, void *payload)
+                                     void *payload)
 {
    const struct pan_image_plane_ref pref = pan_image_view_get_color_plane(iview);
    const struct pan_image *image = pref.image;
@@ -964,7 +964,7 @@ pan_emit_rt(const struct pan_fb_info *fb, unsigned layer_idx, unsigned idx,
    struct mali_render_target_packed desc;
    mod_handler->emit_color_attachment(fb->rts[idx].view,
                                       layer_idx + rt->first_layer,
-                                      cbuf_offset, &desc);
+                                      &desc);
 
    /* Avoid mixing loads and stores on write-combined memory. */
    pan_merge(&desc, &common, RGB_RENDER_TARGET);
