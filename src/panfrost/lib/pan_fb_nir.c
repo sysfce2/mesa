@@ -59,6 +59,27 @@ get_shader_op_for_load(enum pan_fb_load_op op)
    UNREACHABLE("Invalid load op");
 }
 
+static inline enum pan_fb_shader_op
+get_shader_op_for_resolve(enum pan_fb_resolve_op op)
+{
+   switch (op) {
+   case PAN_FB_RESOLVE_NONE:  return PAN_FB_SHADER_PRESERVE;
+   case PAN_FB_RESOLVE_IMAGE: return PAN_FB_SHADER_LOAD_IMAGE;
+   case PAN_FB_RESOLVE_RT_0:  return PAN_FB_SHADER_COPY_RT_0;
+   case PAN_FB_RESOLVE_RT_1:  return PAN_FB_SHADER_COPY_RT_1;
+   case PAN_FB_RESOLVE_RT_2:  return PAN_FB_SHADER_COPY_RT_2;
+   case PAN_FB_RESOLVE_RT_3:  return PAN_FB_SHADER_COPY_RT_3;
+   case PAN_FB_RESOLVE_RT_4:  return PAN_FB_SHADER_COPY_RT_4;
+   case PAN_FB_RESOLVE_RT_5:  return PAN_FB_SHADER_COPY_RT_5;
+   case PAN_FB_RESOLVE_RT_6:  return PAN_FB_SHADER_COPY_RT_6;
+   case PAN_FB_RESOLVE_RT_7:  return PAN_FB_SHADER_COPY_RT_7;
+   case PAN_FB_RESOLVE_Z:     return PAN_FB_SHADER_COPY_Z;
+   case PAN_FB_RESOLVE_S:     return PAN_FB_SHADER_COPY_S;
+   case PAN_FB_RESOLVE_OP_COUNT: UNREACHABLE("Invalid resolve op");
+   }
+   UNREACHABLE("Invalid resolve op");
+}
+
 static enum pan_fb_msaa_copy_op
 reduce_msaa_op(enum pan_fb_msaa_copy_op msaa, enum pan_fb_shader_op op,
                uint8_t fb_sample_count, uint8_t image_sample_count)
@@ -219,6 +240,54 @@ GENX(pan_fb_load_shader_key_fill)(struct pan_fb_shader_key *key,
       return needs_shader;
    }
 }
+
+#if PAN_ARCH >= 6
+static struct pan_fb_shader_key_target
+get_resolve_key_target(enum pipe_format format,
+                       uint8_t fb_sample_count,
+                       bool has_border,
+                       const struct pan_fb_resolve_target *load)
+{
+   const enum pan_fb_shader_op in_bounds_op =
+      get_shader_op_for_resolve(load->in_bounds.resolve);
+   const enum pan_fb_shader_op border_op =
+      get_shader_op_for_resolve(load->border.resolve);
+   return get_key_target(format, fb_sample_count, has_border,
+                         in_bounds_op, border_op,
+                         load->in_bounds.msaa, load->border.msaa,
+                         true, load->iview);
+}
+
+bool
+GENX(pan_fb_resolve_shader_key_fill)(struct pan_fb_shader_key *key,
+                                     const struct pan_fb_layout *fb,
+                                     const struct pan_fb_resolve *resolve)
+{
+   const bool has_border = pan_fb_has_partial_tiles(fb);
+
+   *key = (struct pan_fb_shader_key) {
+      .z = get_resolve_key_target(fb->z_format, fb->sample_count,
+                                  has_border, &resolve->z),
+      .s = get_resolve_key_target(fb->s_format, fb->sample_count,
+                                  has_border, &resolve->s),
+      .z_format = fb->z_format,
+      .fb_sample_count = fb->sample_count,
+   };
+   bool needs_shader = pan_fb_shader_key_target_written(&key->z) ||
+                       pan_fb_shader_key_target_written(&key->s);
+
+   for (unsigned rt = 0; rt < fb->rt_count; rt++) {
+      key->rts[rt] = get_resolve_key_target(fb->rt_formats[rt],
+                                            fb->sample_count,
+                                            has_border,
+                                            &resolve->rts[rt]);
+      if (pan_fb_shader_key_target_written(&key->rts[rt]))
+         needs_shader = true;
+   }
+
+   return needs_shader;
+}
+#endif
 
 static nir_def *
 combine_samples_no_div(nir_builder *b, nir_def **samples, uint8_t sample_count,

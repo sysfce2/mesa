@@ -309,6 +309,82 @@ pan_fb_has_image_load(const struct pan_fb_load *load, bool include_border)
    return false;
 }
 
+/** Describes a resolve operation
+ *
+ * This describes the source data for the resolve operation.  The way in which
+ * MSAA is handled in the source data is defined by the pan_fb_msaa_copy_op.
+ */
+enum ENUM_PACKED pan_fb_resolve_op {
+   /** Do nothing
+    *
+    * In this mode, the framebuffer is left unaffected by the resolve.  If
+    * necessary (sometimes required for Z/S), the old value will be read and
+    * written back to ensure the final value is the same.
+    */
+   PAN_FB_RESOLVE_NONE = 0,
+
+   /** Load from the specified image view */
+   PAN_FB_RESOLVE_IMAGE,
+
+   /** Load from color render target 0 */
+   PAN_FB_RESOLVE_RT_0,
+   PAN_FB_RESOLVE_RT_1,
+   PAN_FB_RESOLVE_RT_2,
+   PAN_FB_RESOLVE_RT_3,
+   PAN_FB_RESOLVE_RT_4,
+   PAN_FB_RESOLVE_RT_5,
+   PAN_FB_RESOLVE_RT_6,
+   PAN_FB_RESOLVE_RT_7,
+
+   /** Load from the depth target
+    *
+    * From the perspective of resolve ops, Z/S are always separate
+    */
+   PAN_FB_RESOLVE_Z,
+
+   /** Load from the stencil target
+    *
+    * From the perspective of resolve ops, Z/S are always separate
+    */
+   PAN_FB_RESOLVE_S,
+   PAN_FB_RESOLVE_OP_COUNT,
+};
+
+static_assert(PAN_FB_RESOLVE_Z == PAN_FB_RESOLVE_RT_0 + PAN_MAX_RTS,
+              "There are PAN_MAX_RTS many RTs");
+
+#define PAN_FB_RESOLVE_RT(rt) \
+   (assert(0 <= (rt) && (rt) < PAN_MAX_RTS), (PAN_FB_RESOLVE_RT_0 + (rt)))
+
+/** Describes a resovle operation on a given target
+ *
+ * For each side of the render area (in-bounds or border), this defines both
+ * a source to copy from (the resolve op) and a MSAA copy op to apply as part
+ * of the copy.  In the common case, a resolve op will read from itself but
+ * that is not strictly a requirement.  Any resolve op can read from any
+ * render target.
+ */
+struct pan_fb_resolve_target {
+   struct pan_fb_resolve_op_msaa {
+      enum pan_fb_resolve_op resolve;
+      enum pan_fb_msaa_copy_op msaa;
+   } in_bounds, border;
+
+   /** For PAN_FB_RESOLVE_IMAGE the image view to load from */
+   const struct pan_image_view *iview;
+};
+
+/** Describes a resolve operation
+ *
+ * A resolve operation is implemented as a post-frame shader (see
+ * pan_fb_resolve_shader_key_fill) and does a copy from render targets to
+ * render targets, applying MSAA copy ops along the way.
+ */
+struct pan_fb_resolve {
+   struct pan_fb_resolve_target rts[PAN_MAX_RTS];
+   struct pan_fb_resolve_target z, s;
+};
+
 struct pan_fb_store_target {
    /** Whether or not to do a store */
    bool store;
@@ -369,6 +445,10 @@ struct pan_fb_store {
 #ifdef PAN_ARCH
 void GENX(pan_align_fb_tiling_area)(struct pan_fb_layout *fb,
                                     const struct pan_fb_store *store);
+
+void GENX(pan_fb_fold_resolve_into_store)(const struct pan_fb_layout *fb,
+                                          struct pan_fb_resolve *resolve,
+                                          struct pan_fb_store *store);
 #endif
 
 struct pan_fb_frame_shaders {
@@ -528,6 +608,12 @@ bool GENX(pan_fb_load_shader_key_fill)(struct pan_fb_shader_key *key,
                                        const struct pan_fb_layout *fb,
                                        const struct pan_fb_load *load,
                                        bool zs_prepass);
+
+#if PAN_ARCH >= 6
+bool GENX(pan_fb_resolve_shader_key_fill)(struct pan_fb_shader_key *key,
+                                          const struct pan_fb_layout *fb,
+                                          const struct pan_fb_resolve *resolve);
+#endif
 
 struct nir_shader *
 GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
