@@ -59,11 +59,16 @@ get_shader_op_for_load(enum pan_fb_load_op op)
 }
 
 static enum pan_fb_msaa_copy_op
-reduce_msaa_op(enum pan_fb_msaa_copy_op msaa,
-               uint8_t dst_sample_count, uint8_t src_sample_count)
+reduce_msaa_op(enum pan_fb_msaa_copy_op msaa, enum pan_fb_shader_op op,
+               uint8_t fb_sample_count, uint8_t image_sample_count)
 {
+   if (pan_fb_shader_op_can_discard(op))
+      return PAN_FB_MSAA_COPY_ALL;
+
+   const uint8_t src_sample_count = op == PAN_FB_SHADER_LOAD_IMAGE
+                                    ? image_sample_count : fb_sample_count;
    if (msaa == PAN_FB_MSAA_COPY_ALL)
-      assert(src_sample_count == dst_sample_count);
+      assert(src_sample_count == fb_sample_count);
 
    if (src_sample_count <= 1)
       return PAN_FB_MSAA_COPY_SINGLE;
@@ -72,7 +77,8 @@ reduce_msaa_op(enum pan_fb_msaa_copy_op msaa,
 }
 
 static bool
-msaa_op_needs_sample_count(enum pan_fb_msaa_copy_op msaa)
+op_needs_sample_count(enum pan_fb_shader_op op,
+                      enum pan_fb_msaa_copy_op msaa)
 {
    return msaa == PAN_FB_MSAA_COPY_AVERAGE ||
           msaa == PAN_FB_MSAA_COPY_MIN ||
@@ -95,7 +101,8 @@ get_key_target(enum pipe_format format,
                bool has_border,
                enum pan_fb_shader_op in_bounds_op,
                enum pan_fb_shader_op border_op,
-               enum pan_fb_msaa_copy_op msaa,
+               enum pan_fb_msaa_copy_op in_bounds_msaa,
+               enum pan_fb_msaa_copy_op border_msaa,
                const struct pan_image_view *iview)
 {
    if (format == PIPE_FORMAT_NONE)
@@ -104,8 +111,10 @@ get_key_target(enum pipe_format format,
    /* If we have a full framebuffer, there is no border.  Set the boarder load
     * equal to the in-bounds load so things in the shader fold nicely.
     */
-   if (!has_border)
+   if (!has_border) {
       border_op = in_bounds_op;
+      border_msaa = in_bounds_msaa;
+   }
 
    if (in_bounds_op == PAN_FB_SHADER_DONT_CARE &&
        border_op == PAN_FB_SHADER_DONT_CARE)
@@ -136,21 +145,27 @@ get_key_target(enum pipe_format format,
       dim = iview->dim;
       is_array = iview->first_layer != iview->last_layer;
       image_sample_count = pan_image_view_get_nr_samples(iview);
-
-      msaa = reduce_msaa_op(msaa, fb_sample_count, image_sample_count);
-   } else {
-      msaa = PAN_FB_MSAA_COPY_ALL;
    }
+
+   in_bounds_msaa = reduce_msaa_op(in_bounds_msaa, in_bounds_op,
+                                   fb_sample_count, image_sample_count);
+   border_msaa = reduce_msaa_op(border_msaa, border_op,
+                                fb_sample_count, image_sample_count);
+
+   const bool needs_sample_count =
+      op_needs_sample_count(in_bounds_op, in_bounds_msaa) ||
+      op_needs_sample_count(border_op, border_msaa);
 
    assert(((unsigned)dim) < (1 << 2));
 
    return (struct pan_fb_shader_key_target) {
       .in_bounds_op = in_bounds_op,
       .border_op = border_op,
-      .image_msaa = msaa,
+      .in_bounds_msaa = in_bounds_msaa,
+      .border_msaa = border_msaa,
       .image_dim = dim,
       .image_is_array = is_array,
-      .image_samples_log2 = msaa_op_needs_sample_count(msaa)
+      .image_samples_log2 = needs_sample_count
                             ? util_logbase2(image_sample_count) : 0,
       .data_type = data_type_for_format(format),
    };
@@ -165,7 +180,7 @@ get_load_key_target(enum pipe_format format,
    return get_key_target(format, fb_sample_count, has_border,
                          get_shader_op_for_load(load->in_bounds_load),
                          get_shader_op_for_load(load->border_load),
-                         load->msaa, load->iview);
+                         load->msaa, load->msaa, load->iview);
 }
 
 bool
@@ -366,7 +381,7 @@ build_image_load(nir_builder *b, const nir_alu_type nir_type,
 
 static nir_def *
 build_load(nir_builder *b, nir_def *pos,
-           enum pan_fb_shader_op op,
+           enum pan_fb_shader_op op, enum pan_fb_msaa_copy_op msaa,
            gl_frag_result location,
            const struct pan_fb_shader_key_target *target)
 {
@@ -384,8 +399,7 @@ build_load(nir_builder *b, nir_def *pos,
                                       .dest_type = nir_type);
 
    case PAN_FB_SHADER_LOAD_IMAGE:
-      return build_image_load(b, nir_type, pos, location,
-                              target->image_msaa,
+      return build_image_load(b, nir_type, pos, location, msaa,
                               1 << target->image_samples_log2,
                               target->image_dim, target->image_is_array);
 
@@ -400,19 +414,21 @@ build_op(nir_builder *b, nir_def *pos, nir_def *in_bounds,
          const struct pan_fb_shader_key_target *target)
 {
    nir_def *val;
-   if (target->in_bounds_op == target->border_op) {
-      val = build_load(b, pos, target->in_bounds_op, location, target);
+   if (target->in_bounds_op == target->border_op &&
+       target->in_bounds_msaa == target->border_msaa) {
+      val = build_load(b, pos, target->in_bounds_op, target->in_bounds_msaa,
+                       location, target);
    } else {
       nir_def *in_bounds_val, *border_val;
       nir_if *nif = nir_push_if(b, in_bounds);
       {
          in_bounds_val = build_load(b, pos, target->in_bounds_op,
-                                    location, target);
+                                    target->in_bounds_msaa, location, target);
       }
       nir_push_else(b, nif);
       {
          border_val = build_load(b, pos, target->border_op,
-                                 location, target);
+                                 target->border_msaa, location, target);
       }
       nir_pop_if(b, nif);
       val = nir_if_phi(b, in_bounds_val, border_val);
@@ -513,9 +529,10 @@ GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
          nir_def *u4 = nir_undef(b, 4, 32);
 
          nir_def *color;
-         if (target->in_bounds_op == target->border_op) {
+         if (target->in_bounds_op == target->border_op &&
+             target->in_bounds_msaa == target->border_msaa) {
             color = build_load(b, pos, target->in_bounds_op,
-                               location, target);
+                               target->in_bounds_msaa, location, target);
          } else {
             nir_def *ib_color, *bd_color, *ib_cov, *bd_cov;
             nir_if *nif = nir_push_if(b, in_bounds);
@@ -525,6 +542,7 @@ GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
                   ib_cov = z1;
                } else {
                   ib_color = build_load(b, pos, target->in_bounds_op,
+                                        target->in_bounds_msaa,
                                         location, target);
                   ib_cov = coverage;
                }
@@ -536,6 +554,7 @@ GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
                   bd_cov = z1;
                } else {
                   bd_color = build_load(b, pos, target->border_op,
+                                        target->border_msaa,
                                         location, target);
                   bd_cov = coverage;
                }
