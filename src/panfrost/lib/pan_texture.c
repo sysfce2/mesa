@@ -161,28 +161,6 @@ GENX(pan_texture_estimate_payload_size)(const struct pan_image_view *iview)
    return element_size * elements;
 }
 
-#if PAN_ARCH < 9
-static void
-pan_emit_bview_surface_with_stride(const struct pan_buffer_view *bview,
-                                   void *payload)
-{
-   uint64_t base = bview->base;
-
-#if PAN_ARCH >= 5
-   const struct util_format_description *desc =
-      util_format_description(bview->format);
-   if (desc->layout == UTIL_FORMAT_LAYOUT_ASTC)
-      base |= astc_compression_tag(desc);
-#endif
-
-   pan_cast_and_pack(payload, SURFACE_WITH_STRIDE, cfg) {
-      cfg.pointer = base;
-      cfg.row_stride = 0;
-      cfg.surface_stride = 0;
-   }
-}
-#endif
-
 #if PAN_ARCH >= 9
 
 /* clang-format off */
@@ -1386,7 +1364,11 @@ GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
       PIPE_SWIZZLE_W,
    };
 
-   pan_emit_bview_surface_with_stride(bview, payload->cpu);
+   pan_cast_and_pack(payload->cpu, SURFACE_WITH_STRIDE, cfg) {
+      cfg.pointer = bview->base;
+      cfg.row_stride = 0;
+      cfg.surface_stride = 0;
+   }
 
    pan_pack(out, TEXTURE, cfg) {
       cfg.dimension = MALI_TEXTURE_DIMENSION_1D;
