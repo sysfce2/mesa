@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "pan_blend.h"
 #include "pan_desc.h"
 #include "pan_fb.h"
 
@@ -379,17 +380,119 @@ build_image_load(nir_builder *b, const nir_alu_type nir_type,
    return val;
 }
 
+#if PAN_ARCH >= 6
+static uint32_t
+get_fb_conversion(nir_alu_type nir_type, enum pipe_format format)
+{
+#if PAN_ARCH >= 9
+   return 0;
+#else
+   struct mali_internal_conversion_packed conv;
+   pan_pack(&conv, INTERNAL_CONVERSION, cfg) {
+      cfg.register_format = pan_blend_type_from_nir(nir_type);
+      cfg.memory_format = GENX(pan_dithered_format_from_pipe_format)(
+         format, false);
+   }
+   return conv.opaque[0];
+#endif
+}
+
+static nir_def *
+build_single_fb_load(nir_builder *b, const nir_alu_type nir_type,
+                     gl_frag_result location, nir_def *sample,
+                     enum pipe_format z_format)
+{
+   const bool is_zs = location == FRAG_RESULT_DEPTH ||
+                      location == FRAG_RESULT_STENCIL;
+   unsigned num_components = is_zs ? 1 : 4;
+
+   nir_def *conversion;
+   if (location == FRAG_RESULT_DEPTH) {
+      conversion = nir_imm_int(b, get_fb_conversion(nir_type, z_format));
+   } else if (location == FRAG_RESULT_STENCIL) {
+      conversion = nir_imm_int(b,
+         get_fb_conversion(nir_type, PIPE_FORMAT_S8_UINT));
+   } else {
+      assert(location >= FRAG_RESULT_DATA0);
+      uint8_t rt = location - FRAG_RESULT_DATA0;
+      assert(rt < PAN_MAX_RTS);
+
+      conversion = nir_unpack_64_2x32_split_y(b,
+         nir_load_blend_descriptor_pan(b, .base = rt));
+   }
+
+   nir_def *val = nir_load_tile_pan(b,
+      num_components, 32,
+      pan_nir_tile_location_sample(b, location, sample),
+      pan_nir_tile_default_coverage(b),
+      conversion,
+      .dest_type = nir_type,
+      .io_semantics.location = location,
+      .io_semantics.num_slots = 1);
+
+   /* If we loaded the stencil value, the upper 24 bits might contain garbage,
+    * so we need to mask that off before we do any math on the result.
+    */
+   if (location == FRAG_RESULT_STENCIL)
+      val = nir_iand_imm(b, val, 0xff);
+
+   return val;
+}
+
+static nir_def *
+build_fb_load(nir_builder *b, const nir_alu_type nir_type,
+              gl_frag_result location, enum pipe_format z_format,
+              enum pan_fb_msaa_copy_op msaa, uint8_t fb_sample_count)
+{
+   switch (msaa) {
+   case PAN_FB_MSAA_COPY_SINGLE:
+   case PAN_FB_MSAA_COPY_ALL:
+   case PAN_FB_MSAA_COPY_IDENTICAL:
+   case PAN_FB_MSAA_COPY_SAMPLE_0: {
+      nir_def *sample_id = msaa == PAN_FB_MSAA_COPY_ALL
+                           ? build_sample_id(b) : nir_imm_int(b, 0);
+
+      return build_single_fb_load(b, nir_type, location, sample_id, z_format);
+   }
+
+   case PAN_FB_MSAA_COPY_AVERAGE:
+   case PAN_FB_MSAA_COPY_MIN:
+   case PAN_FB_MSAA_COPY_MAX: {
+      nir_def *samples[16];
+      assert(fb_sample_count > 0 && fb_sample_count <= ARRAY_SIZE(samples));
+      for (uint32_t s = 0; s < fb_sample_count; s++) {
+         samples[s] = build_single_fb_load(b, nir_type, location,
+                                           nir_imm_int(b, s), z_format);
+      }
+      return combine_samples(b, samples, fb_sample_count, nir_type, msaa);
+   }
+
+   case PAN_FB_MSAA_COPY_OP_COUNT:
+      UNREACHABLE("Invalid copy op");
+   }
+
+   UNREACHABLE("Invalid copy op");
+}
+#endif
+
 static nir_def *
 build_load(nir_builder *b, nir_def *pos,
            enum pan_fb_shader_op op, enum pan_fb_msaa_copy_op msaa,
            gl_frag_result location,
-           const struct pan_fb_shader_key_target *target)
+           const struct pan_fb_shader_key_target *target,
+           const struct pan_fb_shader_key *key)
 {
    const nir_alu_type nir_type = nir_alu_type_for_data_type(target->data_type);
    const bool is_zs = location == FRAG_RESULT_DEPTH ||
                       location == FRAG_RESULT_STENCIL;
 
    switch (op) {
+#if PAN_ARCH >= 6
+   case PAN_FB_SHADER_PRESERVE:
+      return build_fb_load(b, nir_type, location, key->z_format,
+                           PAN_FB_MSAA_COPY_ALL, key->fb_sample_count);
+#endif
+
    case PAN_FB_SHADER_DONT_CARE:
       return nir_imm_zero(b, is_zs ? 1 : 4, 32);
 
@@ -403,32 +506,52 @@ build_load(nir_builder *b, nir_def *pos,
                               1 << target->image_samples_log2,
                               target->image_dim, target->image_is_array);
 
+#if PAN_ARCH >= 6
+   default: { /* PAN_FB_SHADER_COPY_RT_N */
+      uint8_t rt = op - PAN_FB_SHADER_COPY_RT_0;
+      assert(rt < PAN_MAX_RTS);
+      return build_fb_load(b, nir_type, FRAG_RESULT_DATA0 + rt,
+                           PIPE_FORMAT_NONE, msaa, key->fb_sample_count);
+   }
+
+   case PAN_FB_SHADER_COPY_Z:
+      return build_fb_load(b, nir_type, FRAG_RESULT_DEPTH,
+                           key->z_format, msaa, key->fb_sample_count);
+
+   case PAN_FB_SHADER_COPY_S:
+      return build_fb_load(b, nir_type, FRAG_RESULT_STENCIL,
+                           PIPE_FORMAT_S8_UINT, msaa, key->fb_sample_count);
+#else
    default:
-      UNREACHABLE("Unsupported load op");
+      UNREACHABLE("Unsupported shader op");
+#endif
    }
 }
 
 static void
 build_op(nir_builder *b, nir_def *pos, nir_def *in_bounds,
          gl_frag_result location,
-         const struct pan_fb_shader_key_target *target)
+         const struct pan_fb_shader_key_target *target,
+         const struct pan_fb_shader_key *key)
 {
    nir_def *val;
    if (target->in_bounds_op == target->border_op &&
        target->in_bounds_msaa == target->border_msaa) {
       val = build_load(b, pos, target->in_bounds_op, target->in_bounds_msaa,
-                       location, target);
+                       location, target, key);
    } else {
       nir_def *in_bounds_val, *border_val;
       nir_if *nif = nir_push_if(b, in_bounds);
       {
          in_bounds_val = build_load(b, pos, target->in_bounds_op,
-                                    target->in_bounds_msaa, location, target);
+                                    target->in_bounds_msaa,
+                                    location, target, key);
       }
       nir_push_else(b, nif);
       {
          border_val = build_load(b, pos, target->border_op,
-                                 target->border_msaa, location, target);
+                                 target->border_msaa,
+                                 location, target, key);
       }
       nir_pop_if(b, nif);
       val = nir_if_phi(b, in_bounds_val, border_val);
@@ -532,7 +655,8 @@ GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
          if (target->in_bounds_op == target->border_op &&
              target->in_bounds_msaa == target->border_msaa) {
             color = build_load(b, pos, target->in_bounds_op,
-                               target->in_bounds_msaa, location, target);
+                               target->in_bounds_msaa,
+                               location, target, key);
          } else {
             nir_def *ib_color, *bd_color, *ib_cov, *bd_cov;
             nir_if *nif = nir_push_if(b, in_bounds);
@@ -543,7 +667,7 @@ GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
                } else {
                   ib_color = build_load(b, pos, target->in_bounds_op,
                                         target->in_bounds_msaa,
-                                        location, target);
+                                        location, target, key);
                   ib_cov = coverage;
                }
             }
@@ -555,7 +679,7 @@ GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
                } else {
                   bd_color = build_load(b, pos, target->border_op,
                                         target->border_msaa,
-                                        location, target);
+                                        location, target, key);
                   bd_cov = coverage;
                }
             }
@@ -583,13 +707,15 @@ GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
       }
 
       if (pan_fb_shader_key_target_written(&key->z))
-         build_op(b, pos, in_bounds, FRAG_RESULT_DEPTH, &key->z);
+         build_op(b, pos, in_bounds, FRAG_RESULT_DEPTH, &key->z, key);
       if (pan_fb_shader_key_target_written(&key->s))
-         build_op(b, pos, in_bounds, FRAG_RESULT_STENCIL, &key->s);
+         build_op(b, pos, in_bounds, FRAG_RESULT_STENCIL, &key->s, key);
 
       for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
-         if (pan_fb_shader_key_target_written(&key->rts[rt]))
-            build_op(b, pos, in_bounds, FRAG_RESULT_DATA0 + rt, &key->rts[rt]);
+         if (pan_fb_shader_key_target_written(&key->rts[rt])) {
+            build_op(b, pos, in_bounds, FRAG_RESULT_DATA0 + rt,
+                     &key->rts[rt], key);
+         }
       }
    }
 

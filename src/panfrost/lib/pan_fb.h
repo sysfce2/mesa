@@ -433,8 +433,25 @@ enum ENUM_PACKED pan_fb_shader_op {
    /** Loads from the image bound at the corresponding gl_frag_result */
    PAN_FB_SHADER_LOAD_IMAGE,
 
+   PAN_FB_SHADER_COPY_RT_0,
+   PAN_FB_SHADER_COPY_RT_1,
+   PAN_FB_SHADER_COPY_RT_2,
+   PAN_FB_SHADER_COPY_RT_3,
+   PAN_FB_SHADER_COPY_RT_4,
+   PAN_FB_SHADER_COPY_RT_5,
+   PAN_FB_SHADER_COPY_RT_6,
+   PAN_FB_SHADER_COPY_RT_7,
+   PAN_FB_SHADER_COPY_Z,
+   PAN_FB_SHADER_COPY_S,
+
    PAN_FB_SHADER_OP_COUNT,
 };
+
+static_assert(PAN_FB_SHADER_COPY_Z == PAN_FB_SHADER_COPY_RT_0 + PAN_MAX_RTS,
+              "We should have one PAN_FB_SHADER_COPY_RT_N per RT");
+
+#define PAN_FB_SHADER_COPY_RT(rt) \
+   (assert(0 <= (rt) && (rt) < PAN_MAX_RTS), (PAN_FB_SHADER_COPY_RT_0 + (rt)))
 
 static inline bool
 pan_fb_shader_op_can_discard(enum pan_fb_shader_op op)
@@ -497,9 +514,12 @@ PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
 struct pan_fb_shader_key {
    struct pan_fb_shader_key_target rts[PAN_MAX_RTS];
    struct pan_fb_shader_key_target z, s;
+   uint16_t z_format;
+   uint8_t fb_sample_count;
+   uint8_t _pad;
 };
 PRAGMA_DIAGNOSTIC_POP
-static_assert(sizeof(struct pan_fb_shader_key) == 4 * (PAN_MAX_RTS + 2),
+static_assert(sizeof(struct pan_fb_shader_key) == 4 * (PAN_MAX_RTS + 3),
               "This struct has no holes");
 
 #ifdef PAN_ARCH
