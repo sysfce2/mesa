@@ -382,20 +382,6 @@ fill_bds(const struct pan_fb_layout *fb,
    }
 }
 
-static bool
-always_load(const struct pan_fb_load *load,
-            const struct panvk_frame_shader_key *key)
-{
-   for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
-      if (pan_fb_shader_key_target_written(&key->key.rts[rt]) &&
-          load->rts[rt].always)
-         return true;
-   }
-
-   return (pan_fb_shader_key_target_written(&key->key.z) && load->z.always) ||
-          (pan_fb_shader_key_target_written(&key->key.s) && load->s.always);
-}
-
 #if PAN_ARCH < 9
 static VkResult
 cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
@@ -403,6 +389,7 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
              const struct pan_fb_load *load,
              const struct panvk_frame_shader_key *key,
              struct pan_fb_frame_shaders *fs,
+             unsigned dcd_idx,
              struct mali_draw_packed **dcds)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
@@ -541,8 +528,6 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
 #endif
    }
 
-   uint32_t dcd_idx = preload_color ? 0 : 1;
-
    uint32_t layer_count = cmdbuf->state.gfx.render.layer_count;
    struct pan_ptr faus = panvk_cmd_alloc_dev_mem(
       cmdbuf, desc, layer_count * sizeof(struct panvk_fb_sysvals), 16);
@@ -565,37 +550,6 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
       (*dcds)[(l * 3) + dcd_idx] = dcd_layer;
    }
 
-   if (key->type == PANVK_META_OBJECT_KEY_FB_COLOR_PRELOAD_SHADER) {
-      fs->modes[dcd_idx] = always_load(load, key)
-                           ? MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS
-                           : MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
-   } else {
-      assert(key->type == PANVK_META_OBJECT_KEY_FB_ZS_PRELOAD_SHADER);
-
-      /* We could use INTERSECT on Bifrost v7 too, but
-       * EARLY_ZS_ALWAYS has the advantage of reloading the ZS tile
-       * buffer one or more tiles ahead, making ZS data immediately
-       * available for any ZS tests taking place in other shaders.
-       * Thing's haven't been benchmarked to determine what's
-       * preferable (saving bandwidth vs having ZS preloaded
-       * earlier), so let's leave it like that for now.
-       * HOWEVER, EARLY_ZS_ALWAYS doesn't exist on 7.0, only on
-       * 7.2 and later, so check for that!
-       */
-      struct panvk_physical_device *pdev =
-         to_panvk_physical_device(dev->vk.physical);
-      unsigned gpu_prod_id = pdev->kmod.dev->props.gpu_id >> 16;
-
-      /* the PAN_ARCH check is redundant but allows compiler optimization
-         when PAN_ARCH <= 6 */
-      if (PAN_ARCH > 6 && gpu_prod_id >= 0x7200)
-         fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS;
-      else if (always_load(load, key))
-         fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS;
-      else
-         fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
-   }
-
    return VK_SUCCESS;
 }
 #else
@@ -605,6 +559,7 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
              const struct pan_fb_load *load,
              struct panvk_frame_shader_key *key,
              struct pan_fb_frame_shaders *fs,
+             unsigned dcd_idx,
              struct mali_draw_packed **dcds)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
@@ -711,8 +666,6 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
    };
    memcpy(faus.cpu, &sysvals, sizeof(sysvals));
 
-   uint32_t dcd_idx = preload_color ? 0 : 1;
-
    pan_pack(&(*dcds)[dcd_idx], DRAW, cfg) {
       if (preload_color) {
          /* Skipping ATEST requires forcing Z/S */
@@ -760,34 +713,23 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
 #endif
    }
 
-   if (key->type == PANVK_META_OBJECT_KEY_FB_COLOR_PRELOAD_SHADER) {
-      fs->modes[dcd_idx] = always_load(load, key)
-                           ? MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS
-                           : MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
-   } else {
-      assert(key->type == PANVK_META_OBJECT_KEY_FB_ZS_PRELOAD_SHADER);
-
-      /* We could use INTERSECT on Valhall too, but
-       * EARLY_ZS_ALWAYS has the advantage of reloading the ZS tile
-       * buffer one or more tiles ahead, making ZS data immediately
-       * available for any ZS tests taking place in other shaders.
-       * Thing's haven't been benchmarked to determine what's
-       * preferable (saving bandwidth vs having ZS preloaded
-       * earlier), so let's leave it like that for now.
-       *
-       * On v13+, we don't have EARLY_ZS_ALWAYS instead we use
-       * PREPASS_ALWAYS.
-       */
-#if PAN_ARCH >= 13
-      fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_PREPASS_ALWAYS;
-#else
-      fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS;
-#endif
-   }
-
    return VK_SUCCESS;
 }
 #endif
+
+static bool
+always_load(const struct pan_fb_load *load,
+            const struct panvk_frame_shader_key *key)
+{
+   for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
+      if (pan_fb_shader_key_target_written(&key->key.rts[rt]) &&
+          load->rts[rt].always)
+         return true;
+   }
+
+   return (pan_fb_shader_key_target_written(&key->key.z) && load->z.always) ||
+          (pan_fb_shader_key_target_written(&key->key.s) && load->s.always);
+}
 
 static VkResult
 cmd_preload_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
@@ -802,7 +744,47 @@ cmd_preload_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
    if (!GENX(pan_fb_load_shader_key_fill)(&key.key, fb, load, true))
       return VK_SUCCESS;
 
-   return cmd_emit_dcd(cmdbuf, fb, load, &key, fs, dcds);
+   const uint32_t dcd_idx = 1;
+   VkResult result = cmd_emit_dcd(cmdbuf, fb, load, &key, fs, dcd_idx, dcds);
+   if (result != VK_SUCCESS)
+      return result;
+
+   /* We could use INTERSECT on Valhall too, but EARLY_ZS_ALWAYS has the
+    * advantage of reloading the ZS tile buffer one or more tiles ahead,
+    * making ZS data immediately available for any ZS tests taking place in
+    * other shaders.  Thing's haven't been benchmarked to determine what's
+    * preferable (saving bandwidth vs having ZS preloaded earlier), so let's
+    * leave it like that for now.
+    *
+    * On v13+, we don't have EARLY_ZS_ALWAYS instead we use PREPASS_ALWAYS.
+    */
+#if PAN_ARCH >= 13
+   fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_PREPASS_ALWAYS;
+#elif PAN_ARCH >= 9
+   fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS;
+#else
+   /* We could use INTERSECT on Bifrost v7 too, but EARLY_ZS_ALWAYS has the
+    * advantage of reloading the ZS tile buffer one or more tiles ahead,
+    * making ZS data immediately available for any ZS tests taking place in
+    * other shaders.  Thing's haven't been benchmarked to determine what's
+    * preferable (saving bandwidth vs having ZS preloaded earlier), so let's
+    * leave it like that for now.  HOWEVER, EARLY_ZS_ALWAYS doesn't exist on
+    * 7.0, only on 7.2 and later, so check for that!
+    */
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   struct panvk_physical_device *pdev =
+      to_panvk_physical_device(dev->vk.physical);
+   unsigned gpu_prod_id = pdev->kmod.dev->props.gpu_id >> 16;
+
+   if (gpu_prod_id >= 0x7200)
+      fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS;
+   else if (always_load(load, &key))
+      fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS;
+   else
+      fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
+#endif
+
+   return VK_SUCCESS;
 }
 
 static VkResult
@@ -818,7 +800,16 @@ cmd_preload_color_attachments(struct panvk_cmd_buffer *cmdbuf,
    if (!GENX(pan_fb_load_shader_key_fill)(&key.key, fb, load, false))
       return VK_SUCCESS;
 
-   return cmd_emit_dcd(cmdbuf, fb, load, &key, fs, dcds);
+   const uint32_t dcd_idx = 0;
+   VkResult result = cmd_emit_dcd(cmdbuf, fb, load, &key, fs, dcd_idx, dcds);
+   if (result != VK_SUCCESS)
+      return result;
+
+   fs->modes[dcd_idx] = always_load(load, &key)
+                        ? MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS
+                        : MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
+
+   return VK_SUCCESS;
 }
 
 VkResult
