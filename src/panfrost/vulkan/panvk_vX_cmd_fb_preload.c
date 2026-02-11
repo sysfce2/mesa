@@ -19,7 +19,7 @@ PRAGMA_DIAGNOSTIC_PUSH
 PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
 struct panvk_fb_preload_shader_key {
    enum panvk_meta_object_key_type type;
-   struct pan_fb_load_shader_key key;
+   struct pan_fb_shader_key key;
 };
 PRAGMA_DIAGNOSTIC_POP
 
@@ -33,36 +33,32 @@ struct panvk_fb_preload_sysvals {
 static_assert(sizeof(struct panvk_fb_preload_sysvals) % FAU_WORD_SIZE == 0,
               "panvk_fb_preload_sysvals is FAU_WORD-aligned.");
 
-static bool
-key_target_has_load(struct pan_fb_shader_load_key_target target)
-{
-   return target.in_bounds_load != PAN_FB_LOAD_NONE ||
-          target.border_load != PAN_FB_LOAD_NONE;
-}
-
 static uint32_t
-key_locations_loaded(const struct panvk_fb_preload_shader_key *key)
+key_locations_written(const struct panvk_fb_preload_shader_key *key)
 {
    uint32_t locations = 0;
    for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
-      if (key_target_has_load(key->key.rts[rt]))
+      if (pan_fb_shader_key_target_written(&key->key.rts[rt]))
          locations |= BITFIELD_BIT(FRAG_RESULT_DATA0 + rt);
    }
 
-   if (key_target_has_load(key->key.z))
+   if (pan_fb_shader_key_target_written(&key->key.z))
       locations |= BITFIELD_BIT(FRAG_RESULT_DEPTH);
 
-   if (key_target_has_load(key->key.s))
+   if (pan_fb_shader_key_target_written(&key->key.s))
       locations |= BITFIELD_BIT(FRAG_RESULT_STENCIL);
 
    return locations;
 }
 
 static uint32_t
-tex_index_for_loc(gl_frag_result loc, uint32_t locations_loaded)
+tex_index_for_loc(gl_frag_result loc, uint32_t locations_written)
 {
-   assert(locations_loaded & BITFIELD_BIT(loc));
-   return util_bitcount(locations_loaded & BITFIELD_MASK(loc));
+   /* We could compact further than locations_written but this is probably
+    * good enough.
+    */
+   assert(locations_written & BITFIELD_BIT(loc));
+   return util_bitcount(locations_written & BITFIELD_MASK(loc));
 }
 
 static bool
@@ -70,7 +66,7 @@ compact_tex_indices(nir_builder *b, nir_tex_instr *tex,
                     const struct panvk_fb_preload_shader_key *key)
 {
    const uint32_t tex_idx =
-      tex_index_for_loc(tex->texture_index, key_locations_loaded(key));
+      tex_index_for_loc(tex->texture_index, key_locations_written(key));
 
 #if PAN_ARCH < 9
    tex->sampler_index = 0;
@@ -171,7 +167,7 @@ get_preload_shader(struct panvk_device *dev,
 
    const struct nir_shader_compiler_options *nir_options =
       pan_get_nir_shader_compiler_options(PAN_ARCH);
-   nir_shader *nir = GENX(pan_get_fb_load_shader)(&key->key, nir_options);
+   nir_shader *nir = GENX(pan_get_fb_shader)(&key->key, nir_options);
 
    NIR_PASS(_, nir, nir_shader_instructions_pass, lower_instr,
             nir_metadata_control_flow, (void *)key);
@@ -245,14 +241,14 @@ alloc_pre_post_dcds(struct panvk_cmd_buffer *cmdbuf,
 }
 
 static enum mali_register_file_format
-get_reg_fmt(enum glsl_base_type type)
+get_reg_fmt(enum pan_fb_shader_data_type data_type)
 {
-   switch (type) {
-   case GLSL_TYPE_FLOAT:
+   switch (data_type) {
+   case PAN_FB_SHADER_DATA_TYPE_F32:
       return MALI_REGISTER_FILE_FORMAT_F32;
-   case GLSL_TYPE_UINT:
+   case PAN_FB_SHADER_DATA_TYPE_U32:
       return MALI_REGISTER_FILE_FORMAT_U32;
-   case GLSL_TYPE_INT:
+   case PAN_FB_SHADER_DATA_TYPE_I32:
       return MALI_REGISTER_FILE_FORMAT_I32;
    default:
       assert(!"Invalid reg type");
@@ -309,7 +305,7 @@ fill_textures(struct panvk_cmd_buffer *cmdbuf,
               const struct panvk_fb_preload_shader_key *key,
               struct mali_texture_packed *textures)
 {
-   uint32_t locations = key_locations_loaded(key);
+   uint32_t locations = key_locations_written(key);
    uint32_t idx = 0;
 
    u_foreach_bit(loc, locations) {
@@ -357,7 +353,7 @@ fill_bds(const struct pan_fb_layout *fb,
 
    for (unsigned i = 0; i < bd_count; i++) {
       pan_pack(&bds[i], BLEND, cfg) {
-         if (!key_target_has_load(key->key.rts[i]) ||
+         if (!pan_fb_shader_key_target_written(&key->key.rts[i]) ||
              fb->rt_formats[i] == PIPE_FORMAT_NONE) {
             cfg.enable = false;
             cfg.internal.mode = MALI_BLEND_MODE_OFF;
@@ -381,7 +377,7 @@ fill_bds(const struct pan_fb_layout *fb,
          cfg.internal.fixed_function.rt = i;
 #if PAN_ARCH < 9
          cfg.internal.fixed_function.conversion.register_format =
-            get_reg_fmt(key->key.rts[i].glsl_type);
+            get_reg_fmt(key->key.rts[i].data_type);
 #endif
       }
    }
@@ -392,12 +388,13 @@ always_load(const struct pan_fb_load *load,
             const struct panvk_fb_preload_shader_key *key)
 {
    for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
-      if (key_target_has_load(key->key.rts[rt]) && load->rts[rt].always)
+      if (pan_fb_shader_key_target_written(&key->key.rts[rt]) &&
+          load->rts[rt].always)
          return true;
    }
 
-   return (key_target_has_load(key->key.z) && load->z.always) ||
-          (key_target_has_load(key->key.s) && load->s.always);
+   return (pan_fb_shader_key_target_written(&key->key.z) && load->z.always) ||
+          (pan_fb_shader_key_target_written(&key->key.s) && load->s.always);
 }
 
 #if PAN_ARCH < 9
@@ -416,14 +413,14 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
    if (result != VK_SUCCESS)
       return result;
 
-   uint32_t locations_loaded = key_locations_loaded(key);
+   uint32_t locations_written = key_locations_written(key);
    bool preload_color =
-      locations_loaded & BITFIELD_RANGE(FRAG_RESULT_DATA0, PAN_MAX_RTS);
-   bool preload_z = locations_loaded & BITFIELD_BIT(FRAG_RESULT_DEPTH);
-   bool preload_s = locations_loaded & BITFIELD_BIT(FRAG_RESULT_STENCIL);
+      locations_written & BITFIELD_RANGE(FRAG_RESULT_DATA0, PAN_MAX_RTS);
+   bool preload_z = locations_written & BITFIELD_BIT(FRAG_RESULT_DEPTH);
+   bool preload_s = locations_written & BITFIELD_BIT(FRAG_RESULT_STENCIL);
    assert(preload_color != (preload_z || preload_s));
 
-   uint32_t tex_count = util_bitcount(locations_loaded);
+   uint32_t tex_count = util_bitcount(locations_written);
    uint32_t bd_count = MAX2(fb->rt_count, 1);
 
    struct pan_ptr rsd = panvk_cmd_alloc_desc_aggregate(
@@ -618,11 +615,11 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
    if (result != VK_SUCCESS)
       return result;
 
-   uint32_t locations_loaded = key_locations_loaded(key);
+   uint32_t locations_written = key_locations_written(key);
    bool preload_color =
-      locations_loaded & BITFIELD_RANGE(FRAG_RESULT_DATA0, PAN_MAX_RTS);
-   bool preload_z = locations_loaded & BITFIELD_BIT(FRAG_RESULT_DEPTH);
-   bool preload_s = locations_loaded & BITFIELD_BIT(FRAG_RESULT_STENCIL);
+      locations_written & BITFIELD_RANGE(FRAG_RESULT_DATA0, PAN_MAX_RTS);
+   bool preload_z = locations_written & BITFIELD_BIT(FRAG_RESULT_DEPTH);
+   bool preload_s = locations_written & BITFIELD_BIT(FRAG_RESULT_STENCIL);
    assert(preload_color != (preload_z || preload_s));
 
    uint32_t bd_count = preload_color ? fb->rt_count : 0;
@@ -630,7 +627,7 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
    if (bd_count > 0 && !bds.cpu)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
-   uint32_t tex_count = util_bitcount(locations_loaded);
+   uint32_t tex_count = util_bitcount(locations_written);
    uint32_t desc_count = tex_count + 1;
 
    struct pan_ptr descs = panvk_cmd_alloc_dev_mem(
@@ -651,7 +648,7 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
    fill_textures(cmdbuf, load, key, descs.cpu + PANVK_DESCRIPTOR_SIZE);
 
    uint32_t rt_written =
-      (locations_loaded >> FRAG_RESULT_DATA0) & BITFIELD_MASK(PAN_MAX_RTS);
+      (locations_written >> FRAG_RESULT_DATA0) & BITFIELD_MASK(PAN_MAX_RTS);
 
    if (preload_color)
       fill_bds(fb, key, bds.cpu);

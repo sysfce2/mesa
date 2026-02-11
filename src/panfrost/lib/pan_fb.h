@@ -391,10 +391,59 @@ uint32_t GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info,
                                 void *out);
 #endif
 
-static_assert(PAN_FB_LOAD_OP_COUNT <= (1 << 2),
-              "pan_fb_load_op fits in 2 bits");
+enum ENUM_PACKED pan_fb_shader_op {
+   /** Preserves the current fragment contents
+    *
+    * The MSAA mode is ignored and, if a load does need to occur to preserve
+    * the current fragment contents, PAN_FB_MSAA_COPY_ALL is implied.
+    *
+    * This is only allowed in resolve shaders so this can always be replaced
+    * with a discard.
+    */
+   PAN_FB_SHADER_PRESERVE = 0,
+
+   /** Do whatever is the fastest (lowest bandwidth)
+    *
+    * This could be a CLEAR or PRESERVE or just write zeros.  It will never
+    * write actual random data but the exact behavior may depend on other bits
+    * in the shader key.
+    */
+   PAN_FB_SHADER_DONT_CARE,
+
+   /** Loads the clear color
+    *
+    * This is only allowed in preload shaders and the clear will also be done
+    * in hardware so it can always be replaced with a discard.
+    */
+   PAN_FB_SHADER_LOAD_CLEAR,
+
+   /** Loads from the image bound at the corresponding gl_frag_result */
+   PAN_FB_SHADER_LOAD_IMAGE,
+
+   PAN_FB_SHADER_OP_COUNT,
+};
+
+static inline bool
+pan_fb_shader_op_can_discard(enum pan_fb_shader_op op)
+{
+   return op == PAN_FB_SHADER_PRESERVE ||
+          op == PAN_FB_SHADER_DONT_CARE ||
+          op == PAN_FB_SHADER_LOAD_CLEAR;
+}
+
+enum ENUM_PACKED pan_fb_shader_data_type {
+   PAN_FB_SHADER_DATA_TYPE_F32 = 0,
+   PAN_FB_SHADER_DATA_TYPE_I32,
+   PAN_FB_SHADER_DATA_TYPE_U32,
+   PAN_FB_SHADER_DATA_TYPE_COUNT,
+};
+
+static_assert(PAN_FB_SHADER_OP_COUNT <= (1 << 4),
+              "pan_fb_shader_op fits in 4 bits");
 static_assert(PAN_FB_MSAA_COPY_OP_COUNT <= (1 << 2),
               "pan_fb_msaa_copy_op fits in 2 bits");
+static_assert(PAN_FB_SHADER_DATA_TYPE_COUNT <= (1 << 2),
+              "pan_fb_shader_data_type fits in 2 bits");
 
 /* Asserts for glsl_sampler_dim glsl_base_type have to be runtime because
  * there is no MAX value we can use.
@@ -402,38 +451,51 @@ static_assert(PAN_FB_MSAA_COPY_OP_COUNT <= (1 << 2),
 
 PRAGMA_DIAGNOSTIC_PUSH
 PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
-struct pan_fb_shader_load_key_target {
-   uint16_t in_bounds_load : 2;
-   uint16_t border_load : 2;
-   uint16_t msaa : 2;
-   uint16_t dim : 2;
-   uint16_t is_array : 1;
-   uint16_t glsl_type : 5;
-   uint16_t _pad : 2;
+struct pan_fb_shader_key_target {
+   uint16_t in_bounds_op : 4;
+   uint16_t border_op : 4;
+   uint16_t image_msaa : 2;
+   uint16_t image_dim : 2;
+   uint16_t image_is_array : 1;
+   uint16_t data_type : 2;
+   uint16_t _pad : 1;
 };
 PRAGMA_DIAGNOSTIC_POP
-static_assert(sizeof(struct pan_fb_shader_load_key_target) == 2,
+static_assert(sizeof(struct pan_fb_shader_key_target) == 2,
               "This struct has no holes");
+
+/** Whether or not the given target is written by the FB shader
+ *
+ * GENX(pan_get_fb_shader)() guarantees that if both in_bounds_op and
+ * border_op can be discarded, that it does nothing with that target.  This
+ * way the full outputs_written can be known from just the shader key.
+ */
+static inline bool
+pan_fb_shader_key_target_written(const struct pan_fb_shader_key_target *target)
+{
+   return !pan_fb_shader_op_can_discard(target->in_bounds_op) ||
+          !pan_fb_shader_op_can_discard(target->border_op);
+}
 
 PRAGMA_DIAGNOSTIC_PUSH
 PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
-struct pan_fb_load_shader_key {
-   struct pan_fb_shader_load_key_target rts[PAN_MAX_RTS];
-   struct pan_fb_shader_load_key_target z, s;
+struct pan_fb_shader_key {
+   struct pan_fb_shader_key_target rts[PAN_MAX_RTS];
+   struct pan_fb_shader_key_target z, s;
 };
 PRAGMA_DIAGNOSTIC_POP
-static_assert(sizeof(struct pan_fb_load_shader_key) == 2 * (PAN_MAX_RTS + 2),
+static_assert(sizeof(struct pan_fb_shader_key) == 2 * (PAN_MAX_RTS + 2),
               "This struct has no holes");
 
 #ifdef PAN_ARCH
-bool GENX(pan_fb_load_shader_key_fill)(struct pan_fb_load_shader_key *key,
+bool GENX(pan_fb_load_shader_key_fill)(struct pan_fb_shader_key *key,
                                        const struct pan_fb_layout *fb,
                                        const struct pan_fb_load *load,
                                        bool zs_prepass);
 
 struct nir_shader *
-GENX(pan_get_fb_load_shader)(const struct pan_fb_load_shader_key *key,
-                             const struct nir_shader_compiler_options *nir_options);
+GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
+                        const struct nir_shader_compiler_options *nir_options);
 #endif
 
 #endif /* __PAN_FB_H */
