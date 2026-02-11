@@ -1060,6 +1060,11 @@ static VkResult pvr_compute_pipeline_compile(
       memcpy(compute_pipeline->cs_stats, &stats, sizeof(stats));
    }
 
+   if (pCreateInfo->flags &
+       VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) {
+      compute_pipeline->cs_nir_str = nir_shader_as_str(nir, NULL);
+   }
+
    result = pvr_gpu_upload_usc(device,
                                pco_shader_binary_data(cs),
                                pco_shader_binary_size(cs),
@@ -1208,6 +1213,7 @@ static void pvr_compute_pipeline_destroy(
    pvr_pipeline_finish(device, &compute_pipeline->base);
 
    vk_free2(&device->vk.alloc, allocator, compute_pipeline->cs_stats);
+   ralloc_free((void *)compute_pipeline->cs_nir_str);
 
    vk_free2(&device->vk.alloc, allocator, compute_pipeline);
 }
@@ -1295,6 +1301,9 @@ pvr_graphics_pipeline_destroy(struct pvr_device *const device,
 
    vk_free2(&device->vk.alloc, allocator, gfx_pipeline->vs_stats);
    vk_free2(&device->vk.alloc, allocator, gfx_pipeline->fs_stats);
+
+   ralloc_free((void *)gfx_pipeline->vs_nir_str);
+   ralloc_free((void *)gfx_pipeline->fs_nir_str);
 
    vk_free2(&device->vk.alloc, allocator, gfx_pipeline);
 }
@@ -2948,6 +2957,12 @@ pvr_graphics_pipeline_compile(struct pvr_device *const device,
       memcpy(gfx_pipeline->vs_stats, &stats, sizeof(stats));
    }
 
+   if (pCreateInfo->flags &
+       VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) {
+      gfx_pipeline->vs_nir_str =
+         nir_shader_as_str(nir_shaders[MESA_SHADER_VERTEX], NULL);
+   }
+
    pvr_graphics_pipeline_setup_vertex_dma(gfx_pipeline,
                                           pCreateInfo->pVertexInputState,
                                           state->vi,
@@ -2977,6 +2992,12 @@ pvr_graphics_pipeline_compile(struct pvr_device *const device,
             return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
          memcpy(gfx_pipeline->fs_stats, &stats, sizeof(stats));
+      }
+
+      if (pCreateInfo->flags &
+          VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) {
+         gfx_pipeline->fs_nir_str =
+            nir_shader_as_str(nir_shaders[MESA_SHADER_FRAGMENT], NULL);
       }
 
       pvr_graphics_pipeline_setup_fragment_coeff_program(
@@ -3494,15 +3515,90 @@ VkResult pvr_GetPipelineExecutablePropertiesKHR(
    return vk_outarray_status(&out);
 }
 
+static bool
+write_ir_text(VkPipelineExecutableInternalRepresentationKHR *ir,
+              const char *data)
+{
+   ir->isText = VK_TRUE;
+
+   size_t data_len = strlen(data) + 1;
+
+   if (ir->pData == NULL) {
+      ir->dataSize = data_len;
+      return true;
+   }
+
+   strncpy(ir->pData, data, ir->dataSize);
+   if (ir->dataSize < data_len)
+      return false;
+
+   ir->dataSize = data_len;
+   return true;
+}
+
 VkResult pvr_GetPipelineExecutableInternalRepresentationsKHR(
    UNUSED VkDevice _device,
    UNUSED const VkPipelineExecutableInfoKHR *pExecutableInfo,
    uint32_t *pInternalRepresentationCount,
-   UNUSED VkPipelineExecutableInternalRepresentationKHR
-      *pInternalRepresentations)
+   VkPipelineExecutableInternalRepresentationKHR *pInternalRepresentations)
 {
-   pvr_finishme("Add support for requesting intermediate representations.");
-   *pInternalRepresentationCount = 0;
+   VK_FROM_HANDLE(pvr_pipeline, pipeline, pExecutableInfo->pipeline);
+   VK_OUTARRAY_MAKE_TYPED(VkPipelineExecutableInternalRepresentationKHR, out,
+                          pInternalRepresentations,
+                          pInternalRepresentationCount);
+   bool incomplete_text = false;
 
-   return VK_SUCCESS;
+   switch (pipeline->type) {
+   case PVR_PIPELINE_TYPE_GRAPHICS: {
+      struct pvr_graphics_pipeline *const gfx_pipeline =
+         to_pvr_graphics_pipeline(pipeline);
+
+      if (pExecutableInfo->executableIndex == 0) {
+         if (gfx_pipeline->vs_nir_str) {
+            vk_outarray_append_typed(VkPipelineExecutableInternalRepresentationKHR, &out, ir) {
+               VK_COPY_STR(ir->name, "Final NIR shader IR");
+               VK_COPY_STR(ir->description, "Final NIR shader IR to be ingested by the PCO backend");
+               if (!write_ir_text(ir, gfx_pipeline->vs_nir_str))
+                  incomplete_text = true;
+            }
+         }
+      } else {
+         assert(pExecutableInfo->executableIndex == 1);
+
+         if (gfx_pipeline->fs_nir_str) {
+            vk_outarray_append_typed(VkPipelineExecutableInternalRepresentationKHR, &out, ir) {
+               VK_COPY_STR(ir->name, "Final NIR shader IR");
+               VK_COPY_STR(ir->description, "Final NIR shader IR to be ingested by the PCO backend");
+               if (!write_ir_text(ir, gfx_pipeline->fs_nir_str))
+                  incomplete_text = true;
+            }
+         }
+      }
+
+      break;
+   }
+
+   case PVR_PIPELINE_TYPE_COMPUTE: {
+      struct pvr_compute_pipeline *const compute_pipeline =
+         to_pvr_compute_pipeline(pipeline);
+
+      assert(pExecutableInfo->executableIndex == 0);
+
+      if (compute_pipeline->cs_nir_str) {
+         vk_outarray_append_typed(VkPipelineExecutableInternalRepresentationKHR, &out, ir) {
+            VK_COPY_STR(ir->name, "Final NIR shader IR");
+            VK_COPY_STR(ir->description, "Final NIR shader IR to be ingested by the PCO backend");
+            if (!write_ir_text(ir, compute_pipeline->cs_nir_str))
+               incomplete_text = true;
+         }
+      }
+
+      break;
+   }
+
+   default:
+      UNREACHABLE("Unknown pipeline type.");
+   }
+
+   return incomplete_text ? VK_INCOMPLETE : vk_outarray_status(&out);
 }
