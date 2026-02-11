@@ -20,7 +20,7 @@
 #include "panvk_cmd_buffer.h"
 #include "panvk_cmd_desc_state.h"
 #include "panvk_cmd_draw.h"
-#include "panvk_cmd_fb_preload.h"
+#include "panvk_cmd_frame_shaders.h"
 #include "panvk_cmd_meta.h"
 #include "panvk_cmd_precomp.h"
 #include "panvk_cmd_ts.h"
@@ -1307,7 +1307,7 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
       .tiler_ctx = &tiler_ctx,
    };
 
-   VkResult result = panvk_per_arch(cmd_fb_preload)(
+   VkResult result = panvk_per_arch(cmd_get_frame_shaders)(
       cmdbuf, fbd_info.fb, fbd_info.load, &fbd_info.frame_shaders);
    if (result != VK_SUCCESS)
       return result;
@@ -1347,7 +1347,7 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
       fbd_info.store = ir_pass == PANVK_IR_LAST_PASS ?
                        &render->fb.store : &render->fb.spill.store;
 
-      VkResult result = panvk_per_arch(cmd_fb_preload)(
+      VkResult result = panvk_per_arch(cmd_get_frame_shaders)(
          cmdbuf, fbd_info.fb, fbd_info.load, &fbd_info.frame_shaders);
       if (result != VK_SUCCESS)
          return result;

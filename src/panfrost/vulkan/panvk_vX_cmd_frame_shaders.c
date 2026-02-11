@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "panvk_cmd_frame_shaders.h"
+
 #include "panvk_cmd_alloc.h"
-#include "panvk_cmd_fb_preload.h"
 #include "panvk_image_view.h"
 #include "panvk_meta.h"
 #include "panvk_shader.h"
@@ -17,24 +18,24 @@
 
 PRAGMA_DIAGNOSTIC_PUSH
 PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
-struct panvk_fb_preload_shader_key {
+struct panvk_frame_shader_key {
    enum panvk_meta_object_key_type type;
    struct pan_fb_shader_key key;
 };
 PRAGMA_DIAGNOSTIC_POP
 
-struct panvk_fb_preload_sysvals {
+struct panvk_fb_sysvals {
    struct pan_fb_bbox render_area_px;
    float clear_depth;
    uint8_t clear_stencil;
    uint8_t _pad;
    uint16_t layer_id;
 } __attribute__((aligned(FAU_WORD_SIZE)));
-static_assert(sizeof(struct panvk_fb_preload_sysvals) % FAU_WORD_SIZE == 0,
-              "panvk_fb_preload_sysvals is FAU_WORD-aligned.");
+static_assert(sizeof(struct panvk_fb_sysvals) % FAU_WORD_SIZE == 0,
+              "panvk_fb_sysvals is FAU_WORD-aligned.");
 
 static uint32_t
-key_locations_written(const struct panvk_fb_preload_shader_key *key)
+key_locations_written(const struct panvk_frame_shader_key *key)
 {
    uint32_t locations = 0;
    for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
@@ -63,7 +64,7 @@ tex_index_for_loc(gl_frag_result loc, uint32_t locations_written)
 
 static bool
 compact_tex_indices(nir_builder *b, nir_tex_instr *tex,
-                    const struct panvk_fb_preload_shader_key *key)
+                    const struct panvk_frame_shader_key *key)
 {
    const uint32_t tex_idx =
       tex_index_for_loc(tex->texture_index, key_locations_written(key));
@@ -89,7 +90,7 @@ load_sysval(nir_builder *b, unsigned num_components,
 {
    assert((offset * 8) % bit_size == 0);
    ASSERTED unsigned size = (num_components * bit_size) / 8;
-   assert(offset + size <= sizeof(struct panvk_fb_preload_sysvals));
+   assert(offset + size <= sizeof(struct panvk_fb_sysvals));
 
    return nir_load_push_constant(b, num_components, bit_size,
                                  nir_imm_int(b, offset));
@@ -97,7 +98,7 @@ load_sysval(nir_builder *b, unsigned num_components,
 
 static bool
 lower_sysval(nir_builder *b, nir_intrinsic_instr *intr,
-             const struct panvk_fb_preload_shader_key *key)
+             const struct panvk_frame_shader_key *key)
 {
    b->cursor = nir_before_instr(&intr->instr);
 
@@ -105,17 +106,17 @@ lower_sysval(nir_builder *b, nir_intrinsic_instr *intr,
    nir_def *val;
    switch (intr->intrinsic) {
    case nir_intrinsic_load_fb_render_area_pan:
-      offset = offsetof(struct panvk_fb_preload_sysvals, render_area_px);
+      offset = offsetof(struct panvk_fb_sysvals, render_area_px);
       val = load_sysval(b, 4, 16, offset);
       break;
    case nir_intrinsic_load_clear_value_pan:
       switch (nir_intrinsic_io_semantics(intr).location) {
       case FRAG_RESULT_DEPTH:
-         offset = offsetof(struct panvk_fb_preload_sysvals, clear_depth);
+         offset = offsetof(struct panvk_fb_sysvals, clear_depth);
          val = load_sysval(b, 1, 32, offset);
          break;
       case FRAG_RESULT_STENCIL:
-         offset = offsetof(struct panvk_fb_preload_sysvals, clear_stencil);
+         offset = offsetof(struct panvk_fb_sysvals, clear_stencil);
          val = nir_u2u32(b, load_sysval(b, 1, 8, offset));
          break;
       default:
@@ -127,7 +128,7 @@ lower_sysval(nir_builder *b, nir_intrinsic_instr *intr,
       if (PAN_ARCH >= 9)
          return false;
 
-      offset = offsetof(struct panvk_fb_preload_sysvals, layer_id);
+      offset = offsetof(struct panvk_fb_sysvals, layer_id);
       val = nir_u2u32(b, load_sysval(b, 1, 16, offset));
       break;
    default:
@@ -153,9 +154,9 @@ lower_instr(nir_builder *b, nir_instr *instr, void *cb_data)
 }
 
 static VkResult
-get_preload_shader(struct panvk_device *dev,
-                   const struct panvk_fb_preload_shader_key *key,
-                   struct panvk_internal_shader **shader_out)
+get_frame_shader(struct panvk_device *dev,
+                 const struct panvk_frame_shader_key *key,
+                 struct panvk_internal_shader **shader_out)
 {
    struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(dev->vk.physical);
@@ -302,7 +303,7 @@ get_load_image_view(const struct pan_fb_load *load, gl_frag_result location)
 static void
 fill_textures(struct panvk_cmd_buffer *cmdbuf,
               const struct pan_fb_load *load,
-              const struct panvk_fb_preload_shader_key *key,
+              const struct panvk_frame_shader_key *key,
               struct mali_texture_packed *textures)
 {
    uint32_t locations = key_locations_written(key);
@@ -346,7 +347,7 @@ fill_textures(struct panvk_cmd_buffer *cmdbuf,
 
 static void
 fill_bds(const struct pan_fb_layout *fb,
-         const struct panvk_fb_preload_shader_key *key,
+         const struct panvk_frame_shader_key *key,
          struct mali_blend_packed *bds)
 {
    for (unsigned i = 0; i < fb->rt_count; i++) {
@@ -383,7 +384,7 @@ fill_bds(const struct pan_fb_layout *fb,
 
 static bool
 always_load(const struct pan_fb_load *load,
-            const struct panvk_fb_preload_shader_key *key)
+            const struct panvk_frame_shader_key *key)
 {
    for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
       if (pan_fb_shader_key_target_written(&key->key.rts[rt]) &&
@@ -400,14 +401,14 @@ static VkResult
 cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
              const struct pan_fb_layout *fb,
              const struct pan_fb_load *load,
-             const struct panvk_fb_preload_shader_key *key,
+             const struct panvk_frame_shader_key *key,
              struct pan_fb_frame_shaders *fs,
              struct mali_draw_packed **dcds)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    struct panvk_internal_shader *shader = NULL;
 
-   VkResult result = get_preload_shader(dev, key, &shader);
+   VkResult result = get_frame_shader(dev, key, &shader);
    if (result != VK_SUCCESS)
       return result;
 
@@ -544,9 +545,9 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
 
    uint32_t layer_count = cmdbuf->state.gfx.render.layer_count;
    struct pan_ptr faus = panvk_cmd_alloc_dev_mem(
-      cmdbuf, desc, layer_count * sizeof(struct panvk_fb_preload_sysvals), 16);
+      cmdbuf, desc, layer_count * sizeof(struct panvk_fb_sysvals), 16);
    for (uint32_t l = 0; l < layer_count; l++) {
-      const struct panvk_fb_preload_sysvals sysvals = {
+      const struct panvk_fb_sysvals sysvals = {
          .render_area_px = fb->render_area_px,
          .clear_depth = load->z.clear.depth,
          .clear_stencil = load->s.clear.stencil,
@@ -602,14 +603,14 @@ static VkResult
 cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
              const struct pan_fb_layout *fb,
              const struct pan_fb_load *load,
-             struct panvk_fb_preload_shader_key *key,
+             struct panvk_frame_shader_key *key,
              struct pan_fb_frame_shaders *fs,
              struct mali_draw_packed **dcds)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    struct panvk_internal_shader *shader = NULL;
 
-   VkResult result = get_preload_shader(dev, key, &shader);
+   VkResult result = get_frame_shader(dev, key, &shader);
    if (result != VK_SUCCESS)
       return result;
 
@@ -702,8 +703,8 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
       return result;
 
    struct pan_ptr faus = panvk_cmd_alloc_dev_mem(
-      cmdbuf, desc, sizeof(struct panvk_fb_preload_sysvals), 16);
-   const struct panvk_fb_preload_sysvals sysvals = {
+      cmdbuf, desc, sizeof(struct panvk_fb_sysvals), 16);
+   const struct panvk_fb_sysvals sysvals = {
       .render_area_px = fb->render_area_px,
       .clear_depth = load->z.clear.depth,
       .clear_stencil = load->s.clear.stencil,
@@ -742,16 +743,14 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
       cfg.fragment_resources = res_table.gpu | res_table_size;
       cfg.fragment_shader = panvk_priv_mem_dev_addr(shader->spd);
       cfg.fragment_fau.pointer = faus.gpu;
-      cfg.fragment_fau.count =
-         sizeof(struct panvk_fb_preload_sysvals) / FAU_WORD_SIZE;
+      cfg.fragment_fau.count = sizeof(struct panvk_fb_sysvals) / FAU_WORD_SIZE;
       cfg.thread_storage = cmdbuf->state.gfx.tsd;
 #else
       cfg.maximum_z = 1.0;
       cfg.shader.resources = res_table.gpu | res_table_size;
       cfg.shader.shader = panvk_priv_mem_dev_addr(shader->spd);
       cfg.shader.thread_storage = cmdbuf->state.gfx.tsd;
-      cfg.shader.fau_count =
-         sizeof(struct panvk_fb_preload_sysvals) / FAU_WORD_SIZE;
+      cfg.shader.fau_count = sizeof(struct panvk_fb_sysvals) / FAU_WORD_SIZE;
       cfg.shader.fau = faus.gpu;
 #endif
       cfg.flags_2.write_mask = rt_written;
@@ -793,7 +792,7 @@ cmd_preload_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
                            struct pan_fb_frame_shaders *fs,
                            struct mali_draw_packed **dcds)
 {
-   struct panvk_fb_preload_shader_key key = {
+   struct panvk_frame_shader_key key = {
       .type = PANVK_META_OBJECT_KEY_FB_ZS_PRELOAD_SHADER,
    };
    if (!GENX(pan_fb_load_shader_key_fill)(&key.key, fb, load, true))
@@ -809,7 +808,7 @@ cmd_preload_color_attachments(struct panvk_cmd_buffer *cmdbuf,
                               struct pan_fb_frame_shaders *fs,
                               struct mali_draw_packed **dcds)
 {
-   struct panvk_fb_preload_shader_key key = {
+   struct panvk_frame_shader_key key = {
       .type = PANVK_META_OBJECT_KEY_FB_COLOR_PRELOAD_SHADER,
    };
    if (!GENX(pan_fb_load_shader_key_fill)(&key.key, fb, load, false))
@@ -819,10 +818,10 @@ cmd_preload_color_attachments(struct panvk_cmd_buffer *cmdbuf,
 }
 
 VkResult
-panvk_per_arch(cmd_fb_preload)(struct panvk_cmd_buffer *cmdbuf,
-                               const struct pan_fb_layout *fb,
-                               const struct pan_fb_load *load,
-                               struct pan_fb_frame_shaders *fs_out)
+panvk_per_arch(cmd_get_frame_shaders)(struct panvk_cmd_buffer *cmdbuf,
+                                      const struct pan_fb_layout *fb,
+                                      const struct pan_fb_load *load,
+                                      struct pan_fb_frame_shaders *fs_out)
 {
    *fs_out = (struct pan_fb_frame_shaders) { .dcd_pointer = 0 };
    struct mali_draw_packed *dcds = NULL;

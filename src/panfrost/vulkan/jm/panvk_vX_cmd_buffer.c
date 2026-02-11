@@ -16,7 +16,7 @@
 #include "panvk_cmd_buffer.h"
 #include "panvk_cmd_desc_state.h"
 #include "panvk_cmd_draw.h"
-#include "panvk_cmd_fb_preload.h"
+#include "panvk_cmd_frame_shaders.h"
 #include "panvk_cmd_pool.h"
 #include "panvk_cmd_push_constant.h"
 #include "panvk_device.h"
@@ -154,9 +154,8 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
       };
 
       struct pan_fb_frame_shaders fs;
-      VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf,
-                                                       &render->fb.layout,
-                                                       fbd_info.load, &fs);
+      VkResult result = panvk_per_arch(cmd_get_frame_shaders)(
+         cmdbuf, &render->fb.layout, fbd_info.load, &fs);
       if (result != VK_SUCCESS)
          return;
 
