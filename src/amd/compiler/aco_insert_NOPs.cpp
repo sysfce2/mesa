@@ -1675,6 +1675,10 @@ handle_instruction_gfx11(State& state, NOP_ctx_gfx11& ctx, aco_ptr<Instruction>&
                ctx.sgpr_read_by_valu_then_wr_by_salu.set(reg.advance(i * 4));
          }
       }
+
+      /* resolve_all_gfx11() can't fix this */
+      if (instr->opcode == aco_opcode::s_call_b64 || instr->opcode == aco_opcode::s_swappc_b64)
+         ctx.sgpr_read_by_valu.set();
    }
 
    /* LdsDirectVMEMHazard
