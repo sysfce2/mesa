@@ -11,6 +11,7 @@
 
 #include "nir_builder.h"
 
+#include "pan_afbc.h"
 #include "pan_shader.h"
 #include "pan_nir.h"
 
@@ -283,6 +284,25 @@ get_s_attachment_view(struct panvk_cmd_buffer *cmdbuf)
              : cmdbuf->state.gfx.render.s_attachment.iview;
 }
 
+static const struct pan_image_view *
+get_load_image_view(const struct pan_fb_load *load, gl_frag_result location)
+{
+   switch (location) {
+   default: {
+      assert(location >= FRAG_RESULT_DATA0);
+      unsigned rt = location - FRAG_RESULT_DATA0;
+      assert(rt < PAN_MAX_RTS);
+      return load->rts[rt].iview;
+   }
+
+   case FRAG_RESULT_DEPTH:
+      return load->z.iview;
+
+   case FRAG_RESULT_STENCIL:
+      return load->s.iview;
+   }
+}
+
 static void
 fill_textures(struct panvk_cmd_buffer *cmdbuf,
               const struct pan_fb_load *load,
@@ -294,43 +314,35 @@ fill_textures(struct panvk_cmd_buffer *cmdbuf,
 
    u_foreach_bit(loc, locations) {
       assert(idx == tex_index_for_loc(loc, locations));
-      struct panvk_image_view *iview;
-      switch (loc) {
-      default: {
-         assert(loc >= FRAG_RESULT_DATA0);
-         unsigned rt = loc - FRAG_RESULT_DATA0;
-         assert(rt < PAN_MAX_RTS);
-         iview = get_color_attachment_view(cmdbuf, rt);
-
-         if (iview)
-            textures[idx++] = iview->descs.tex[0];
-         else
-            textures[idx++] = (struct mali_texture_packed){0};
-         break;
+      const struct pan_image_view *iview = get_load_image_view(load, loc);
+      if (iview == NULL) {
+         textures[idx++] = (struct mali_texture_packed){0};
+         continue;
       }
 
-      case FRAG_RESULT_DEPTH:
-         if (cmdbuf->state.gfx.render.z_attachment.iview)
-            iview = get_z_attachment_view(cmdbuf);
-         else
-            iview = get_s_attachment_view(cmdbuf);
+      struct pan_image_view pview = *iview;
+      if (loc == FRAG_RESULT_DEPTH)
+         pview.format = util_format_get_depth_only(pview.format);
+      else if (loc == FRAG_RESULT_STENCIL)
+         pview.format = util_format_stencil_only(pview.format);
+#if PAN_ARCH == 7
+      else if (pan_afbc_supports_format(PAN_ARCH, pview.format))
+         GENX(pan_texture_afbc_reswizzle)(&pview);
+#endif
 
-         textures[idx++] = vk_format_has_depth(iview->vk.view_format)
-                              ? iview->descs.zs.tex
-                              : iview->descs.zs.other_aspect_tex;
-         break;
+      const uint32_t tex_payload_size =
+         GENX(pan_texture_estimate_payload_size)(&pview);
 
-      case FRAG_RESULT_STENCIL:
-         if (cmdbuf->state.gfx.render.s_attachment.iview)
-            iview = get_s_attachment_view(cmdbuf);
-         else
-            iview = get_z_attachment_view(cmdbuf);
+#if PAN_ARCH <= 7
+      const uint32_t tex_payload_align = pan_alignment(SURFACE_WITH_STRIDE);
+#else
+      const uint32_t tex_payload_align = pan_alignment(NULL_PLANE);
+#endif
 
-         textures[idx++] = vk_format_has_depth(iview->vk.view_format)
-                              ? iview->descs.zs.other_aspect_tex
-                              : iview->descs.zs.tex;
-         break;
-      }
+      struct pan_ptr payload = panvk_cmd_alloc_dev_mem(
+         cmdbuf, desc, tex_payload_size, tex_payload_align);
+
+      GENX(pan_sampled_texture_emit)(&pview, &textures[idx++], &payload);
    }
 
    assert(idx == util_bitcount(locations));
