@@ -71,6 +71,14 @@ reduce_msaa_op(enum pan_fb_msaa_copy_op msaa,
    return msaa;
 }
 
+static bool
+msaa_op_needs_sample_count(enum pan_fb_msaa_copy_op msaa)
+{
+   return msaa == PAN_FB_MSAA_COPY_AVERAGE ||
+          msaa == PAN_FB_MSAA_COPY_MIN ||
+          msaa == PAN_FB_MSAA_COPY_MAX;
+}
+
 static const struct pan_fb_shader_key_target key_target_dont_care = {
    .in_bounds_op = PAN_FB_SHADER_DONT_CARE,
    .border_op = PAN_FB_SHADER_DONT_CARE,
@@ -142,6 +150,8 @@ get_key_target(enum pipe_format format,
       .image_msaa = msaa,
       .image_dim = dim,
       .image_is_array = is_array,
+      .image_samples_log2 = msaa_op_needs_sample_count(msaa)
+                            ? util_logbase2(image_sample_count) : 0,
       .data_type = data_type_for_format(format),
    };
 }
@@ -193,10 +203,165 @@ GENX(pan_fb_load_shader_key_fill)(struct pan_fb_shader_key *key,
 }
 
 static nir_def *
+combine_samples_no_div(nir_builder *b, nir_def **samples, uint8_t sample_count,
+                       const nir_alu_type nir_type,
+                       enum pan_fb_msaa_copy_op msaa)
+{
+   assert(util_is_power_of_two_nonzero(sample_count));
+   if (sample_count == 1)
+      return samples[0];
+
+   nir_def *lo = combine_samples_no_div(b, samples,
+                                        sample_count / 2, nir_type, msaa);
+   nir_def *hi = combine_samples_no_div(b, samples + (sample_count / 2),
+                                        sample_count / 2, nir_type, msaa);
+
+   /* We assume that first half always comes before the second so setting the
+    * cursor after the second half combine instruction will give us the least
+    * common ancestor.
+    */
+   b->cursor = nir_after_instr(nir_def_instr(hi));
+
+   switch (msaa) {
+   case PAN_FB_MSAA_COPY_AVERAGE:
+      assert(nir_alu_type_get_base_type(nir_type) == nir_type_float);
+      return nir_fadd(b, lo, hi);
+
+   case PAN_FB_MSAA_COPY_MIN:
+      switch (nir_alu_type_get_base_type(nir_type)) {
+      case nir_type_float:
+         return nir_fmin(b, lo, hi);
+      case nir_type_uint:
+         return nir_umin(b, lo, hi);
+      case nir_type_int:
+         return nir_imin(b, lo, hi);
+      default:
+         UNREACHABLE("Unsupported NIR type");
+      }
+
+   case PAN_FB_MSAA_COPY_MAX:
+      switch (nir_alu_type_get_base_type(nir_type)) {
+      case nir_type_float:
+         return nir_fmax(b, lo, hi);
+      case nir_type_uint:
+         return nir_umax(b, lo, hi);
+      case nir_type_int:
+         return nir_imax(b, lo, hi);
+      default:
+         UNREACHABLE("Unsupported NIR type");
+      }
+
+   default:
+      UNREACHABLE("Invalid MSAA op");
+   }
+}
+
+static nir_def *
+combine_samples(nir_builder *b, nir_def **samples, uint8_t sample_count,
+                const nir_alu_type nir_type, enum pan_fb_msaa_copy_op msaa)
+{
+   if (msaa == PAN_FB_MSAA_COPY_SAMPLE_0)
+      return samples[0];
+
+   nir_def *val = combine_samples_no_div(b, samples, sample_count,
+                                         nir_type, msaa);
+   if (msaa == PAN_FB_MSAA_COPY_AVERAGE)
+      val = nir_fdiv_imm(b, val, sample_count);
+
+   return val;
+}
+
+static nir_def *
 build_sample_id(nir_builder *b)
 {
    b->shader->info.fs.uses_sample_shading = true;
    return nir_load_sample_id(b);
+}
+
+static nir_def *
+build_image_load(nir_builder *b, const nir_alu_type nir_type,
+                 nir_def *pos, gl_frag_result location,
+                 enum pan_fb_msaa_copy_op msaa, uint8_t sample_count,
+                 enum mali_texture_dimension dim, bool is_array)
+{
+   assert(pos->num_components == 3);
+   switch (dim) {
+   case MALI_TEXTURE_DIMENSION_1D:
+      if (is_array)
+         pos = nir_channels(b, pos, 0b101);
+      else
+         pos = nir_channel(b, pos, 0);
+      break;
+
+   case MALI_TEXTURE_DIMENSION_CUBE:
+      assert(is_array);
+      break;
+
+   case MALI_TEXTURE_DIMENSION_2D:
+      if (!is_array)
+         pos = nir_channels(b, pos, 0b011);
+      break;
+
+   case MALI_TEXTURE_DIMENSION_3D:
+      break;
+
+   default:
+      UNREACHABLE("Unsupported dim");
+   }
+
+   nir_def *val;
+   switch (msaa) {
+   case PAN_FB_MSAA_COPY_SINGLE:
+      val = nir_txf(b, pos,
+                    .texture_index = location,
+                    .dim = mali_to_glsl_dim(dim),
+                    .dest_type = nir_type,
+                    .is_array = is_array);
+      break;
+
+   case PAN_FB_MSAA_COPY_ALL:
+   case PAN_FB_MSAA_COPY_IDENTICAL:
+   case PAN_FB_MSAA_COPY_SAMPLE_0: {
+      assert(dim == MALI_TEXTURE_DIMENSION_2D);
+
+      nir_def *sample_id = msaa == PAN_FB_MSAA_COPY_ALL
+                           ? build_sample_id(b) : nir_imm_int(b, 0);
+
+      val = nir_txf_ms(b, pos, sample_id,
+                       .texture_index = location,
+                       .dim = GLSL_SAMPLER_DIM_MS,
+                       .dest_type = nir_type,
+                       .is_array = is_array);
+      break;
+   }
+
+   case PAN_FB_MSAA_COPY_AVERAGE:
+   case PAN_FB_MSAA_COPY_MIN:
+   case PAN_FB_MSAA_COPY_MAX: {
+      assert(dim == MALI_TEXTURE_DIMENSION_2D);
+      assert(sample_count > 0);
+
+      nir_def *samples[16];
+      assert(sample_count <= ARRAY_SIZE(samples));
+      for (uint32_t s = 0; s < sample_count; s++) {
+         samples[s] = nir_txf_ms(b, pos, nir_imm_int(b, s),
+                                 .texture_index = location,
+                                 .dim = GLSL_SAMPLER_DIM_MS,
+                                 .dest_type = nir_type,
+                                 .is_array = is_array);
+      }
+      val = combine_samples(b, samples, sample_count, nir_type, msaa);
+      break;
+   }
+
+   case PAN_FB_MSAA_COPY_OP_COUNT:
+      UNREACHABLE("Invalid copy op");
+   }
+
+   if (location == FRAG_RESULT_DEPTH || location == FRAG_RESULT_STENCIL)
+      val = nir_channel(b, val, 0);
+
+   return val;
 }
 
 static nir_def *
@@ -218,59 +383,11 @@ build_load(nir_builder *b, nir_def *pos,
                                       .io_semantics.location = location,
                                       .dest_type = nir_type);
 
-   case PAN_FB_SHADER_LOAD_IMAGE: {
-      assert(pos->num_components == 3);
-      switch (target->image_dim) {
-      case MALI_TEXTURE_DIMENSION_1D:
-         if (target->image_is_array)
-            pos = nir_channels(b, pos, 0b101);
-         else
-            pos = nir_channel(b, pos, 0);
-         break;
-
-      case MALI_TEXTURE_DIMENSION_CUBE:
-         assert(target->image_is_array);
-         break;
-
-      case MALI_TEXTURE_DIMENSION_2D:
-         if (!target->image_is_array)
-            pos = nir_channels(b, pos, 0b011);
-         break;
-
-      case MALI_TEXTURE_DIMENSION_3D:
-         break;
-
-      default:
-         UNREACHABLE("Unsupported dim");
-      }
-
-      nir_def *val;
-      if (target->image_msaa == PAN_FB_MSAA_COPY_SINGLE) {
-         val = nir_txf(b, pos,
-                       .texture_index = location,
-                       .dim = mali_to_glsl_dim(target->image_dim),
-                       .dest_type = nir_type,
-                       .is_array = target->image_is_array);
-      } else {
-         assert(target->image_dim == MALI_TEXTURE_DIMENSION_2D);
-
-         assert(target->image_msaa == PAN_FB_MSAA_COPY_ALL ||
-                target->image_msaa == PAN_FB_MSAA_COPY_SAMPLE_0);
-         nir_def *sample_id = target->image_msaa == PAN_FB_MSAA_COPY_ALL
-                              ? build_sample_id(b) : nir_imm_int(b, 0);
-
-         val = nir_txf_ms(b, pos, sample_id,
-                          .texture_index = location,
-                          .dim = GLSL_SAMPLER_DIM_MS,
-                          .dest_type = nir_type,
-                          .is_array = target->image_is_array);
-      }
-
-      if (is_zs)
-         val = nir_channel(b, val, 0);
-
-      return val;
-   }
+   case PAN_FB_SHADER_LOAD_IMAGE:
+      return build_image_load(b, nir_type, pos, location,
+                              target->image_msaa,
+                              1 << target->image_samples_log2,
+                              target->image_dim, target->image_is_array);
 
    default:
       UNREACHABLE("Unsupported load op");

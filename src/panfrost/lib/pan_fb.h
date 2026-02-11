@@ -212,11 +212,24 @@ enum ENUM_PACKED pan_fb_msaa_copy_op {
     */
    PAN_FB_MSAA_COPY_SINGLE,
 
+   /** Copies assuming all source samples are identical
+    *
+    * The actual copy can use any resolve mode because we know a priori that
+    * all samples are identical.  All resolve modes yield the same result.
+    */
+   PAN_FB_MSAA_COPY_IDENTICAL,
+
    /** Copies sample 0 from the source to all samples in the destination */
    PAN_FB_MSAA_COPY_SAMPLE_0,
 
    /** Copies the average of the samples in the source to the destination */
    PAN_FB_MSAA_COPY_AVERAGE,
+
+   /** Copies the minimum of the samples in the source to the destination */
+   PAN_FB_MSAA_COPY_MIN,
+
+   /** Copies the maximum of the samples in the source to the destination */
+   PAN_FB_MSAA_COPY_MAX,
 
    PAN_FB_MSAA_COPY_OP_COUNT,
 };
@@ -440,8 +453,8 @@ enum ENUM_PACKED pan_fb_shader_data_type {
 
 static_assert(PAN_FB_SHADER_OP_COUNT <= (1 << 4),
               "pan_fb_shader_op fits in 4 bits");
-static_assert(PAN_FB_MSAA_COPY_OP_COUNT <= (1 << 2),
-              "pan_fb_msaa_copy_op fits in 2 bits");
+static_assert(PAN_FB_MSAA_COPY_OP_COUNT <= (1 << 3),
+              "pan_fb_msaa_copy_op fits in 3 bits");
 static_assert(PAN_FB_SHADER_DATA_TYPE_COUNT <= (1 << 2),
               "pan_fb_shader_data_type fits in 2 bits");
 
@@ -452,16 +465,17 @@ static_assert(PAN_FB_SHADER_DATA_TYPE_COUNT <= (1 << 2),
 PRAGMA_DIAGNOSTIC_PUSH
 PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
 struct pan_fb_shader_key_target {
-   uint16_t in_bounds_op : 4;
-   uint16_t border_op : 4;
-   uint16_t image_msaa : 2;
-   uint16_t image_dim : 2;
-   uint16_t image_is_array : 1;
-   uint16_t data_type : 2;
-   uint16_t _pad : 1;
+   uint32_t in_bounds_op : 4;
+   uint32_t border_op : 4;
+   uint32_t image_msaa : 3;
+   uint32_t image_dim : 2;
+   uint32_t image_is_array : 1;
+   uint32_t image_samples_log2 : 3;
+   uint32_t data_type : 2;
+   uint32_t pad : 13;
 };
 PRAGMA_DIAGNOSTIC_POP
-static_assert(sizeof(struct pan_fb_shader_key_target) == 2,
+static_assert(sizeof(struct pan_fb_shader_key_target) == 4,
               "This struct has no holes");
 
 /** Whether or not the given target is written by the FB shader
@@ -484,7 +498,7 @@ struct pan_fb_shader_key {
    struct pan_fb_shader_key_target z, s;
 };
 PRAGMA_DIAGNOSTIC_POP
-static_assert(sizeof(struct pan_fb_shader_key) == 2 * (PAN_MAX_RTS + 2),
+static_assert(sizeof(struct pan_fb_shader_key) == 4 * (PAN_MAX_RTS + 2),
               "This struct has no holes");
 
 #ifdef PAN_ARCH
