@@ -155,7 +155,7 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
 
       struct pan_fb_frame_shaders fs;
       VkResult result = panvk_per_arch(cmd_get_frame_shaders)(
-         cmdbuf, &render->fb.layout, fbd_info.load, &fs);
+         cmdbuf, &render->fb.layout, fbd_info.load, NULL, &fs);
       if (result != VK_SUCCESS)
          return;
 

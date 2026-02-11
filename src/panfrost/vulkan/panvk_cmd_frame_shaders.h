@@ -14,6 +14,7 @@ VkResult
 panvk_per_arch(cmd_get_frame_shaders)(struct panvk_cmd_buffer *cmdbuf,
                                       const struct pan_fb_layout *fb,
                                       const struct pan_fb_load *load,
+                                      const struct pan_fb_resolve *resolve,
                                       struct pan_fb_frame_shaders *fs_out);
 
 #endif
