@@ -280,12 +280,6 @@ v3dX(meta_framebuffer_init)(struct v3dv_meta_framebuffer *fb,
 /* Used at v3dv_pipeline */
 void
 v3dX(pipeline_pack_state)(struct v3dv_pipeline *pipeline,
-                          const VkPipelineColorBlendStateCreateInfo *cb_info,
-                          const VkPipelineDepthStencilStateCreateInfo *ds_info,
-                          const VkPipelineRasterizationStateCreateInfo *rs_info,
-                          const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *pv_info,
-                          const VkPipelineRasterizationLineStateCreateInfoEXT *ls_info,
-                          const VkPipelineMultisampleStateCreateInfo *ms_info,
                           const struct vk_graphics_pipeline_state *state);
 void
 v3dX(pipeline_pack_compile_state)(struct v3dv_pipeline *pipeline,

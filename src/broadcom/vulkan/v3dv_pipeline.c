@@ -1065,18 +1065,12 @@ static const enum pipe_logicop vk_to_pipe_logicop[] = {
 
 static bool
 enable_line_smooth(struct v3dv_pipeline *pipeline,
-                   const VkPipelineRasterizationStateCreateInfo *rs_info)
+                   const struct vk_rasterization_state *rs)
 {
    if (!pipeline->rasterization_enabled)
       return false;
 
-   assert(rs_info);
-   const VkPipelineRasterizationLineStateCreateInfoKHR *ls_info =
-      vk_find_struct_const(rs_info->pNext,
-                           PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_KHR);
-
-   if (!ls_info)
-      return false;
+   assert(rs);
 
    enum mesa_prim output_topology;
    if (pipeline->has_gs) {
@@ -1097,7 +1091,7 @@ enable_line_smooth(struct v3dv_pipeline *pipeline,
    case MESA_PRIM_LINE_STRIP:
    case MESA_PRIM_LINES_ADJACENCY:
    case MESA_PRIM_LINE_STRIP_ADJACENCY:
-      return ls_info->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_KHR;
+      return rs->line.mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_KHR;
    default:
       return false;
    }
@@ -1170,7 +1164,7 @@ v3d_fs_key_set_color_attachment(struct v3d_fs_key *key,
 
 static void
 pipeline_populate_v3d_fs_key(struct v3d_fs_key *key,
-                             const VkGraphicsPipelineCreateInfo *pCreateInfo,
+                             const struct vk_graphics_pipeline_state *state,
                              const struct vk_render_pass_state *rendering_info,
                              const struct v3dv_pipeline_stage *p_stage,
                              bool has_geometry_shader,
@@ -1197,9 +1191,9 @@ pipeline_populate_v3d_fs_key(struct v3d_fs_key *key,
     */
    key->ucp_enables = ucp_enables;
 
-   const VkPipelineInputAssemblyStateCreateInfo *ia_info =
-      pCreateInfo->pInputAssemblyState;
-   uint8_t topology = vk_topology_to_mesa(ia_info->topology);
+   const struct vk_input_assembly_state *ia = state->ia;
+   assert(ia);
+   uint8_t topology = vk_topology_to_mesa(ia->primitive_topology);
 
    key->is_points = (topology == MESA_PRIM_POINTS);
    key->is_lines = (topology >= MESA_PRIM_LINES &&
@@ -1217,32 +1211,29 @@ pipeline_populate_v3d_fs_key(struct v3d_fs_key *key,
 
    key->has_gs = has_geometry_shader;
 
-   const VkPipelineColorBlendStateCreateInfo *cb_info =
-      p_stage->pipeline->rasterization_enabled ?
-      pCreateInfo->pColorBlendState : NULL;
+   const struct vk_color_blend_state *cb_info = state->cb;
 
-   key->logicop_func = cb_info && cb_info->logicOpEnable == VK_TRUE ?
-                       vk_to_pipe_logicop[cb_info->logicOp] :
+   key->logicop_func = cb_info && cb_info->logic_op_enable ?
+                       vk_to_pipe_logicop[cb_info->logic_op] :
                        PIPE_LOGICOP_COPY;
 
    /* Multisample rasterization state must be ignored if rasterization
     * is disabled.
     */
-   const VkPipelineMultisampleStateCreateInfo *ms_info =
-      p_stage->pipeline->rasterization_enabled ? pCreateInfo->pMultisampleState : NULL;
+   const struct vk_multisample_state *ms_info = state->ms;
    if (ms_info) {
-      assert(ms_info->rasterizationSamples == VK_SAMPLE_COUNT_1_BIT ||
-             ms_info->rasterizationSamples == VK_SAMPLE_COUNT_4_BIT);
-      key->msaa = ms_info->rasterizationSamples > VK_SAMPLE_COUNT_1_BIT;
+      assert(ms_info->rasterization_samples == VK_SAMPLE_COUNT_1_BIT ||
+             ms_info->rasterization_samples == VK_SAMPLE_COUNT_4_BIT);
+      key->msaa = ms_info->rasterization_samples > VK_SAMPLE_COUNT_1_BIT;
 
       if (key->msaa)
-         key->sample_alpha_to_coverage = ms_info->alphaToCoverageEnable;
+         key->sample_alpha_to_coverage = ms_info->alpha_to_coverage_enable;
 
-      key->sample_alpha_to_one = ms_info->alphaToOneEnable;
+      key->sample_alpha_to_one = ms_info->alpha_to_one_enable;
    }
 
-   key->line_smoothing = enable_line_smooth(p_stage->pipeline,
-                                            pCreateInfo->pRasterizationState);
+   const struct vk_rasterization_state *rs = state->rs;
+   key->line_smoothing = enable_line_smooth(p_stage->pipeline, rs);
 
    /* This is intended for V3D versions before 4.1, otherwise we just use the
     * tile buffer load/store swap R/B bit.
@@ -1273,7 +1264,6 @@ setup_stage_outputs_from_next_stage_inputs(
 
 static void
 pipeline_populate_v3d_gs_key(struct v3d_gs_key *key,
-                             const VkGraphicsPipelineCreateInfo *pCreateInfo,
                              const struct v3dv_pipeline_stage *p_stage)
 {
    assert(p_stage->stage == BROADCOM_SHADER_GEOMETRY ||
@@ -1925,8 +1915,7 @@ pipeline_compile_vertex_shader(struct v3dv_pipeline *pipeline,
 
 static VkResult
 pipeline_compile_geometry_shader(struct v3dv_pipeline *pipeline,
-                                 const VkAllocationCallbacks *pAllocator,
-                                 const VkGraphicsPipelineCreateInfo *pCreateInfo)
+                                 const VkAllocationCallbacks *pAllocator)
 {
    struct v3dv_pipeline_stage *p_stage_gs =
       pipeline->stages[BROADCOM_SHADER_GEOMETRY];
@@ -1942,14 +1931,14 @@ pipeline_compile_geometry_shader(struct v3dv_pipeline *pipeline,
 
    VkResult vk_result;
    struct v3d_gs_key key;
-   pipeline_populate_v3d_gs_key(&key, pCreateInfo, p_stage_gs);
+   pipeline_populate_v3d_gs_key(&key, p_stage_gs);
    pipeline->shared_data->variants[BROADCOM_SHADER_GEOMETRY] =
       pipeline_compile_shader_variant(p_stage_gs, &key.base, sizeof(key),
                                       pAllocator, &vk_result);
    if (vk_result != VK_SUCCESS)
       return vk_result;
 
-   pipeline_populate_v3d_gs_key(&key, pCreateInfo, p_stage_gs_bin);
+   pipeline_populate_v3d_gs_key(&key, p_stage_gs_bin);
    pipeline->shared_data->variants[BROADCOM_SHADER_GEOMETRY_BIN] =
       pipeline_compile_shader_variant(p_stage_gs_bin, &key.base, sizeof(key),
                                       pAllocator, &vk_result);
@@ -1960,7 +1949,7 @@ pipeline_compile_geometry_shader(struct v3dv_pipeline *pipeline,
 static VkResult
 pipeline_compile_fragment_shader(struct v3dv_pipeline *pipeline,
                                  const VkAllocationCallbacks *pAllocator,
-                                 const VkGraphicsPipelineCreateInfo *pCreateInfo)
+                                 const struct vk_graphics_pipeline_state *state)
 {
    struct v3dv_pipeline_stage *p_stage_vs =
       pipeline->stages[BROADCOM_SHADER_VERTEX];
@@ -1970,7 +1959,7 @@ pipeline_compile_fragment_shader(struct v3dv_pipeline *pipeline,
       pipeline->stages[BROADCOM_SHADER_GEOMETRY];
 
    struct v3d_fs_key key;
-   pipeline_populate_v3d_fs_key(&key, pCreateInfo, &pipeline->rendering_info,
+   pipeline_populate_v3d_fs_key(&key, state, &pipeline->rendering_info,
                                 p_stage_fs, p_stage_gs != NULL,
                                 get_ucp_enable_mask(p_stage_vs));
 
@@ -1990,7 +1979,8 @@ pipeline_compile_fragment_shader(struct v3dv_pipeline *pipeline,
 static void
 pipeline_populate_graphics_key(struct v3dv_pipeline *pipeline,
                                struct v3dv_pipeline_key *key,
-                               const VkGraphicsPipelineCreateInfo *pCreateInfo)
+                               const VkGraphicsPipelineCreateInfo *pCreateInfo,
+                               const struct vk_graphics_pipeline_state *state)
 {
    struct v3dv_device *device = pipeline->device;
    assert(device);
@@ -1999,31 +1989,29 @@ pipeline_populate_graphics_key(struct v3dv_pipeline *pipeline,
 
    key->line_smooth = pipeline->line_smooth;
 
-   const VkPipelineInputAssemblyStateCreateInfo *ia_info =
-      pCreateInfo->pInputAssemblyState;
-   key->topology = vk_topology_to_mesa(ia_info->topology);
+   const struct vk_input_assembly_state *ia = state->ia;
+   assert(ia);
+   key->topology = vk_topology_to_mesa(ia->primitive_topology);
 
-   const VkPipelineColorBlendStateCreateInfo *cb_info =
-      pipeline->rasterization_enabled ? pCreateInfo->pColorBlendState : NULL;
+   const struct vk_color_blend_state *cb_info = state->cb;
 
-   key->logicop_func = cb_info && cb_info->logicOpEnable == VK_TRUE ?
-      vk_to_pipe_logicop[cb_info->logicOp] :
+   key->logicop_func = cb_info && cb_info->logic_op_enable ?
+      vk_to_pipe_logicop[cb_info->logic_op] :
       PIPE_LOGICOP_COPY;
 
    /* Multisample rasterization state must be ignored if rasterization
     * is disabled.
     */
-   const VkPipelineMultisampleStateCreateInfo *ms_info =
-      pipeline->rasterization_enabled ? pCreateInfo->pMultisampleState : NULL;
+   const struct vk_multisample_state *ms_info = state->ms;
    if (ms_info) {
-      assert(ms_info->rasterizationSamples == VK_SAMPLE_COUNT_1_BIT ||
-             ms_info->rasterizationSamples == VK_SAMPLE_COUNT_4_BIT);
-      key->msaa = ms_info->rasterizationSamples > VK_SAMPLE_COUNT_1_BIT;
+      assert(ms_info->rasterization_samples == VK_SAMPLE_COUNT_1_BIT ||
+             ms_info->rasterization_samples == VK_SAMPLE_COUNT_4_BIT);
+      key->msaa = ms_info->rasterization_samples > VK_SAMPLE_COUNT_1_BIT;
 
       if (key->msaa)
-         key->sample_alpha_to_coverage = ms_info->alphaToCoverageEnable;
+         key->sample_alpha_to_coverage = ms_info->alpha_to_coverage_enable;
 
-      key->sample_alpha_to_one = ms_info->alphaToOneEnable;
+      key->sample_alpha_to_one = ms_info->alpha_to_one_enable;
    }
 
    key->software_blend = pipeline->blend.use_software;
@@ -2427,6 +2415,7 @@ pipeline_check_buffer_device_address(struct v3dv_pipeline *pipeline)
 static VkResult
 pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
                           struct v3dv_pipeline_cache *cache,
+                          const struct vk_graphics_pipeline_state *state,
                           const VkGraphicsPipelineCreateInfo *pCreateInfo,
                           const VkAllocationCallbacks *pAllocator)
 {
@@ -2548,7 +2537,7 @@ pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
       pipeline->flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR;
    if (!needs_executable_info) {
       struct v3dv_pipeline_key pipeline_key;
-      pipeline_populate_graphics_key(pipeline, &pipeline_key, pCreateInfo);
+      pipeline_populate_graphics_key(pipeline, &pipeline_key, pCreateInfo, state);
       pipeline_hash_graphics(pipeline, &pipeline_key, pipeline->sha1);
 
       bool cache_hit = false;
@@ -2631,7 +2620,7 @@ pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
    /* We should have got all the variants or no variants from the cache */
    assert(!pipeline->shared_data->variants[BROADCOM_SHADER_FRAGMENT]);
    vk_result = pipeline_compile_fragment_shader(pipeline, pAllocator,
-                                                pCreateInfo);
+                                                state);
    if (vk_result != VK_SUCCESS)
       return vk_result;
 
@@ -2640,7 +2629,7 @@ pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
 
    if (p_stage_gs) {
       vk_result =
-         pipeline_compile_geometry_shader(pipeline, pAllocator, pCreateInfo);
+         pipeline_compile_geometry_shader(pipeline, pAllocator);
       if (vk_result != VK_SUCCESS)
          return vk_result;
    }
@@ -2770,26 +2759,25 @@ v3dv_compute_ez_state(struct vk_dynamic_graphics_state *dyn,
 
 static void
 pipeline_set_sample_mask(struct v3dv_pipeline *pipeline,
-                         const VkPipelineMultisampleStateCreateInfo *ms_info)
+                         const struct vk_multisample_state *ms)
 {
    pipeline->sample_mask = (1 << V3D_MAX_SAMPLES) - 1;
 
    /* Ignore pSampleMask if we are not enabling multisampling. The hardware
     * requires this to be 0xf or 0x0 if using a single sample.
     */
-   if (ms_info && ms_info->pSampleMask &&
-       ms_info->rasterizationSamples > VK_SAMPLE_COUNT_1_BIT) {
-      pipeline->sample_mask &= ms_info->pSampleMask[0];
+   if (ms && ms->rasterization_samples > VK_SAMPLE_COUNT_1_BIT) {
+      pipeline->sample_mask &= ms->sample_mask;
    }
 }
 
 static void
 pipeline_set_sample_rate_shading(struct v3dv_pipeline *pipeline,
-                                 const VkPipelineMultisampleStateCreateInfo *ms_info)
+                                 const struct vk_multisample_state *ms)
 {
    pipeline->sample_rate_shading =
-      ms_info && ms_info->rasterizationSamples > VK_SAMPLE_COUNT_1_BIT &&
-      ms_info->sampleShadingEnable;
+      ms && ms->rasterization_samples > VK_SAMPLE_COUNT_1_BIT &&
+      ms->sample_shading_enable;
 }
 
 static void
@@ -2946,10 +2934,6 @@ pipeline_init(struct v3dv_pipeline *pipeline,
 
    pipeline_setup_rendering_info(device, pipeline, pCreateInfo, pAllocator);
 
-   const VkPipelineInputAssemblyStateCreateInfo *ia_info =
-      pCreateInfo->pInputAssemblyState;
-   pipeline->topology = vk_topology_to_mesa(ia_info->topology);
-
    struct vk_graphics_pipeline_all_state all;
    struct vk_graphics_pipeline_state pipeline_state = { };
    result = pipeline_init_dynamic_state(device, pipeline, &all, &pipeline_state,
@@ -2962,6 +2946,10 @@ pipeline_init(struct v3dv_pipeline *pipeline,
       return result;
    }
 
+   const struct vk_input_assembly_state *ia = pipeline_state.ia;
+   assert(ia);
+   pipeline->topology = vk_topology_to_mesa(ia->primitive_topology);
+
    /* If rasterization is disabled, we just disable it through the CFG_BITS
     * packet, so for building the pipeline we always assume it is enabled
     */
@@ -2971,51 +2959,18 @@ pipeline_init(struct v3dv_pipeline *pipeline,
 
    pipeline->rasterization_enabled = raster_enabled;
 
-   const VkPipelineViewportStateCreateInfo *vp_info =
-      raster_enabled ? pCreateInfo->pViewportState : NULL;
+   if (raster_enabled && pipeline_state.vp)
+      pipeline->negative_one_to_one =
+         pipeline_state.vp->depth_clip_negative_one_to_one;
 
-   const VkPipelineDepthStencilStateCreateInfo *ds_info =
-      raster_enabled ? pCreateInfo->pDepthStencilState : NULL;
+   v3d_X((&device->devinfo), pipeline_pack_state)(pipeline, &pipeline_state);
 
-   const VkPipelineRasterizationStateCreateInfo *rs_info =
-      raster_enabled ? pCreateInfo->pRasterizationState : NULL;
+   pipeline_set_sample_mask(pipeline, pipeline_state.ms);
+   pipeline_set_sample_rate_shading(pipeline, pipeline_state.ms);
+   pipeline->line_smooth = enable_line_smooth(pipeline, pipeline_state.rs);
 
-   const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *pv_info =
-      raster_enabled ? vk_find_struct_const(
-         rs_info->pNext,
-         PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT) :
-            NULL;
-
-   const VkPipelineRasterizationLineStateCreateInfoEXT *ls_info =
-      raster_enabled ? vk_find_struct_const(
-         rs_info->pNext,
-         PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT) :
-            NULL;
-
-   const VkPipelineColorBlendStateCreateInfo *cb_info =
-      raster_enabled ? pCreateInfo->pColorBlendState : NULL;
-
-   const VkPipelineMultisampleStateCreateInfo *ms_info =
-      raster_enabled ? pCreateInfo->pMultisampleState : NULL;
-
-   const VkPipelineViewportDepthClipControlCreateInfoEXT *depth_clip_control =
-      vp_info ? vk_find_struct_const(vp_info->pNext,
-                                     PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT) :
-                NULL;
-
-   if (depth_clip_control)
-      pipeline->negative_one_to_one = depth_clip_control->negativeOneToOne;
-
-   v3d_X((&device->devinfo), pipeline_pack_state)(pipeline, cb_info, ds_info,
-                                       rs_info, pv_info, ls_info,
-                                       ms_info,
-                                       &pipeline_state);
-
-   pipeline_set_sample_mask(pipeline, ms_info);
-   pipeline_set_sample_rate_shading(pipeline, ms_info);
-   pipeline->line_smooth = enable_line_smooth(pipeline, rs_info);
-
-   result = pipeline_compile_graphics(pipeline, cache, pCreateInfo, pAllocator);
+   result = pipeline_compile_graphics(pipeline, cache, &pipeline_state,
+                                      pCreateInfo, pAllocator);
 
    if (result != VK_SUCCESS) {
       /* Caller would already destroy the pipeline, and we didn't allocate any
