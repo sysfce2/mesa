@@ -471,6 +471,9 @@ resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, 
          dst_format = vk_format_no_srgb(dst_format);
       }
 
+      const VkResolveModeFlagBits resolve_mode =
+         vk_format_is_int(src_format) ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT;
+
       switch (resolve_method) {
       case RESOLVE_HW:
          radv_meta_resolve_hardware_image(cmd_buffer, src_image, src_format, src_image_layout, dst_image, dst_format,
@@ -480,14 +483,13 @@ resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, 
          radv_decompress_resolve_src(cmd_buffer, src_image, src_image_layout, region, NULL);
 
          radv_meta_resolve_fragment_image(cmd_buffer, src_image, src_format, src_image_layout, dst_image, dst_format,
-                                          dst_image_layout, region);
+                                          dst_image_layout, resolve_mode, region);
          break;
       case RESOLVE_COMPUTE:
          radv_decompress_resolve_src(cmd_buffer, src_image, src_image_layout, region, NULL);
 
-         radv_compute_resolve_image(
-            cmd_buffer, src_image, src_format, src_image_layout, dst_image, dst_format, dst_image_layout,
-            vk_format_is_int(src_format) ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT, region);
+         radv_compute_resolve_image(cmd_buffer, src_image, src_format, src_image_layout, dst_image, dst_format,
+                                    dst_image_layout, resolve_mode, region);
          break;
       default:
          assert(!"Invalid resolve method selected");
@@ -802,7 +804,7 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRe
                                      VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT, 0, dst_iview->image, &dst_range);
 
             radv_meta_resolve_fragment_image(cmd_buffer, src_iview->image, src_format, src_layout, dst_iview->image,
-                                             dst_format, dst_layout, &region);
+                                             dst_format, dst_layout, att->resolveMode, &region);
 
             cmd_buffer->state.flush_bits |=
                radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,

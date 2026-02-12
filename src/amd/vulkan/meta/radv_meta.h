@@ -301,7 +301,7 @@ void radv_compute_resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_
 void radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
                                       VkFormat src_format, VkImageLayout src_image_layout, struct radv_image *dst_image,
                                       VkFormat dst_format, VkImageLayout dst_image_layout,
-                                      const VkImageResolve2 *region);
+                                      VkResolveModeFlagBits resolve_mode, const VkImageResolve2 *region);
 
 uint32_t radv_clear_cmask(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
                           const VkImageSubresourceRange *range, uint32_t value);

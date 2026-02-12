@@ -194,12 +194,12 @@ struct radv_resolve_color_fs_key {
    enum radv_meta_object_key_type type;
    VkFormat format;
    uint32_t samples;
-   uint32_t fs_key;
+   VkResolveModeFlagBits resolve_mode;
 };
 
 static VkResult
-get_color_resolve_pipeline(struct radv_device *device, VkFormat format, uint8_t samples, VkPipeline *pipeline_out,
-                           VkPipelineLayout *layout_out)
+get_color_resolve_pipeline(struct radv_device *device, VkFormat format, uint8_t samples,
+                           VkResolveModeFlagBits resolve_mode, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
    const bool is_integer = vk_format_is_int(format);
@@ -214,9 +214,7 @@ get_color_resolve_pipeline(struct radv_device *device, VkFormat format, uint8_t 
    key.type = RADV_META_OBJECT_KEY_RESOLVE_COLOR_FS;
    key.format = format;
    key.samples = samples;
-
-   const VkResolveModeFlagBits resolve_mode =
-      is_integer ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT;
+   key.resolve_mode = resolve_mode;
 
    VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
@@ -319,14 +317,15 @@ get_color_resolve_pipeline(struct radv_device *device, VkFormat format, uint8_t 
 void
 radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkFormat src_format,
                                  VkImageLayout src_image_layout, struct radv_image *dst_image, VkFormat dst_format,
-                                 VkImageLayout dst_image_layout, const VkImageResolve2 *region)
+                                 VkImageLayout dst_image_layout, VkResolveModeFlagBits resolve_mode,
+                                 const VkImageResolve2 *region)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    VkPipelineLayout layout;
    VkPipeline pipeline;
    VkResult result;
 
-   result = get_color_resolve_pipeline(device, dst_format, src_image->vk.samples, &pipeline, &layout);
+   result = get_color_resolve_pipeline(device, dst_format, src_image->vk.samples, resolve_mode, &pipeline, &layout);
    if (result != VK_SUCCESS) {
       vk_command_buffer_set_error(&cmd_buffer->vk, result);
       return;
