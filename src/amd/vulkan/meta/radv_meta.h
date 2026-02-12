@@ -296,10 +296,10 @@ void radv_compute_resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_
                                 VkImageLayout dst_image_layout, VkResolveModeFlagBits resolve_mode,
                                 const VkImageResolve2 *region);
 
-void radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
-                                      VkFormat src_format, VkImageLayout src_image_layout, struct radv_image *dst_image,
-                                      VkFormat dst_format, VkImageLayout dst_image_layout,
-                                      VkResolveModeFlagBits resolve_mode, const VkImageResolve2 *region);
+void radv_gfx_resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkFormat src_format,
+                            VkImageLayout src_image_layout, struct radv_image *dst_image, VkFormat dst_format,
+                            VkImageLayout dst_image_layout, VkResolveModeFlagBits resolve_mode,
+                            const VkImageResolve2 *region);
 
 uint32_t radv_clear_cmask(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
                           const VkImageSubresourceRange *range, uint32_t value);
@@ -340,12 +340,6 @@ void radv_cmd_buffer_clear_attachment(struct radv_cmd_buffer *cmd_buffer, const 
 void radv_cmd_buffer_clear_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRenderingInfo *render_info);
 
 void radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRenderingInfo *pRenderingInfo);
-
-void radv_meta_resolve_depth_stencil_fs(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
-                                        VkFormat src_format, VkImageLayout src_image_layout,
-                                        struct radv_image *dst_image, VkFormat dst_format,
-                                        VkImageLayout dst_image_layout, VkResolveModeFlagBits resolve_mode,
-                                        const VkImageResolve2 *region, uint32_t view_mask);
 
 VkResult radv_meta_get_noop_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out);
 
