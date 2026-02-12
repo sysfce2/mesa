@@ -298,7 +298,7 @@ void radv_fmask_copy(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d
 void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
                                      VkFormat src_format, VkImageLayout src_image_layout, struct radv_image *dst_image,
                                      VkFormat dst_format, VkImageLayout dst_image_layout,
-                                     const VkImageResolve2 *region);
+                                     VkResolveModeFlagBits resolve_mode, const VkImageResolve2 *region);
 
 void radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
                                       VkFormat src_format, VkImageLayout src_image_layout, struct radv_image *dst_image,
