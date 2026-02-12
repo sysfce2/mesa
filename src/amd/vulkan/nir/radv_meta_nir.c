@@ -1229,60 +1229,6 @@ radv_meta_resolve_compute_type_name(enum radv_meta_resolve_compute_type type)
    }
 }
 
-nir_shader *
-radv_meta_nir_build_resolve_compute_shader(struct radv_device *dev, bool use_fmask,
-                                           enum radv_meta_resolve_compute_type type, int samples)
-{
-   enum glsl_base_type img_base_type = type == RADV_META_RESOLVE_COMPUTE_INTEGER ? GLSL_TYPE_UINT : GLSL_TYPE_FLOAT;
-   const struct glsl_type *sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, true, img_base_type);
-   const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_2D, true, img_base_type);
-   nir_builder b = radv_meta_nir_init_shader(dev, MESA_SHADER_COMPUTE, "meta_resolve_cs-%d-%s", samples,
-                                             radv_meta_resolve_compute_type_name(type));
-   b.shader->info.workgroup_size[0] = 8;
-   b.shader->info.workgroup_size[1] = 8;
-
-   nir_variable *input_img = nir_variable_create(b.shader, nir_var_uniform, sampler_type, "s_tex");
-   input_img->data.descriptor_set = 0;
-   input_img->data.binding = 0;
-
-   nir_variable *output_img = nir_variable_create(b.shader, nir_var_image, img_type, "out_img");
-   output_img->data.descriptor_set = 0;
-   output_img->data.binding = 1;
-
-   nir_def *global_id = radv_meta_nir_get_global_ids(&b, 3);
-
-   nir_def *src_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
-   nir_def *dst_offset = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 8), .range = 20);
-
-   nir_def *src_coord = nir_iadd(&b, nir_trim_vector(&b, global_id, 2), src_offset);
-   nir_def *dst_coord = nir_iadd(&b, global_id, dst_offset);
-
-   nir_def *src_img_coord =
-      nir_vec3(&b, nir_channel(&b, src_coord, 0), nir_channel(&b, src_coord, 1), nir_channel(&b, global_id, 2));
-
-   nir_variable *color = nir_local_variable_create(b.impl, glsl_vec4_type(), "color");
-
-   VkResolveModeFlagBits resolve_mode =
-      type == RADV_META_RESOLVE_COMPUTE_INTEGER ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT;
-
-   radv_meta_nir_build_resolve_shader_core(&b, use_fmask, samples, VK_IMAGE_ASPECT_COLOR_BIT, resolve_mode, input_img,
-                                           color, src_img_coord);
-
-   nir_def *outval = nir_load_var(&b, color);
-   if (type == RADV_META_RESOLVE_COMPUTE_NORM_SRGB)
-      outval = radv_meta_build_resolve_srgb_conversion(&b, outval);
-
-   if (type == RADV_META_RESOLVE_COMPUTE_NORM || type == RADV_META_RESOLVE_COMPUTE_NORM_SRGB)
-      outval = nir_f2f32(&b, nir_f2f16_rtz(&b, outval));
-
-   nir_def *dst_img_coord = nir_vec4(&b, nir_channel(&b, dst_coord, 0), nir_channel(&b, dst_coord, 1),
-                                     nir_channel(&b, dst_coord, 2), nir_undef(&b, 1, 32));
-
-   nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, dst_img_coord, nir_undef(&b, 1, 32), outval,
-                         nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_2D, .image_array = true);
-   return b.shader;
-}
-
 static const char *
 get_resolve_mode_str(VkResolveModeFlagBits resolve_mode)
 {
@@ -1301,16 +1247,18 @@ get_resolve_mode_str(VkResolveModeFlagBits resolve_mode)
 }
 
 nir_shader *
-radv_meta_nir_build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
-                                                         VkImageAspectFlags aspects, VkResolveModeFlagBits resolve_mode)
+radv_meta_nir_build_resolve_cs(struct radv_device *dev, bool use_fmask, enum radv_meta_resolve_compute_type type,
+                               int samples, VkImageAspectFlags aspects, VkResolveModeFlagBits resolve_mode)
 {
-   enum glsl_base_type img_base_type = aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? GLSL_TYPE_FLOAT : GLSL_TYPE_UINT;
+   enum glsl_base_type img_base_type =
+      (aspects == VK_IMAGE_ASPECT_COLOR_BIT && type == RADV_META_RESOLVE_COMPUTE_INTEGER) ||
+            aspects == VK_IMAGE_ASPECT_STENCIL_BIT
+         ? GLSL_TYPE_UINT
+         : GLSL_TYPE_FLOAT;
    const struct glsl_type *sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, true, img_base_type);
    const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_2D, true, img_base_type);
 
-   nir_builder b = radv_meta_nir_init_shader(dev, MESA_SHADER_COMPUTE, "meta_resolve_cs_%s-%s-%d",
-                                             aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? "depth" : "stencil",
-                                             get_resolve_mode_str(resolve_mode), samples);
+   nir_builder b = radv_meta_nir_init_shader(dev, MESA_SHADER_COMPUTE, "meta_resolve_cs");
    b.shader->info.workgroup_size[0] = 8;
    b.shader->info.workgroup_size[1] = 8;
 
@@ -1337,6 +1285,14 @@ radv_meta_nir_build_depth_stencil_resolve_compute_shader(struct radv_device *dev
    radv_meta_nir_build_resolve_shader_core(&b, false, samples, aspects, resolve_mode, input_img, output_var,
                                            src_img_coord);
    nir_def *outval = nir_load_var(&b, output_var);
+
+   if (aspects == VK_IMAGE_ASPECT_COLOR_BIT) {
+      if (type == RADV_META_RESOLVE_COMPUTE_NORM_SRGB)
+         outval = radv_meta_build_resolve_srgb_conversion(&b, outval);
+
+      if (type == RADV_META_RESOLVE_COMPUTE_NORM || type == RADV_META_RESOLVE_COMPUTE_NORM_SRGB)
+         outval = nir_f2f32(&b, nir_f2f16_rtz(&b, outval));
+   }
 
    nir_def *coord = nir_vec4(&b, nir_channel(&b, dst_coord, 0), nir_channel(&b, dst_coord, 1),
                              nir_channel(&b, dst_coord, 2), nir_undef(&b, 1, 32));

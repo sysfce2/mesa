@@ -105,7 +105,10 @@ get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *s
       return VK_SUCCESS;
    }
 
-   nir_shader *cs = radv_meta_nir_build_resolve_compute_shader(device, pdev->use_fmask, type, samples);
+   const VkResolveModeFlagBits resolve_mode =
+      type == RADV_META_RESOLVE_COMPUTE_INTEGER ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT;
+   nir_shader *cs =
+      radv_meta_nir_build_resolve_cs(device, pdev->use_fmask, type, samples, VK_IMAGE_ASPECT_COLOR_BIT, resolve_mode);
 
    const VkPipelineShaderStageCreateInfo stage_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -206,7 +209,7 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
       return VK_SUCCESS;
    }
 
-   nir_shader *cs = radv_meta_nir_build_depth_stencil_resolve_compute_shader(device, samples, aspects, resolve_mode);
+   nir_shader *cs = radv_meta_nir_build_resolve_cs(device, false, 0, samples, aspects, resolve_mode);
 
    const VkPipelineShaderStageCreateInfo stage_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
