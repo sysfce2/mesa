@@ -513,9 +513,11 @@ dri3_handle_present_event(struct loader_dri3_drawable *draw,
          /* Only assume wraparound if that results in exactly the previous
           * SBC + 1, otherwise ignore received SBC > sent SBC (those are
           * probably from a previous loader_dri3_drawable instance) to avoid
-          * calculating bogus target MSC values in loader_dri3_swap_buffers_msc
+          * calculating bogus target MSC values in loader_dri3_swap_buffers_msc.
+          * Since events can be received out of order, don't let recv_sbc go
+          * back unless for wraparound.
           */
-         if (recv_sbc <= draw->send_sbc)
+         if (recv_sbc <= draw->send_sbc && draw->recv_sbc <= recv_sbc)
             draw->recv_sbc = recv_sbc;
          else if (recv_sbc == (draw->recv_sbc + 0x100000001ULL))
             draw->recv_sbc = recv_sbc - 0x100000000ULL;
