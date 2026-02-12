@@ -198,12 +198,10 @@ struct radv_resolve_color_fs_key {
 };
 
 static VkResult
-get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *src_iview,
-                           struct radv_image_view *dst_iview, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
+get_color_resolve_pipeline(struct radv_device *device, VkFormat format, uint8_t samples, VkPipeline *pipeline_out,
+                           VkPipelineLayout *layout_out)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const uint32_t samples = src_iview->image->vk.samples;
-   VkFormat format = dst_iview->vk.format;
    const bool is_integer = vk_format_is_int(format);
    struct radv_resolve_color_fs_key key;
    VkResult result;
@@ -318,54 +316,21 @@ get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *s
    return result;
 }
 
-static void
-emit_resolve(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_iview, struct radv_image_view *dst_iview,
-             const VkOffset2D *src_offset, const VkOffset2D *dst_offset)
-{
-   struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
-   VkCommandBuffer cmd_buffer_h = radv_cmd_buffer_to_handle(cmd_buffer);
-   VkPipelineLayout layout;
-   VkPipeline pipeline;
-   VkResult result;
-
-   result = get_color_resolve_pipeline(device, src_iview, dst_iview, &pipeline, &layout);
-   if (result != VK_SUCCESS) {
-      vk_command_buffer_set_error(&cmd_buffer->vk, result);
-      return;
-   }
-
-   radv_meta_bind_descriptors(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 1,
-                              (VkDescriptorGetInfoEXT[]){
-                                 {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-                                  .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                                  .data.pSampledImage =
-                                     (VkDescriptorImageInfo[]){
-                                        {
-                                           .sampler = VK_NULL_HANDLE,
-                                           .imageView = radv_image_view_to_handle(src_iview),
-                                           .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-                                        },
-                                     }},
-                              });
-
-   unsigned push_constants[2] = {
-      src_offset->x - dst_offset->x,
-      src_offset->y - dst_offset->y,
-   };
-
-   radv_meta_push_constants(cmd_buffer, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 8, push_constants);
-
-   radv_meta_bind_graphics_pipeline(cmd_buffer, pipeline);
-
-   radv_CmdDraw(cmd_buffer_h, 3, 1, 0, 0);
-}
-
 void
 radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkFormat src_format,
                                  VkImageLayout src_image_layout, struct radv_image *dst_image, VkFormat dst_format,
                                  VkImageLayout dst_image_layout, const VkImageResolve2 *region)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+   VkPipelineLayout layout;
+   VkPipeline pipeline;
+   VkResult result;
+
+   result = get_color_resolve_pipeline(device, dst_format, src_image->vk.samples, &pipeline, &layout);
+   if (result != VK_SUCCESS) {
+      vk_command_buffer_set_error(&cmd_buffer->vk, result);
+      return;
+   }
 
    assert(region->srcSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
    assert(region->dstSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
@@ -454,8 +419,29 @@ radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer, struct radv
 
    radv_CmdBeginRendering(radv_cmd_buffer_to_handle(cmd_buffer), &rendering_info);
 
-   emit_resolve(cmd_buffer, &src_iview, &dst_iview, &(VkOffset2D){srcOffset.x, srcOffset.y},
-                &(VkOffset2D){dstOffset.x, dstOffset.y});
+   radv_meta_bind_descriptors(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 1,
+                              (VkDescriptorGetInfoEXT[]){
+                                 {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                                  .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                  .data.pSampledImage =
+                                     (VkDescriptorImageInfo[]){
+                                        {
+                                           .sampler = VK_NULL_HANDLE,
+                                           .imageView = radv_image_view_to_handle(&src_iview),
+                                           .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+                                        },
+                                     }},
+                              });
+   const uint32_t push_constants[2] = {
+      srcOffset.x - dstOffset.x,
+      srcOffset.y - dstOffset.y,
+   };
+
+   radv_meta_push_constants(cmd_buffer, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 8, push_constants);
+
+   radv_meta_bind_graphics_pipeline(cmd_buffer, pipeline);
+
+   radv_CmdDraw(radv_cmd_buffer_to_handle(cmd_buffer), 3, 1, 0, 0);
 
    const VkRenderingEndInfoKHR end_info = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_END_INFO_KHR,
