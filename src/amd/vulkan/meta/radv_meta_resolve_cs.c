@@ -487,7 +487,9 @@ radv_meta_resolve_depth_stencil_cs(struct radv_cmd_buffer *cmd_buffer, struct ra
 
    radv_meta_bind_compute_pipeline(cmd_buffer, pipeline);
 
-   const uint32_t push_constants[2] = {region->srcOffset.x, region->srcOffset.y};
+   const uint32_t push_constants[5] = {
+      region->srcOffset.x, region->srcOffset.y, region->dstOffset.x, region->dstOffset.y, region->dstOffset.z,
+   };
 
    radv_meta_push_constants(cmd_buffer, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_constants), push_constants);
 
