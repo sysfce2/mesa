@@ -69,8 +69,7 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
       return VK_SUCCESS;
    }
 
-   nir_shader *fs_module =
-      radv_meta_nir_build_depth_stencil_resolve_fragment_shader(device, samples, aspects, resolve_mode);
+   nir_shader *fs_module = radv_meta_nir_build_resolve_fs(device, false, samples, false, aspects, resolve_mode);
    nir_shader *vs_module = radv_meta_nir_build_vs_generate_vertices(device);
 
    const VkStencilOp stencil_op = aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? VK_STENCIL_OP_KEEP : VK_STENCIL_OP_REPLACE;
@@ -218,6 +217,9 @@ get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *s
    key.format = format;
    key.samples = samples;
 
+   const VkResolveModeFlagBits resolve_mode =
+      is_integer ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT;
+
    VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
@@ -225,7 +227,8 @@ get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *s
    }
 
    nir_shader *vs_module = radv_meta_nir_build_vs_generate_vertices(device);
-   nir_shader *fs_module = radv_meta_nir_build_resolve_fragment_shader(device, pdev->use_fmask, is_integer, samples);
+   nir_shader *fs_module = radv_meta_nir_build_resolve_fs(device, pdev->use_fmask, samples, is_integer,
+                                                          VK_IMAGE_ASPECT_COLOR_BIT, resolve_mode);
 
    const VkGraphicsPipelineCreateInfo pipeline_create_info = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,

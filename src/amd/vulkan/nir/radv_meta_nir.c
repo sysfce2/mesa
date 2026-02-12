@@ -1302,59 +1302,41 @@ radv_meta_nir_build_resolve_cs(struct radv_device *dev, bool use_fmask, enum rad
 }
 
 nir_shader *
-radv_meta_nir_build_resolve_fragment_shader(struct radv_device *dev, bool use_fmask, bool is_integer, int samples)
+radv_meta_nir_build_resolve_fs(struct radv_device *dev, bool use_fmask, int samples, bool is_integer,
+                               VkImageAspectFlags aspects, VkResolveModeFlagBits resolve_mode)
 {
-   enum glsl_base_type img_base_type = is_integer ? GLSL_TYPE_UINT : GLSL_TYPE_FLOAT;
+   enum glsl_base_type img_base_type =
+      (aspects == VK_IMAGE_ASPECT_COLOR_BIT && is_integer) || aspects == VK_IMAGE_ASPECT_STENCIL_BIT ? GLSL_TYPE_UINT
+                                                                                                     : GLSL_TYPE_FLOAT;
    const struct glsl_type *vec4 = glsl_vec4_type();
    const struct glsl_type *sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, false, img_base_type);
 
-   nir_builder b = radv_meta_nir_init_shader(dev, MESA_SHADER_FRAGMENT, "meta_resolve_fs-%d-%s", samples,
-                                             is_integer ? "int" : "float");
+   nir_builder b = radv_meta_nir_init_shader(dev, MESA_SHADER_FRAGMENT, "meta_resolve_fs");
 
-   nir_variable *input_img = nir_variable_create(b.shader, nir_var_uniform, sampler_type, "s_tex");
-   input_img->data.descriptor_set = 0;
-   input_img->data.binding = 0;
-
-   nir_variable *color_out = nir_variable_create(b.shader, nir_var_shader_out, vec4, "f_color");
-   color_out->data.location = FRAG_RESULT_DATA0;
-
-   nir_def *pos_in = nir_trim_vector(&b, nir_load_frag_coord(&b), 2);
-   nir_def *src_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
-
-   nir_def *pos_int = nir_f2i32(&b, pos_in);
-
-   nir_def *img_coord = nir_trim_vector(&b, nir_iadd(&b, pos_int, src_offset), 2);
-   nir_variable *color = nir_local_variable_create(b.impl, glsl_vec4_type(), "color");
-
-   VkResolveModeFlagBits resolve_mode = is_integer ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT;
-
-   radv_meta_nir_build_resolve_shader_core(&b, use_fmask, samples, VK_IMAGE_ASPECT_COLOR_BIT, resolve_mode, input_img,
-                                           color, img_coord);
-
-   nir_def *outval = nir_load_var(&b, color);
-   nir_store_var(&b, color_out, outval, 0xf);
-   return b.shader;
-}
-
-nir_shader *
-radv_meta_nir_build_depth_stencil_resolve_fragment_shader(struct radv_device *dev, int samples,
-                                                          VkImageAspectFlags aspects,
-                                                          VkResolveModeFlagBits resolve_mode)
-{
-   enum glsl_base_type img_base_type = aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? GLSL_TYPE_FLOAT : GLSL_TYPE_UINT;
-   const struct glsl_type *vec4 = glsl_vec4_type();
-   const struct glsl_type *sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, false, img_base_type);
-
-   nir_builder b = radv_meta_nir_init_shader(dev, MESA_SHADER_FRAGMENT, "meta_resolve_fs_%s-%s-%d",
-                                             aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? "depth" : "stencil",
-                                             get_resolve_mode_str(resolve_mode), samples);
+   uint32_t location, writemask;
+   switch (aspects) {
+   case VK_IMAGE_ASPECT_COLOR_BIT:
+      location = FRAG_RESULT_DATA0;
+      writemask = 0xf;
+      break;
+   case VK_IMAGE_ASPECT_DEPTH_BIT:
+      location = FRAG_RESULT_DEPTH;
+      writemask = 0x1;
+      break;
+   case VK_IMAGE_ASPECT_STENCIL_BIT:
+      location = FRAG_RESULT_STENCIL;
+      writemask = 0x1;
+      break;
+   default:
+      UNREACHABLE("Unhandled aspect");
+   }
 
    nir_variable *input_img = nir_variable_create(b.shader, nir_var_uniform, sampler_type, "s_tex");
    input_img->data.descriptor_set = 0;
    input_img->data.binding = 0;
 
    nir_variable *fs_out = nir_variable_create(b.shader, nir_var_shader_out, vec4, "f_out");
-   fs_out->data.location = aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? FRAG_RESULT_DEPTH : FRAG_RESULT_STENCIL;
+   fs_out->data.location = location;
 
    nir_def *pos_in = nir_trim_vector(&b, nir_load_frag_coord(&b), 2);
    nir_def *src_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
@@ -1364,21 +1346,22 @@ radv_meta_nir_build_depth_stencil_resolve_fragment_shader(struct radv_device *de
    nir_def *img_coord = nir_trim_vector(&b, nir_iadd(&b, pos_int, src_offset), 2);
 
    nir_variable *output_var = nir_local_variable_create(b.impl, glsl_vec4_type(), "output_var");
-   radv_meta_nir_build_resolve_shader_core(&b, false, samples, aspects, resolve_mode, input_img, output_var, img_coord);
+   radv_meta_nir_build_resolve_shader_core(&b, use_fmask, samples, aspects, resolve_mode, input_img, output_var,
+                                           img_coord);
    nir_def *outval = nir_load_var(&b, output_var);
 
-   nir_store_var(&b, fs_out, outval, 0x1);
+   nir_store_var(&b, fs_out, outval, writemask);
 
    return b.shader;
 }
 
 nir_shader *
-radv_meta_nir_build_resolve_fs(struct radv_device *dev)
+radv_meta_nir_build_resolve_hw(struct radv_device *dev)
 {
    const struct glsl_type *vec4 = glsl_vec4_type();
    nir_variable *f_color;
 
-   nir_builder b = radv_meta_nir_init_shader(dev, MESA_SHADER_FRAGMENT, "meta_resolve_fs");
+   nir_builder b = radv_meta_nir_init_shader(dev, MESA_SHADER_FRAGMENT, "meta_resolve_hw");
 
    f_color = nir_variable_create(b.shader, nir_var_shader_out, vec4, "f_color");
    f_color->data.location = FRAG_RESULT_DATA0;

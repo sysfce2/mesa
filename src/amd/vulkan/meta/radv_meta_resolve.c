@@ -39,7 +39,7 @@ get_pipeline(struct radv_device *device, VkFormat format, VkPipeline *pipeline_o
    }
 
    nir_shader *vs_module = radv_meta_nir_build_vs_generate_vertices(device);
-   nir_shader *fs_module = radv_meta_nir_build_resolve_fs(device);
+   nir_shader *fs_module = radv_meta_nir_build_resolve_hw(device);
 
    const VkGraphicsPipelineCreateInfoRADV radv_info = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO_RADV,
