@@ -293,10 +293,10 @@ bool radv_can_use_fmask_copy(struct radv_cmd_buffer *cmd_buffer, const struct ra
 void radv_fmask_copy(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *src,
                      struct radv_meta_blit2d_surf *dst);
 
-void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
-                                     VkFormat src_format, VkImageLayout src_image_layout, struct radv_image *dst_image,
-                                     VkFormat dst_format, VkImageLayout dst_image_layout,
-                                     VkResolveModeFlagBits resolve_mode, const VkImageResolve2 *region);
+void radv_compute_resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkFormat src_format,
+                                VkImageLayout src_image_layout, struct radv_image *dst_image, VkFormat dst_format,
+                                VkImageLayout dst_image_layout, VkResolveModeFlagBits resolve_mode,
+                                const VkImageResolve2 *region);
 
 void radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
                                       VkFormat src_format, VkImageLayout src_image_layout, struct radv_image *dst_image,
@@ -342,12 +342,6 @@ void radv_cmd_buffer_clear_attachment(struct radv_cmd_buffer *cmd_buffer, const 
 void radv_cmd_buffer_clear_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRenderingInfo *render_info);
 
 void radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRenderingInfo *pRenderingInfo);
-
-void radv_meta_resolve_depth_stencil_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
-                                        VkFormat src_format, VkImageLayout src_image_layout,
-                                        struct radv_image *dst_image, VkFormat dst_format,
-                                        VkImageLayout dst_image_layout, VkResolveModeFlagBits resolve_mode,
-                                        const VkImageResolve2 *region);
 
 void radv_meta_resolve_depth_stencil_fs(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
                                         VkFormat src_format, VkImageLayout src_image_layout,

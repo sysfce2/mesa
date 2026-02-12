@@ -437,9 +437,9 @@ resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, 
                                                &depth_region, 0);
          } else {
             assert(resolve_method == RESOLVE_COMPUTE);
-            radv_meta_resolve_depth_stencil_cs(cmd_buffer, src_image, src_image->vk.format, src_image_layout, dst_image,
-                                               dst_image->vk.format, dst_image_layout, resolve_mode_info->resolveMode,
-                                               &depth_region);
+            radv_compute_resolve_image(cmd_buffer, src_image, src_image->vk.format, src_image_layout, dst_image,
+                                       dst_image->vk.format, dst_image_layout, resolve_mode_info->resolveMode,
+                                       &depth_region);
          }
       }
 
@@ -457,9 +457,9 @@ resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, 
                                                resolve_mode_info->stencilResolveMode, &stencil_region, 0);
          } else {
             assert(resolve_method == RESOLVE_COMPUTE);
-            radv_meta_resolve_depth_stencil_cs(cmd_buffer, src_image, src_image->vk.format, src_image_layout, dst_image,
-                                               dst_image->vk.format, dst_image_layout,
-                                               resolve_mode_info->stencilResolveMode, &stencil_region);
+            radv_compute_resolve_image(cmd_buffer, src_image, src_image->vk.format, src_image_layout, dst_image,
+                                       dst_image->vk.format, dst_image_layout, resolve_mode_info->stencilResolveMode,
+                                       &stencil_region);
          }
       }
    } else {
@@ -485,7 +485,7 @@ resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, 
       case RESOLVE_COMPUTE:
          radv_decompress_resolve_src(cmd_buffer, src_image, src_image_layout, region, NULL);
 
-         radv_meta_resolve_compute_image(
+         radv_compute_resolve_image(
             cmd_buffer, src_image, src_format, src_image_layout, dst_image, dst_format, dst_image_layout,
             vk_format_is_int(src_format) ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT, region);
          break;
@@ -651,9 +651,9 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRe
                                                pRenderingInfo->viewMask);
          } else {
             assert(resolve_method == RESOLVE_COMPUTE);
-            radv_meta_resolve_depth_stencil_cs(cmd_buffer, src_iview->image, src_iview->vk.format,
-                                               depth_att->imageLayout, dst_iview->image, dst_iview->vk.format,
-                                               depth_att->resolveImageLayout, depth_att->resolveMode, &depth_region);
+            radv_compute_resolve_image(cmd_buffer, src_iview->image, src_iview->vk.format, depth_att->imageLayout,
+                                       dst_iview->image, dst_iview->vk.format, depth_att->resolveImageLayout,
+                                       depth_att->resolveMode, &depth_region);
 
             cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_VCACHE |
                                             radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -677,9 +677,9 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRe
                                                &stencil_region, pRenderingInfo->viewMask);
          } else {
             assert(resolve_method == RESOLVE_COMPUTE);
-            radv_meta_resolve_depth_stencil_cs(
-               cmd_buffer, src_iview->image, src_iview->vk.format, stencil_att->imageLayout, dst_iview->image,
-               dst_iview->vk.format, stencil_att->resolveImageLayout, stencil_att->resolveMode, &stencil_region);
+            radv_compute_resolve_image(cmd_buffer, src_iview->image, src_iview->vk.format, stencil_att->imageLayout,
+                                       dst_iview->image, dst_iview->vk.format, stencil_att->resolveImageLayout,
+                                       stencil_att->resolveMode, &stencil_region);
 
             cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_VCACHE |
                                             radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -769,8 +769,8 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRe
          case RESOLVE_COMPUTE:
             radv_decompress_resolve_src(cmd_buffer, src_iview->image, src_layout, &region, NULL);
 
-            radv_meta_resolve_compute_image(cmd_buffer, src_iview->image, src_format, src_layout, dst_iview->image,
-                                            dst_format, dst_layout, att->resolveMode, &region);
+            radv_compute_resolve_image(cmd_buffer, src_iview->image, src_format, src_layout, dst_iview->image,
+                                       dst_format, dst_layout, att->resolveMode, &region);
 
             cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_VCACHE |
                                             radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
