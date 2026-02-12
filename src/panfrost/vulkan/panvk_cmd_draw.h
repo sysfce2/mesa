@@ -72,6 +72,7 @@ struct panvk_rendering_state {
    struct {
       struct pan_fb_layout layout;
       struct pan_fb_load load;
+      struct pan_fb_resolve resolve;
       struct pan_fb_store store;
       struct {
          struct pan_fb_load load;

@@ -1308,7 +1308,8 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
    };
 
    VkResult result = panvk_per_arch(cmd_get_frame_shaders)(
-      cmdbuf, fbd_info.fb, fbd_info.load, NULL, &fbd_info.frame_shaders);
+      cmdbuf, fbd_info.fb, fbd_info.load, &render->fb.resolve,
+      &fbd_info.frame_shaders);
    if (result != VK_SUCCESS)
       return result;
 
@@ -1348,7 +1349,9 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
                        &render->fb.store : &render->fb.spill.store;
 
       VkResult result = panvk_per_arch(cmd_get_frame_shaders)(
-         cmdbuf, fbd_info.fb, fbd_info.load, NULL, &fbd_info.frame_shaders);
+         cmdbuf, fbd_info.fb, fbd_info.load,
+         ir_pass == PANVK_IR_LAST_PASS ? &render->fb.resolve : NULL,
+         &fbd_info.frame_shaders);
       if (result != VK_SUCCESS)
          return result;
 

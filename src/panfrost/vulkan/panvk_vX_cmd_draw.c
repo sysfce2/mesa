@@ -45,6 +45,18 @@ get_att_fb_load_op(const VkRenderingAttachmentInfo *att)
    }
 }
 
+static enum pan_fb_msaa_copy_op
+vk_to_pan_fb_resolve_mode(VkResolveModeFlagBits resolveMode)
+{
+   switch (resolveMode) {
+   case VK_RESOLVE_MODE_SAMPLE_ZERO_BIT:  return PAN_FB_MSAA_COPY_SAMPLE_0;
+   case VK_RESOLVE_MODE_AVERAGE_BIT:      return PAN_FB_MSAA_COPY_AVERAGE;
+   case VK_RESOLVE_MODE_MIN_BIT:          return PAN_FB_MSAA_COPY_MIN;
+   case VK_RESOLVE_MODE_MAX_BIT:          return PAN_FB_MSAA_COPY_MAX;
+   default: UNREACHABLE("Unsupported resolveMode");
+   }
+}
+
 static struct panvk_image_view *
 get_ms2ss_image_view(struct panvk_image_view *iview, uint32_t nr_samples)
 {
@@ -163,9 +175,25 @@ render_state_set_color_attachment(struct panvk_cmd_buffer *cmdbuf,
       assert(resolve.dst_iview != NULL);
       assert(resolve.dst_iview->pview.nr_samples == 1);
 
-      /* We need to store so we can do the MSAA resolve later */
-      render->fb.store.rts[index] = pan_fb_store_iview(&iview->pview);
-      render->color_attachments.resolve[index] = resolve;
+      if (ms2ss || att->storeOp != VK_ATTACHMENT_STORE_OP_STORE) {
+         render->fb.resolve.rts[index] = (struct pan_fb_resolve_target) {
+            .in_bounds = {
+               .resolve = PAN_FB_RESOLVE_RT(index),
+               .msaa = vk_to_pan_fb_resolve_mode(att->resolveMode),
+            },
+            .border = {
+               .resolve = PAN_FB_RESOLVE_IMAGE,
+               .msaa = PAN_FB_MSAA_COPY_SINGLE,
+            },
+            .iview = &resolve.dst_iview->pview,
+         };
+         render->fb.store.rts[index] =
+            pan_fb_always_store_iview_s0(&resolve.dst_iview->pview);
+      } else {
+         /* We need to store so we can do the MSAA resolve later */
+         render->fb.store.rts[index] = pan_fb_store_iview(&iview->pview);
+         render->color_attachments.resolve[index] = resolve;
+      }
    }
 }
 
