@@ -776,12 +776,39 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRe
                                             radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                                                                   VK_ACCESS_2_SHADER_WRITE_BIT, 0, NULL, NULL);
             break;
-         case RESOLVE_FRAGMENT:
+         case RESOLVE_FRAGMENT: {
             radv_decompress_resolve_src(cmd_buffer, src_iview->image, src_layout, &region, NULL);
+
+            const VkImageSubresourceRange src_range = {
+               .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+               .baseMipLevel = 0,
+               .levelCount = 1,
+               .baseArrayLayer = 0,
+               .layerCount = 1,
+            };
+
+            const VkImageSubresourceRange dst_range = {
+               .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+               .baseMipLevel = region.dstSubresource.mipLevel,
+               .levelCount = 1,
+               .baseArrayLayer = 0,
+               .layerCount = 1,
+            };
+
+            cmd_buffer->state.flush_bits |=
+               radv_dst_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_SHADER_READ_BIT, 0,
+                                     src_iview->image, &src_range) |
+               radv_dst_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                     VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT, 0, dst_iview->image, &dst_range);
 
             radv_meta_resolve_fragment_image(cmd_buffer, src_iview->image, src_format, src_layout, dst_iview->image,
                                              dst_format, dst_layout, &region);
+
+            cmd_buffer->state.flush_bits |=
+               radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                     VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, 0, dst_iview->image, &dst_range);
             break;
+         }
          default:
             UNREACHABLE("Invalid resolve method");
          }
