@@ -1055,6 +1055,7 @@ tu6_emit_vpc(struct tu_cs *cs,
          crb.add(PC_HS_CNTL(CHIP,
             .primitive_id = primid,
          ));
+         break;
       case MESA_SHADER_TESS_EVAL:
          crb.add(PC_DS_CNTL(CHIP,
             .stride_in_vpc = COND(last, linkage.max_loc),
