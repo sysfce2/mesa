@@ -429,7 +429,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Tool to trigger a subset of container jobs "
         + "and monitor the progress of a test job",
-        epilog="Example: mesa-monitor.py --rev $(git rev-parse HEAD) "
+        epilog="Example: %(prog)s --rev $(git rev-parse HEAD) "
         + '--target ".*traces" ',
     )
     parser.add_argument(
