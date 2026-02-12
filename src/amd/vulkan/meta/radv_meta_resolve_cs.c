@@ -39,7 +39,7 @@ radv_meta_get_resolve_compute_type(VkFormat format)
 }
 
 static VkResult
-create_layout(struct radv_device *device, VkPipelineLayout *layout_out)
+get_compute_resolve_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
    enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_RESOLVE_CS;
 
@@ -74,88 +74,34 @@ create_layout(struct radv_device *device, VkPipelineLayout *layout_out)
                                       layout_out);
 }
 
-struct radv_resolve_color_cs_key {
+struct radv_compute_resolve_key {
    enum radv_meta_object_key_type type;
    enum radv_meta_resolve_compute_type resolve_type;
-   uint8_t samples;
-   VkResolveModeFlagBits resolve_mode;
-};
-
-static VkResult
-get_color_resolve_pipeline(struct radv_device *device, VkFormat format, uint8_t samples,
-                           VkResolveModeFlagBits resolve_mode, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
-{
-   const struct radv_physical_device *pdev = radv_device_physical(device);
-   const enum radv_meta_resolve_compute_type type = radv_meta_get_resolve_compute_type(format);
-   struct radv_resolve_color_cs_key key;
-   VkResult result;
-
-   result = create_layout(device, layout_out);
-   if (result != VK_SUCCESS)
-      return result;
-
-   memset(&key, 0, sizeof(key));
-   key.type = RADV_META_OBJECT_KEY_RESOLVE_COLOR_CS;
-   key.resolve_type = type;
-   key.samples = samples;
-   key.resolve_mode = resolve_mode;
-
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
-   if (pipeline_from_cache != VK_NULL_HANDLE) {
-      *pipeline_out = pipeline_from_cache;
-      return VK_SUCCESS;
-   }
-
-   nir_shader *cs =
-      radv_meta_nir_build_resolve_cs(device, pdev->use_fmask, type, samples, VK_IMAGE_ASPECT_COLOR_BIT, resolve_mode);
-
-   const VkPipelineShaderStageCreateInfo stage_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-      .module = vk_shader_module_handle_from_nir(cs),
-      .pName = "main",
-      .pSpecializationInfo = NULL,
-   };
-
-   const VkComputePipelineCreateInfo pipeline_info = {
-      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-      .stage = stage_info,
-      .flags = 0,
-      .layout = *layout_out,
-   };
-
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
-                                            pipeline_out);
-
-   ralloc_free(cs);
-   return result;
-}
-
-struct radv_resolve_ds_cs_key {
-   enum radv_meta_object_key_type type;
    VkImageAspectFlags aspects;
    uint8_t samples;
    VkResolveModeFlagBits resolve_mode;
 };
 
 static VkResult
-get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkImageAspectFlags aspects,
-                                   VkResolveModeFlagBits resolve_mode, VkPipeline *pipeline_out,
-                                   VkPipelineLayout *layout_out)
-
+get_compute_resolve_pipeline(struct radv_device *device, VkFormat format, int samples, VkImageAspectFlags aspects,
+                             VkResolveModeFlagBits resolve_mode, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   struct radv_resolve_ds_cs_key key;
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+   struct radv_compute_resolve_key key;
    VkResult result;
 
-   result = create_layout(device, layout_out);
+   result = get_compute_resolve_pipeline_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
    memset(&key, 0, sizeof(key));
-   key.type = RADV_META_OBJECT_KEY_RESOLVE_DS_CS;
+   key.type = RADV_META_OBJECT_KEY_RESOLVE_CS;
    key.aspects = aspects;
    key.samples = samples;
    key.resolve_mode = resolve_mode;
+
+   if (aspects == VK_IMAGE_ASPECT_COLOR_BIT)
+      key.resolve_type = radv_meta_get_resolve_compute_type(format);
 
    VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
@@ -163,7 +109,8 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
       return VK_SUCCESS;
    }
 
-   nir_shader *cs = radv_meta_nir_build_resolve_cs(device, false, 0, samples, aspects, resolve_mode);
+   nir_shader *cs = radv_meta_nir_build_resolve_cs(device, pdev->use_fmask, key.resolve_type, key.samples, key.aspects,
+                                                   key.resolve_mode);
 
    const VkPipelineShaderStageCreateInfo stage_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -268,7 +215,8 @@ radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer, struct radv_
    VkPipeline pipeline;
    VkResult result;
 
-   result = get_color_resolve_pipeline(device, src_format, src_image->vk.samples, resolve_mode, &pipeline, &layout);
+   result = get_compute_resolve_pipeline(device, src_format, src_image->vk.samples, region->srcSubresource.aspectMask,
+                                         resolve_mode, &pipeline, &layout);
    if (result != VK_SUCCESS) {
       vk_command_buffer_set_error(&cmd_buffer->vk, result);
       return;
@@ -388,8 +336,8 @@ radv_meta_resolve_depth_stencil_cs(struct radv_cmd_buffer *cmd_buffer, struct ra
    VkPipeline pipeline;
    VkResult result;
 
-   result = get_depth_stencil_resolve_pipeline(device, src_image->vk.samples, region->srcSubresource.aspectMask,
-                                               resolve_mode, &pipeline, &layout);
+   result = get_compute_resolve_pipeline(device, src_format, src_image->vk.samples, region->srcSubresource.aspectMask,
+                                         resolve_mode, &pipeline, &layout);
    if (result != VK_SUCCESS) {
       vk_command_buffer_set_error(&cmd_buffer->vk, result);
       return;
