@@ -1276,15 +1276,14 @@ get_resolve_mode_str(VkResolveModeFlagBits resolve_mode)
 
 nir_shader *
 radv_meta_nir_build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
-                                                         enum radv_meta_resolve_type index,
-                                                         VkResolveModeFlagBits resolve_mode)
+                                                         VkImageAspectFlags aspects, VkResolveModeFlagBits resolve_mode)
 {
-   enum glsl_base_type img_base_type = index == RADV_META_DEPTH_RESOLVE ? GLSL_TYPE_FLOAT : GLSL_TYPE_UINT;
+   enum glsl_base_type img_base_type = aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? GLSL_TYPE_FLOAT : GLSL_TYPE_UINT;
    const struct glsl_type *sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, true, img_base_type);
    const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_2D, true, img_base_type);
 
    nir_builder b = radv_meta_nir_init_shader(dev, MESA_SHADER_COMPUTE, "meta_resolve_cs_%s-%s-%d",
-                                             index == RADV_META_DEPTH_RESOLVE ? "depth" : "stencil",
+                                             aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? "depth" : "stencil",
                                              get_resolve_mode_str(resolve_mode), samples);
    b.shader->info.workgroup_size[0] = 8;
    b.shader->info.workgroup_size[1] = 8;
@@ -1317,17 +1316,17 @@ radv_meta_nir_build_depth_stencil_resolve_compute_shader(struct radv_device *dev
 
          switch (resolve_mode) {
          case VK_RESOLVE_MODE_AVERAGE_BIT:
-            assert(index == RADV_META_DEPTH_RESOLVE);
+            assert(aspects == VK_IMAGE_ASPECT_DEPTH_BIT);
             outval = nir_fadd(&b, outval, si);
             break;
          case VK_RESOLVE_MODE_MIN_BIT:
-            if (index == RADV_META_DEPTH_RESOLVE)
+            if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
                outval = nir_fmin(&b, outval, si);
             else
                outval = nir_umin(&b, outval, si);
             break;
          case VK_RESOLVE_MODE_MAX_BIT:
-            if (index == RADV_META_DEPTH_RESOLVE)
+            if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
                outval = nir_fmax(&b, outval, si);
             else
                outval = nir_umax(&b, outval, si);
@@ -1382,15 +1381,15 @@ radv_meta_nir_build_resolve_fragment_shader(struct radv_device *dev, bool use_fm
 
 nir_shader *
 radv_meta_nir_build_depth_stencil_resolve_fragment_shader(struct radv_device *dev, int samples,
-                                                          enum radv_meta_resolve_type index,
+                                                          VkImageAspectFlags aspects,
                                                           VkResolveModeFlagBits resolve_mode)
 {
-   enum glsl_base_type img_base_type = index == RADV_META_DEPTH_RESOLVE ? GLSL_TYPE_FLOAT : GLSL_TYPE_UINT;
+   enum glsl_base_type img_base_type = aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? GLSL_TYPE_FLOAT : GLSL_TYPE_UINT;
    const struct glsl_type *vec4 = glsl_vec4_type();
    const struct glsl_type *sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, false, img_base_type);
 
    nir_builder b = radv_meta_nir_init_shader(dev, MESA_SHADER_FRAGMENT, "meta_resolve_fs_%s-%s-%d",
-                                             index == RADV_META_DEPTH_RESOLVE ? "depth" : "stencil",
+                                             aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? "depth" : "stencil",
                                              get_resolve_mode_str(resolve_mode), samples);
 
    nir_variable *input_img = nir_variable_create(b.shader, nir_var_uniform, sampler_type, "s_tex");
@@ -1398,7 +1397,7 @@ radv_meta_nir_build_depth_stencil_resolve_fragment_shader(struct radv_device *de
    input_img->data.binding = 0;
 
    nir_variable *fs_out = nir_variable_create(b.shader, nir_var_shader_out, vec4, "f_out");
-   fs_out->data.location = index == RADV_META_DEPTH_RESOLVE ? FRAG_RESULT_DEPTH : FRAG_RESULT_STENCIL;
+   fs_out->data.location = aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? FRAG_RESULT_DEPTH : FRAG_RESULT_STENCIL;
 
    nir_def *pos_in = nir_trim_vector(&b, nir_load_frag_coord(&b), 2);
    nir_def *src_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
@@ -1416,17 +1415,17 @@ radv_meta_nir_build_depth_stencil_resolve_fragment_shader(struct radv_device *de
 
          switch (resolve_mode) {
          case VK_RESOLVE_MODE_AVERAGE_BIT:
-            assert(index == RADV_META_DEPTH_RESOLVE);
+            assert(aspects == VK_IMAGE_ASPECT_DEPTH_BIT);
             outval = nir_fadd(&b, outval, si);
             break;
          case VK_RESOLVE_MODE_MIN_BIT:
-            if (index == RADV_META_DEPTH_RESOLVE)
+            if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
                outval = nir_fmin(&b, outval, si);
             else
                outval = nir_umin(&b, outval, si);
             break;
          case VK_RESOLVE_MODE_MAX_BIT:
-            if (index == RADV_META_DEPTH_RESOLVE)
+            if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
                outval = nir_fmax(&b, outval, si);
             else
                outval = nir_umax(&b, outval, si);

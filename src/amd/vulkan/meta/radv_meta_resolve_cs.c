@@ -176,7 +176,7 @@ emit_resolve(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_ivi
 
 struct radv_resolve_ds_cs_key {
    enum radv_meta_object_key_type type;
-   uint8_t index;
+   VkImageAspectFlags aspects;
    uint8_t samples;
    VkResolveModeFlagBits resolve_mode;
 };
@@ -187,8 +187,6 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
                                    VkPipelineLayout *layout_out)
 
 {
-   const enum radv_meta_resolve_type index =
-      aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? RADV_META_DEPTH_RESOLVE : RADV_META_STENCIL_RESOLVE;
    struct radv_resolve_ds_cs_key key;
    VkResult result;
 
@@ -198,7 +196,7 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
 
    memset(&key, 0, sizeof(key));
    key.type = RADV_META_OBJECT_KEY_RESOLVE_DS_CS;
-   key.index = index;
+   key.aspects = aspects;
    key.samples = samples;
    key.resolve_mode = resolve_mode;
 
@@ -208,7 +206,7 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
       return VK_SUCCESS;
    }
 
-   nir_shader *cs = radv_meta_nir_build_depth_stencil_resolve_compute_shader(device, samples, index, resolve_mode);
+   nir_shader *cs = radv_meta_nir_build_depth_stencil_resolve_compute_shader(device, samples, aspects, resolve_mode);
 
    const VkPipelineShaderStageCreateInfo stage_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,

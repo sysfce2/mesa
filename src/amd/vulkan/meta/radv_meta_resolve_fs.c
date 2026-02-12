@@ -50,8 +50,6 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
                                    VkResolveModeFlagBits resolve_mode, VkPipeline *pipeline_out,
                                    VkPipelineLayout *layout_out)
 {
-   const enum radv_meta_resolve_type index =
-      aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? RADV_META_DEPTH_RESOLVE : RADV_META_STENCIL_RESOLVE;
    struct radv_resolve_ds_fs_key key;
    VkResult result;
 
@@ -72,10 +70,10 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
    }
 
    nir_shader *fs_module =
-      radv_meta_nir_build_depth_stencil_resolve_fragment_shader(device, samples, index, resolve_mode);
+      radv_meta_nir_build_depth_stencil_resolve_fragment_shader(device, samples, aspects, resolve_mode);
    nir_shader *vs_module = radv_meta_nir_build_vs_generate_vertices(device);
 
-   const VkStencilOp stencil_op = index == RADV_META_DEPTH_RESOLVE ? VK_STENCIL_OP_KEEP : VK_STENCIL_OP_REPLACE;
+   const VkStencilOp stencil_op = aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? VK_STENCIL_OP_KEEP : VK_STENCIL_OP_REPLACE;
 
    const VkGraphicsPipelineCreateInfo pipeline_create_info = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -115,8 +113,8 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
       .pDepthStencilState =
          &(VkPipelineDepthStencilStateCreateInfo){.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
                                                   .depthTestEnable = true,
-                                                  .depthWriteEnable = index == RADV_META_DEPTH_RESOLVE,
-                                                  .stencilTestEnable = index == RADV_META_STENCIL_RESOLVE,
+                                                  .depthWriteEnable = aspects == VK_IMAGE_ASPECT_DEPTH_BIT,
+                                                  .stencilTestEnable = aspects == VK_IMAGE_ASPECT_STENCIL_BIT,
                                                   .depthCompareOp = VK_COMPARE_OP_ALWAYS,
                                                   .front =
                                                      {
@@ -181,8 +179,8 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
    };
 
    struct vk_meta_rendering_info render = {
-      .depth_attachment_format = index == RADV_META_DEPTH_RESOLVE ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_UNDEFINED,
-      .stencil_attachment_format = index == RADV_META_STENCIL_RESOLVE ? VK_FORMAT_S8_UINT : VK_FORMAT_UNDEFINED,
+      .depth_attachment_format = aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_UNDEFINED,
+      .stencil_attachment_format = aspects == VK_IMAGE_ASPECT_STENCIL_BIT ? VK_FORMAT_S8_UINT : VK_FORMAT_UNDEFINED,
    };
 
    result = vk_meta_create_graphics_pipeline(&device->vk, &device->meta_state.device, &pipeline_create_info, &render,

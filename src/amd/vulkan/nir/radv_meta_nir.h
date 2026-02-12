@@ -89,11 +89,6 @@ nir_shader *radv_meta_nir_build_fmask_copy_compute_shader(struct radv_device *de
 
 nir_shader *radv_meta_nir_build_fmask_expand_compute_shader(struct radv_device *device, int samples);
 
-enum radv_meta_resolve_type {
-   RADV_META_DEPTH_RESOLVE,
-   RADV_META_STENCIL_RESOLVE,
-};
-
 enum radv_meta_resolve_compute_type {
    RADV_META_RESOLVE_COMPUTE_NORM,
    RADV_META_RESOLVE_COMPUTE_NORM_SRGB,
@@ -105,12 +100,12 @@ enum radv_meta_resolve_compute_type {
 nir_shader *radv_meta_nir_build_resolve_compute_shader(struct radv_device *dev, bool use_fmask,
                                                        enum radv_meta_resolve_compute_type type, int samples);
 nir_shader *radv_meta_nir_build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
-                                                                     enum radv_meta_resolve_type index,
+                                                                     VkImageAspectFlags aspects,
                                                                      VkResolveModeFlagBits resolve_mode);
 nir_shader *radv_meta_nir_build_resolve_fragment_shader(struct radv_device *dev, bool use_fmask, bool is_integer,
                                                         int samples);
 nir_shader *radv_meta_nir_build_depth_stencil_resolve_fragment_shader(struct radv_device *dev, int samples,
-                                                                      enum radv_meta_resolve_type index,
+                                                                      VkImageAspectFlags aspects,
                                                                       VkResolveModeFlagBits resolve_mode);
 
 nir_shader *radv_meta_nir_build_resolve_fs(struct radv_device *dev);
