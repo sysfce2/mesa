@@ -61,18 +61,19 @@ radv_meta_nir_build_fs_noop(struct radv_device *dev)
 }
 
 static void
-radv_meta_nir_build_resolve_shader_core(nir_builder *b, bool use_fmask, bool is_integer, int samples,
-                                        nir_variable *input_img, nir_variable *color, nir_def *img_coord)
+radv_meta_nir_build_resolve_shader_core(nir_builder *b, bool use_fmask, int samples, VkImageAspectFlags aspects,
+                                        VkResolveModeFlagBits resolve_mode, nir_variable *input_img,
+                                        nir_variable *output, nir_def *img_coord)
 {
    nir_deref_instr *input_img_deref = nir_build_deref_var(b, input_img);
    nir_def *sample0 = nir_txf_ms(b, img_coord, nir_imm_int(b, 0), .texture_deref = input_img_deref);
 
-   if (is_integer || samples <= 1) {
-      nir_store_var(b, color, sample0, 0xf);
+   if (resolve_mode == VK_RESOLVE_MODE_SAMPLE_ZERO_BIT) {
+      nir_store_var(b, output, sample0, 0xf);
       return;
    }
 
-   if (use_fmask) {
+   if (aspects == VK_IMAGE_ASPECT_COLOR_BIT && use_fmask) {
       nir_def *all_same = nir_samples_identical(b, img_coord, .texture_deref = input_img_deref);
       nir_push_if(b, nir_inot(b, all_same));
    }
@@ -80,15 +81,37 @@ radv_meta_nir_build_resolve_shader_core(nir_builder *b, bool use_fmask, bool is_
    nir_def *accum = sample0;
    for (int i = 1; i < samples; i++) {
       nir_def *sample = nir_txf_ms(b, img_coord, nir_imm_int(b, i), .texture_deref = input_img_deref);
-      accum = nir_fadd(b, accum, sample);
+
+      switch (resolve_mode) {
+      case VK_RESOLVE_MODE_AVERAGE_BIT:
+         assert(aspects == VK_IMAGE_ASPECT_COLOR_BIT || aspects == VK_IMAGE_ASPECT_DEPTH_BIT);
+         accum = nir_fadd(b, accum, sample);
+         break;
+      case VK_RESOLVE_MODE_MIN_BIT:
+         if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
+            accum = nir_fmin(b, accum, sample);
+         else
+            accum = nir_umin(b, accum, sample);
+         break;
+      case VK_RESOLVE_MODE_MAX_BIT:
+         if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
+            accum = nir_fmax(b, accum, sample);
+         else
+            accum = nir_umax(b, accum, sample);
+         break;
+      default:
+         UNREACHABLE("invalid resolve mode");
+      }
    }
 
-   accum = nir_fdiv_imm(b, accum, samples);
-   nir_store_var(b, color, accum, 0xf);
+   if (resolve_mode == VK_RESOLVE_MODE_AVERAGE_BIT)
+      accum = nir_fdiv_imm(b, accum, samples);
 
-   if (use_fmask) {
+   nir_store_var(b, output, accum, 0xf);
+
+   if (aspects == VK_IMAGE_ASPECT_COLOR_BIT && use_fmask) {
       nir_push_else(b, NULL);
-      nir_store_var(b, color, sample0, 0xf);
+      nir_store_var(b, output, sample0, 0xf);
       nir_pop_if(b, NULL);
    }
 }
@@ -1239,7 +1262,10 @@ radv_meta_nir_build_resolve_compute_shader(struct radv_device *dev, bool use_fma
 
    nir_variable *color = nir_local_variable_create(b.impl, glsl_vec4_type(), "color");
 
-   radv_meta_nir_build_resolve_shader_core(&b, use_fmask, type == RADV_META_RESOLVE_COMPUTE_INTEGER, samples, input_img,
+   VkResolveModeFlagBits resolve_mode =
+      type == RADV_META_RESOLVE_COMPUTE_INTEGER ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT;
+
+   radv_meta_nir_build_resolve_shader_core(&b, use_fmask, samples, VK_IMAGE_ASPECT_COLOR_BIT, resolve_mode, input_img,
                                            color, src_img_coord);
 
    nir_def *outval = nir_load_var(&b, color);
@@ -1307,38 +1333,10 @@ radv_meta_nir_build_depth_stencil_resolve_compute_shader(struct radv_device *dev
    nir_def *src_img_coord =
       nir_vec3(&b, nir_channel(&b, src_coord, 0), nir_channel(&b, src_coord, 1), nir_channel(&b, global_id, 2));
 
-   nir_deref_instr *input_img_deref = nir_build_deref_var(&b, input_img);
-   nir_def *outval = nir_txf_ms(&b, src_img_coord, nir_imm_int(&b, 0), .texture_deref = input_img_deref);
-
-   if (resolve_mode != VK_RESOLVE_MODE_SAMPLE_ZERO_BIT) {
-      for (int i = 1; i < samples; i++) {
-         nir_def *si = nir_txf_ms(&b, src_img_coord, nir_imm_int(&b, i), .texture_deref = input_img_deref);
-
-         switch (resolve_mode) {
-         case VK_RESOLVE_MODE_AVERAGE_BIT:
-            assert(aspects == VK_IMAGE_ASPECT_DEPTH_BIT);
-            outval = nir_fadd(&b, outval, si);
-            break;
-         case VK_RESOLVE_MODE_MIN_BIT:
-            if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
-               outval = nir_fmin(&b, outval, si);
-            else
-               outval = nir_umin(&b, outval, si);
-            break;
-         case VK_RESOLVE_MODE_MAX_BIT:
-            if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
-               outval = nir_fmax(&b, outval, si);
-            else
-               outval = nir_umax(&b, outval, si);
-            break;
-         default:
-            UNREACHABLE("invalid resolve mode");
-         }
-      }
-
-      if (resolve_mode == VK_RESOLVE_MODE_AVERAGE_BIT)
-         outval = nir_fdiv_imm(&b, outval, samples);
-   }
+   nir_variable *output_var = nir_local_variable_create(b.impl, glsl_vec4_type(), "output_var");
+   radv_meta_nir_build_resolve_shader_core(&b, false, samples, aspects, resolve_mode, input_img, output_var,
+                                           src_img_coord);
+   nir_def *outval = nir_load_var(&b, output_var);
 
    nir_def *coord = nir_vec4(&b, nir_channel(&b, dst_coord, 0), nir_channel(&b, dst_coord, 1),
                              nir_channel(&b, dst_coord, 2), nir_undef(&b, 1, 32));
@@ -1372,7 +1370,10 @@ radv_meta_nir_build_resolve_fragment_shader(struct radv_device *dev, bool use_fm
    nir_def *img_coord = nir_trim_vector(&b, nir_iadd(&b, pos_int, src_offset), 2);
    nir_variable *color = nir_local_variable_create(b.impl, glsl_vec4_type(), "color");
 
-   radv_meta_nir_build_resolve_shader_core(&b, use_fmask, is_integer, samples, input_img, color, img_coord);
+   VkResolveModeFlagBits resolve_mode = is_integer ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT;
+
+   radv_meta_nir_build_resolve_shader_core(&b, use_fmask, samples, VK_IMAGE_ASPECT_COLOR_BIT, resolve_mode, input_img,
+                                           color, img_coord);
 
    nir_def *outval = nir_load_var(&b, color);
    nir_store_var(&b, color_out, outval, 0xf);
@@ -1406,38 +1407,9 @@ radv_meta_nir_build_depth_stencil_resolve_fragment_shader(struct radv_device *de
 
    nir_def *img_coord = nir_trim_vector(&b, nir_iadd(&b, pos_int, src_offset), 2);
 
-   nir_deref_instr *input_img_deref = nir_build_deref_var(&b, input_img);
-   nir_def *outval = nir_txf_ms(&b, img_coord, nir_imm_int(&b, 0), .texture_deref = input_img_deref);
-
-   if (resolve_mode != VK_RESOLVE_MODE_SAMPLE_ZERO_BIT) {
-      for (int i = 1; i < samples; i++) {
-         nir_def *si = nir_txf_ms(&b, img_coord, nir_imm_int(&b, i), .texture_deref = input_img_deref);
-
-         switch (resolve_mode) {
-         case VK_RESOLVE_MODE_AVERAGE_BIT:
-            assert(aspects == VK_IMAGE_ASPECT_DEPTH_BIT);
-            outval = nir_fadd(&b, outval, si);
-            break;
-         case VK_RESOLVE_MODE_MIN_BIT:
-            if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
-               outval = nir_fmin(&b, outval, si);
-            else
-               outval = nir_umin(&b, outval, si);
-            break;
-         case VK_RESOLVE_MODE_MAX_BIT:
-            if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
-               outval = nir_fmax(&b, outval, si);
-            else
-               outval = nir_umax(&b, outval, si);
-            break;
-         default:
-            UNREACHABLE("invalid resolve mode");
-         }
-      }
-
-      if (resolve_mode == VK_RESOLVE_MODE_AVERAGE_BIT)
-         outval = nir_fdiv_imm(&b, outval, samples);
-   }
+   nir_variable *output_var = nir_local_variable_create(b.impl, glsl_vec4_type(), "output_var");
+   radv_meta_nir_build_resolve_shader_core(&b, false, samples, aspects, resolve_mode, input_img, output_var, img_coord);
+   nir_def *outval = nir_load_var(&b, output_var);
 
    nir_store_var(&b, fs_out, outval, 0x1);
 
