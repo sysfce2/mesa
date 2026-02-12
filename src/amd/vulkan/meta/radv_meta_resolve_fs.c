@@ -30,7 +30,7 @@ create_layout(struct radv_device *device, VkPipelineLayout *layout_out)
    };
 
    const VkPushConstantRange pc_range = {
-      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
       .size = 8,
    };
 
