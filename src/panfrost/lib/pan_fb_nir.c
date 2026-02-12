@@ -104,6 +104,7 @@ get_key_target(enum pipe_format format,
                enum pan_fb_shader_op border_op,
                enum pan_fb_msaa_copy_op in_bounds_msaa,
                enum pan_fb_msaa_copy_op border_msaa,
+               bool sample0_only,
                const struct pan_image_view *iview)
 {
    if (format == PIPE_FORMAT_NONE)
@@ -164,6 +165,7 @@ get_key_target(enum pipe_format format,
       .border_op = border_op,
       .in_bounds_msaa = in_bounds_msaa,
       .border_msaa = border_msaa,
+      .sample0_only = sample0_only,
       .image_dim = dim,
       .image_is_array = is_array,
       .image_samples_log2 = needs_sample_count
@@ -181,7 +183,7 @@ get_load_key_target(enum pipe_format format,
    return get_key_target(format, fb_sample_count, has_border,
                          get_shader_op_for_load(load->in_bounds_load),
                          get_shader_op_for_load(load->border_load),
-                         load->msaa, load->msaa, load->iview);
+                         load->msaa, load->msaa, false, load->iview);
 }
 
 bool
@@ -534,6 +536,10 @@ build_op(nir_builder *b, nir_def *pos, nir_def *in_bounds,
          const struct pan_fb_shader_key_target *target,
          const struct pan_fb_shader_key *key)
 {
+   nir_if *nif_s0 = NULL;
+   if (target->sample0_only)
+      nif_s0 = nir_push_if(b, nir_ieq_imm(b, build_sample_id(b), 0));
+
    nir_def *val;
    if (target->in_bounds_op == target->border_op &&
        target->in_bounds_msaa == target->border_msaa) {
@@ -563,11 +569,15 @@ build_op(nir_builder *b, nir_def *pos, nir_def *in_bounds,
                     .src_type = nir_alu_type_for_data_type(target->data_type),
                     .io_semantics.location = location,
                     .io_semantics.num_slots = 1);
+
+   if (nif_s0)
+      nir_pop_if(b, nif_s0);
 }
 
 struct pan_fb_shader_info {
    bool discard_in_bounds;
    bool discard_border;
+   bool sample0_only;
 };
 
 static void
@@ -583,6 +593,9 @@ gather_target_info(struct pan_fb_shader_info *info,
 
    if (!pan_fb_shader_op_can_discard(target->border_op))
       info->discard_border = false;
+
+   if (!target->sample0_only)
+      info->sample0_only = false;
 }
 
 static struct pan_fb_shader_info
@@ -591,6 +604,7 @@ gather_shader_info(const struct pan_fb_shader_key *key)
    struct pan_fb_shader_info info = {
       .discard_in_bounds = true,
       .discard_border = true,
+      .sample0_only = true,
    };
 
    for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++)
@@ -600,6 +614,25 @@ gather_shader_info(const struct pan_fb_shader_key *key)
    gather_target_info(&info, &key->s);
 
    return info;
+}
+
+static bool
+opt_sample0_only_intr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_sample_id:
+      b->cursor = nir_before_instr(&intr->instr);
+      nir_def_replace(&intr->def, nir_imm_int(b, 0));
+      return true;
+
+   case nir_intrinsic_load_cumulative_coverage_pan:
+      b->cursor = nir_before_instr(&intr->instr);
+      nir_def_replace(&intr->def, nir_imm_int(b, 1));
+      return true;
+
+   default:
+      return false;
+   }
 }
 
 nir_shader *
@@ -651,6 +684,10 @@ GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
          nir_def *z1 = nir_imm_int(b, 0);
          nir_def *u4 = nir_undef(b, 4, 32);
 
+         nir_if *nif_s0 = NULL;
+         if (target->sample0_only)
+            nif_s0 = nir_push_if(b, nir_ieq_imm(b, build_sample_id(b), 0));
+
          nir_def *color;
          if (target->in_bounds_op == target->border_op &&
              target->in_bounds_msaa == target->border_msaa) {
@@ -688,6 +725,12 @@ GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
             coverage = nir_if_phi(b, ib_cov, bd_cov);
          }
 
+         if (nif_s0) {
+            nir_pop_if(b, nif_s0);
+            color = nir_if_phi(b, color, u4);
+            coverage = nir_if_phi(b, coverage, z1);
+         }
+
          const nir_alu_type nir_type =
             nir_alu_type_for_data_type(target->data_type);
          nir_def *blend = nir_load_blend_descriptor_pan(b, .base = rt);
@@ -706,17 +749,42 @@ GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
          in_bounds = nir_imm_true(b);
       }
 
-      if (pan_fb_shader_key_target_written(&key->z))
+      if (info.sample0_only) {
+         /* The little optimization we do at the end will take care of most
+          * of what we need for sample0-only but we also need to write
+          * SAMPLE_MASK so pan_nir_lower_fs_outputs will do the right thing.
+          */
+         nir_store_output(b, nir_imm_int(b, 1), nir_imm_int(b, 0),
+                          .base = FRAG_RESULT_SAMPLE_MASK, .range = 1,
+                          .write_mask = 1,
+                          .src_type = nir_type_uint32,
+                          .io_semantics.location = FRAG_RESULT_SAMPLE_MASK,
+                          .io_semantics.num_slots = 1);
+      }
+
+      if (pan_fb_shader_key_target_written(&key->z)) {
+         assert(key->z.sample0_only == info.sample0_only);
          build_op(b, pos, in_bounds, FRAG_RESULT_DEPTH, &key->z, key);
-      if (pan_fb_shader_key_target_written(&key->s))
+      }
+
+      if (pan_fb_shader_key_target_written(&key->s)) {
+         assert(key->s.sample0_only == info.sample0_only);
          build_op(b, pos, in_bounds, FRAG_RESULT_STENCIL, &key->s, key);
+      }
 
       for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
          if (pan_fb_shader_key_target_written(&key->rts[rt])) {
+            assert(key->rts[rt].sample0_only == info.sample0_only);
             build_op(b, pos, in_bounds, FRAG_RESULT_DATA0 + rt,
                      &key->rts[rt], key);
          }
       }
+   }
+
+   if (info.sample0_only) {
+      NIR_PASS(_, b->shader, nir_shader_intrinsics_pass,
+               opt_sample0_only_intr, nir_metadata_control_flow, NULL);
+      b->shader->info.fs.uses_sample_shading = false;
    }
 
    return builder.shader;

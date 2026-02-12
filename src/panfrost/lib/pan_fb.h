@@ -486,11 +486,12 @@ struct pan_fb_shader_key_target {
    uint32_t border_op : 4;
    uint32_t in_bounds_msaa : 3;
    uint32_t border_msaa : 3;
+   uint32_t sample0_only : 1;
    uint32_t image_dim : 2;
    uint32_t image_is_array : 1;
    uint32_t image_samples_log2 : 3;
    uint32_t data_type : 2;
-   uint32_t pad : 10;
+   uint32_t pad : 9;
 };
 PRAGMA_DIAGNOSTIC_POP
 static_assert(sizeof(struct pan_fb_shader_key_target) == 4,
