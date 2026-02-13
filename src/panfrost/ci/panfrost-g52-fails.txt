@@ -317,11 +317,6 @@ dEQP-VK.api.copy_and_blit.core.resolve_image.copy_with_regions_before_resolving.
 dEQP-VK.api.copy_and_blit.copy_commands2.resolve_image.whole_copy_before_resolving_no_cab.4_bit,Fail
 dEQP-VK.api.copy_and_blit.copy_commands2.resolve_image.copy_with_regions_before_resolving.4_bit,Fail
 
-# New fails in 1.4.3.3
-dEQP-VK.pipeline.fast_linked_library.empty_fs.masked_samples,Fail
-dEQP-VK.pipeline.monolithic.empty_fs.masked_samples,Fail
-dEQP-VK.pipeline.pipeline_library.empty_fs.masked_samples,Fail
-
 # New failures with VKCTS 1.4.4.0
 dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.combined_image_sampler,Crash
 dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.sampled_image,Crash

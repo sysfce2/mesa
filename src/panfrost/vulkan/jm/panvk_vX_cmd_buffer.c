@@ -126,7 +126,9 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
    if (batch->tls.cpu)
       GENX(pan_emit_tls)(&batch->tlsinfo, batch->tls.cpu);
 
-   if (batch->fb.desc.cpu) {
+   if (batch->fb.desc.cpu &&
+       (cmdbuf->cur_batch->vtc_jc.first_tiler ||
+        cmdbuf->state.gfx.render.fb.needs_store)) {
       panvk_per_arch(cmd_select_tile_size)(cmdbuf);
 
       /* At this point, we should know sample count and the tile size should
@@ -136,18 +138,13 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
       assert(render->fb.layout.sample_count > 0);
       assert(render->fb.layout.tile_size_px > 0);
 
-      struct pan_fb_frame_shaders fs;
-      VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf,
-                                                       &render->fb.layout,
-                                                       &render->fb.load, &fs);
-      if (result != VK_SUCCESS)
-         return;
-
       const uint8_t sample_count = render->fb.layout.sample_count;
       struct pan_fb_desc_info fbd_info = {
          .fb = &render->fb.layout,
-         .load = &render->fb.load,
-         .store = &render->fb.store,
+         .load = render->fb.needs_load ? &render->fb.load :
+                                         &render->fb.spill.load,
+         .store = render->fb.needs_store ? &render->fb.store :
+                                           &render->fb.spill.store,
          .sample_pos_array_pointer = dev->sample_positions->addr.dev +
             pan_sample_positions_offset(pan_sample_pattern(sample_count)),
          .provoking_vertex_first =
@@ -155,6 +152,13 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
          .tls = &batch->tlsinfo,
          .tiler_ctx = &batch->tiler.ctx,
       };
+
+      struct pan_fb_frame_shaders fs;
+      VkResult result = panvk_per_arch(cmd_fb_preload)(cmdbuf,
+                                                       &render->fb.layout,
+                                                       fbd_info.load, &fs);
+      if (result != VK_SUCCESS)
+         return;
 
       uint32_t view_mask = cmdbuf->state.gfx.render.view_mask;
       assert(view_mask == 0 || util_bitcount(view_mask) <= batch->fb.layer_count);
@@ -183,6 +187,9 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
          if (result != VK_SUCCESS)
             break;
       }
+
+      /* We've now done the load.  Everything from now on should spill */
+      cmdbuf->state.gfx.render.fb.needs_load = false;
    }
 
    cmdbuf->cur_batch = NULL;
@@ -339,14 +346,7 @@ panvk_per_arch(CmdPipelineBarrier2)(VkCommandBuffer commandBuffer,
     * barrier flag set to true.
     */
    if (cmdbuf->cur_batch) {
-      bool preload_fb =
-         cmdbuf->cur_batch && cmdbuf->cur_batch->vtc_jc.first_tiler;
-
       panvk_per_arch(cmd_close_batch)(cmdbuf);
-
-      if (preload_fb)
-         panvk_per_arch(cmd_preload_fb_after_batch_split)(cmdbuf);
-
       panvk_per_arch(cmd_open_batch)(cmdbuf);
    }
 

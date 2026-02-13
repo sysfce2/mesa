@@ -1207,14 +1207,6 @@ panvk_draw_prepare_fs_copy_desc_job(struct panvk_cmd_buffer *cmdbuf,
    return VK_SUCCESS;
 }
 
-void
-panvk_per_arch(cmd_preload_fb_after_batch_split)(struct panvk_cmd_buffer *cmdbuf)
-{
-   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
-
-   render->fb.load = render->fb.spill.load;
-}
-
 static VkResult
 panvk_cmd_prepare_draw_link_shaders(struct panvk_cmd_buffer *cmd)
 {
@@ -1260,7 +1252,6 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
    if (batch->vtc_jc.job_index + (4 * cmdbuf->state.gfx.render.layer_count) >=
        UINT16_MAX) {
       panvk_per_arch(cmd_close_batch)(cmdbuf);
-      panvk_per_arch(cmd_preload_fb_after_batch_split)(cmdbuf);
       batch = panvk_per_arch(cmd_open_batch)(cmdbuf);
    }
 
@@ -1761,14 +1752,7 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
     * much as this will cause the TLS budget to go crazy.
     */
    if (batch->vtc_jc.job_index > (5 * 1024)) {
-      bool preload_fb =
-         cmdbuf->cur_batch && cmdbuf->cur_batch->vtc_jc.first_tiler;
-
       panvk_per_arch(cmd_close_batch)(cmdbuf);
-
-      if (preload_fb)
-         panvk_per_arch(cmd_preload_fb_after_batch_split)(cmdbuf);
-
       batch = panvk_per_arch(cmd_open_batch)(cmdbuf);
       cmdbuf->state.gfx.vs.indirect_varying_bufs_infos = 0;
    }
@@ -1946,9 +1930,7 @@ panvk_per_arch(CmdBeginRendering)(VkCommandBuffer commandBuffer,
          panvk_per_arch(cmd_close_batch)(cmdbuf);
 
       panvk_per_arch(cmd_init_render_state)(cmdbuf, pRenderingInfo);
-
-      if (resuming)
-         panvk_per_arch(cmd_preload_fb_after_batch_split)(cmdbuf);
+      cmdbuf->state.gfx.render.fb.needs_load = !resuming;
    }
 
    if (!cmdbuf->cur_batch)
@@ -1965,15 +1947,16 @@ panvk_per_arch(CmdEndRendering)(VkCommandBuffer commandBuffer)
 
    if (!(cmdbuf->state.gfx.render.flags & VK_RENDERING_SUSPENDING_BIT)) {
       const struct pan_fb_load *fb_load = &cmdbuf->state.gfx.render.fb.load;
-      bool clear = fb_load->z.in_bounds_load == PAN_FB_LOAD_CLEAR ||
-                   fb_load->s.in_bounds_load == PAN_FB_LOAD_CLEAR;
+      bool always_load = fb_load->z.always || fb_load->s.always;
       for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
-         if (fb_load->rts[rt].in_bounds_load == PAN_FB_LOAD_CLEAR)
-            clear = true;
+         if (fb_load->rts[rt].always)
+            always_load = true;
       }
 
-      if (clear)
+      if (always_load)
          panvk_per_arch(cmd_alloc_fb_desc)(cmdbuf);
+
+      cmdbuf->state.gfx.render.fb.needs_store = true;
 
       panvk_per_arch(cmd_close_batch)(cmdbuf);
       cmdbuf->cur_batch = NULL;
