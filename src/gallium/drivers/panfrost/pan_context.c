@@ -964,7 +964,8 @@ panfrost_fence_server_sync(struct pipe_context *pctx,
 {
    struct panfrost_device *dev = pan_device(pctx->screen);
    struct panfrost_context *ctx = pan_context(pctx);
-   int fd = -1, ret;
+   ASSERTED int ret;
+   int fd = -1;
    assert(!value);
 
    ret = drmSyncobjExportSyncFile(panfrost_device_fd(dev), f->syncobj, &fd);

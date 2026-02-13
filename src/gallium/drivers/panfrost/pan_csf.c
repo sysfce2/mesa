@@ -1668,7 +1668,7 @@ GENX(csf_cleanup_context)(struct panfrost_context *ctx)
    struct drm_panthor_tiler_heap_destroy thd = {
       .handle = ctx->csf.heap.handle,
    };
-   int ret;
+   ASSERTED int ret;
 
    /* Make sure all jobs are done before destroying the heap. */
    ret = drmSyncobjWait(panfrost_device_fd(dev), &ctx->syncobj, 1, INT64_MAX, 0,

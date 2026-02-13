@@ -694,7 +694,7 @@ default_wsi_row_pitch(unsigned arch, const struct pan_image_props *iprops,
 
       unsigned row_pitch_B =
          (width_px / util_format_get_blockwidth(format)) * fmt_blksz_B;
-      struct pan_image_block_size tile_size_el = {1, 1};
+      ASSERTED struct pan_image_block_size tile_size_el = {1, 1};
 
       if (modifier == DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED) {
          if (util_format_is_compressed(format)) {

@@ -1179,7 +1179,7 @@ panvk_queue_submit_process_signals(struct panvk_queue_submit *submit,
 {
    struct panvk_device *dev = submit->dev;
    struct panvk_gpu_queue *queue = submit->queue;
-   int ret;
+   ASSERTED int ret;
 
    if (!submit->signal_queue_mask)
       return;

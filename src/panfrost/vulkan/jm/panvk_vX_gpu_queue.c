@@ -39,7 +39,7 @@ panvk_queue_submit_batch(struct panvk_gpu_queue *queue,
    struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
    struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(dev->vk.physical);
-   int ret;
+   ASSERTED int ret;
 
    /* Reset the batch if it's already been issued */
    if (batch->issued) {
@@ -155,7 +155,7 @@ static void
 panvk_queue_transfer_sync(struct panvk_gpu_queue *queue, uint32_t syncobj)
 {
    struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
-   int ret;
+   ASSERTED int ret;
 
    struct drm_syncobj_handle handle = {
       .handle = queue->sync,
