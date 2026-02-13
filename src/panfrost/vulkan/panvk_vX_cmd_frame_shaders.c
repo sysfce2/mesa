@@ -684,7 +684,11 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
          cfg.blend_count = 0;
       }
 
-      cfg.flags_0.allow_forward_pixel_to_kill = preload_color;
+      /* Only allow color preload shaders to be killed since post-frame
+       * shaders are likely to read from the framebuffer.
+       */
+      cfg.flags_0.allow_forward_pixel_to_kill =
+         key->type == PANVK_META_OBJECT_KEY_FB_COLOR_PRELOAD_SHADER;
       cfg.flags_0.allow_forward_pixel_to_be_killed = true;
       cfg.depth_stencil = zsd.gpu;
       cfg.flags_1.sample_mask = 0xFFFF;
