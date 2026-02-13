@@ -1211,7 +1211,8 @@ namespace {
                            dependency(TGL_SBID_SET, ip, exec_all));
 
          if (inst->dst.file != BAD_FILE && !inst->dst.is_null() &&
-             !inst->dst.is_accumulator()) {
+             !inst->dst.is_accumulator() &&
+             inst->opcode != SHADER_OPCODE_UNDEF) {
             for (unsigned j = 0; j < regs_written(inst); j++) {
                add_dependency(ids, inst_deps, dependency_for_write(devinfo, inst,
                   sb.get(byte_offset(inst->dst, REG_SIZE * j))));
@@ -1286,43 +1287,39 @@ namespace {
             const std::vector<dependency> &inst_deps0 = deps0[ip];
             std::vector<dependency> inst_deps1;
 
-            if (inst->opcode != SHADER_OPCODE_UNDEF) {
-               /* First trim any dependencies that were already resolved. */
-               for (auto dep : inst_deps0) {
-                  if (dep.unordered & (TGL_SBID_DST | TGL_SBID_SRC)) {
-                     resolved_id_state &resolved = resolved_ids[dep.id];
-                     dep.unordered &= ~resolved.mode[exec_all];
-                  }
-
-                  if (is_valid(dep))
-                     inst_deps1.push_back(dep);
-               }
-
-               /* Then update new resolved dependencies.  This is done in
-                * a separate step to avoid an instruction resolving its own
-                * dependencies.
-                */
-               for (const auto &dep : inst_deps1) {
-                  if (!dep.unordered)
-                     continue;
-
-                  /* See other comments about Wa_1407528679. */
-                  if (exec_all < dep.exec_all)
-                     continue;
-
+            /* First trim any dependencies that were already resolved. */
+            for (auto dep : inst_deps0) {
+               if (dep.unordered & (TGL_SBID_DST | TGL_SBID_SRC)) {
                   resolved_id_state &resolved = resolved_ids[dep.id];
-
-                  for (int m = 0; m <= exec_all; m++) {
-                     if (dep.unordered & TGL_SBID_SET)
-                        resolved = {};
-                     else if (dep.unordered & TGL_SBID_DST)
-                        resolved.mode[m] |= TGL_SBID_DST | TGL_SBID_SRC;
-                     else if (dep.unordered & TGL_SBID_SRC)
-                        resolved.mode[m] |= TGL_SBID_SRC;
-                  }
+                  dep.unordered &= ~resolved.mode[exec_all];
                }
-            } else {
-               inst_deps1 = inst_deps0;
+
+               if (is_valid(dep))
+                  inst_deps1.push_back(dep);
+            }
+
+            /* Then update new resolved dependencies.  This is done in
+             * a separate step to avoid an instruction resolving its own
+             * dependencies.
+             */
+            for (const auto &dep : inst_deps1) {
+               if (!dep.unordered)
+                  continue;
+
+               /* See other comments about Wa_1407528679. */
+               if (exec_all < dep.exec_all)
+                  continue;
+
+               resolved_id_state &resolved = resolved_ids[dep.id];
+
+               for (int m = 0; m <= exec_all; m++) {
+                  if (dep.unordered & TGL_SBID_SET)
+                     resolved = {};
+                  else if (dep.unordered & TGL_SBID_DST)
+                     resolved.mode[m] |= TGL_SBID_DST | TGL_SBID_SRC;
+                  else if (dep.unordered & TGL_SBID_SRC)
+                     resolved.mode[m] |= TGL_SBID_SRC;
+               }
             }
 
             deps1.push_back(inst_deps1);
