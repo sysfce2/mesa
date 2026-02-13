@@ -144,7 +144,8 @@ render_state_set_color_attachment(struct panvk_cmd_buffer *cmdbuf,
    };
    render->fb.spill.load.rts[index] = pan_fb_load_iview(&iview->pview);
    render->fb.spill.store.rts[index] = pan_fb_store_iview(&iview->pview);
-   render->fb.store.rts[index] = pan_fb_store_iview(&iview->pview);
+   if (att->storeOp == VK_ATTACHMENT_STORE_OP_STORE && !ms2ss)
+      render->fb.store.rts[index] = pan_fb_store_iview(&iview->pview);
 
    if (att->resolveMode != VK_RESOLVE_MODE_NONE) {
       VK_FROM_HANDLE(panvk_image_view, resolve_iview, att->resolveImageView);
@@ -162,6 +163,8 @@ render_state_set_color_attachment(struct panvk_cmd_buffer *cmdbuf,
       assert(resolve.dst_iview != NULL);
       assert(resolve.dst_iview->pview.nr_samples == 1);
 
+      /* We need to store so we can do the MSAA resolve later */
+      render->fb.store.rts[index] = pan_fb_store_iview(&iview->pview);
       render->color_attachments.resolve[index] = resolve;
    }
 }
