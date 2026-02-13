@@ -3026,7 +3026,6 @@ panvk_per_arch(cmd_inherit_render_state)(
    struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(dev->vk.physical);
    struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
-   struct pan_fb_info *fbinfo = &render->fb.info;
 
    render->first_provoking_vertex = U_TRISTATE_UNSET;
    render->maybe_set_tds_provoking_vertex = NULL;
@@ -3045,18 +3044,23 @@ panvk_per_arch(cmd_inherit_render_state)(
       util_last_bit(inheritance_info->viewMask) : 0;
 
    /* If a draw was performed, the inherited sample count should match our current sample count */
-   assert(fbinfo->nr_samples == 0 || inheritance_info->rasterizationSamples == fbinfo->nr_samples);
-   *fbinfo = (struct pan_fb_info){
-      .tile_buf_budget = pan_query_optimal_tib_size(PAN_ARCH, phys_dev->model),
-      .z_tile_buf_budget = pan_query_optimal_z_tib_size(PAN_ARCH, phys_dev->model),
-      .tile_size = fbinfo->tile_size,
-      .cbuf_allocation = fbinfo->cbuf_allocation,
-      .nr_samples = inheritance_info->rasterizationSamples,
+   const uint32_t sample_count = inheritance_info->rasterizationSamples;
+   assert(render->fb.layout.sample_count == 0 ||
+          render->fb.layout.sample_count == sample_count);
+   render->fb.layout = (struct pan_fb_layout) {
+      .sample_count = sample_count,
       .rt_count = inheritance_info->colorAttachmentCount,
-   };
-   render->fb.nr_samples = inheritance_info->rasterizationSamples;
 
-   assert(inheritance_info->colorAttachmentCount <= ARRAY_SIZE(fbinfo->rts));
+      .tile_size_px = render->fb.layout.tile_size_px,
+      .tile_rt_alloc_B = render->fb.layout.tile_rt_alloc_B,
+      .tile_rt_budget_B =
+         pan_query_optimal_tib_size(PAN_ARCH, phys_dev->model),
+      .tile_z_budget_B =
+         pan_query_optimal_z_tib_size(PAN_ARCH, phys_dev->model),
+   };
+   render->fb.nr_samples = sample_count;
+
+   assert(inheritance_info->colorAttachmentCount <= PAN_MAX_RTS);
 
    for (uint32_t i = 0; i < inheritance_info->colorAttachmentCount; i++) {
       render->bound_attachments |= MESA_VK_RP_ATTACHMENT_COLOR_BIT(i);
@@ -3064,17 +3068,29 @@ panvk_per_arch(cmd_inherit_render_state)(
          inheritance_info->pColorAttachmentFormats[i];
       render->color_attachments.samples[i] =
          inheritance_info->rasterizationSamples;
+      render->fb.layout.rt_formats[i] =
+         vk_format_to_pipe_format(inheritance_info->pColorAttachmentFormats[i]);
    }
 
    if (inheritance_info->depthAttachmentFormat) {
       render->bound_attachments |= MESA_VK_RP_ATTACHMENT_DEPTH_BIT;
       render->z_attachment.fmt = inheritance_info->depthAttachmentFormat;
+      render->fb.layout.z_format =
+         vk_format_to_pipe_format(inheritance_info->depthAttachmentFormat);
    }
 
    if (inheritance_info->stencilAttachmentFormat) {
       render->bound_attachments |= MESA_VK_RP_ATTACHMENT_STENCIL_BIT;
       render->s_attachment.fmt = inheritance_info->stencilAttachmentFormat;
+      render->fb.layout.s_format =
+         vk_format_to_pipe_format(inheritance_info->stencilAttachmentFormat);
    }
+
+   /* Populate the pan_fb_info as best as we can */
+   struct pan_fb_desc_info fbd_info = {
+      .fb = &render->fb.layout,
+   };
+   GENX(pan_fill_fb_info)(&fbd_info, &render->fb.info);
 
    const VkRenderingAttachmentLocationInfoKHR att_loc_info_default = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_LOCATION_INFO_KHR,

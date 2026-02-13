@@ -23,6 +23,7 @@
 #include "vk_format.h"
 #include "util/u_tristate.h"
 
+#include "pan_fb.h"
 #include "pan_props.h"
 
 #define MAX_VBS 16
@@ -55,9 +56,6 @@ struct panvk_rendering_state {
       struct panvk_resolve_attachment resolve[MAX_RTS];
    } color_attachments;
 
-   struct pan_image_view zs_pview;
-   struct pan_image_view s_pview;
-
    struct {
       struct panvk_image_view *iview;
       /* If non-null, preload_iview overrides iview for preloads. */
@@ -66,8 +64,20 @@ struct panvk_rendering_state {
       struct panvk_resolve_attachment resolve;
    } z_attachment, s_attachment;
 
+   /* Used for separate Z/S images */
+   struct {
+      struct pan_image_view load, spill, store;
+   } z_pview, s_pview;
+
    struct {
       struct pan_fb_info info;
+      struct pan_fb_layout layout;
+      struct pan_fb_load load;
+      struct pan_fb_store store;
+      struct {
+         struct pan_fb_load load;
+         struct pan_fb_store store;
+      } spill;
 
       /* nr_samples to be used before framebuffer / tiler descriptor are emitted */
       uint32_t nr_samples;
