@@ -739,8 +739,10 @@ panvk_descriptor_set_copy(const VkCopyDescriptorSet *copy)
    const struct panvk_descriptor_set_binding_layout *src_binding_layout =
       &src_set->layout->bindings[copy->srcBinding];
 
-   const bool src_mutable = src_binding_layout->type == VK_DESCRIPTOR_TYPE_MUTABLE_EXT;
-   const bool dst_mutable = dst_binding_layout->type == VK_DESCRIPTOR_TYPE_MUTABLE_EXT;
+   ASSERTED const bool src_mutable =
+      src_binding_layout->type == VK_DESCRIPTOR_TYPE_MUTABLE_EXT;
+   ASSERTED const bool dst_mutable =
+      dst_binding_layout->type == VK_DESCRIPTOR_TYPE_MUTABLE_EXT;
    assert(dst_binding_layout->type == src_binding_layout->type || src_mutable || dst_mutable);
 
    switch (src_binding_layout->type) {

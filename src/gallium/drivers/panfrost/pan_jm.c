@@ -413,7 +413,7 @@ jm_emit_tiler_desc(struct panfrost_batch *batch)
    }
 
    uint64_t heap = t.gpu;
-   unsigned max_levels = dev->tiler_features.max_levels;
+   ASSERTED unsigned max_levels = dev->tiler_features.max_levels;
    assert(max_levels >= 2);
 
    t = pan_pool_alloc_desc(&batch->pool.base, TILER_CONTEXT);

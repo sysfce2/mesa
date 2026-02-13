@@ -280,9 +280,9 @@ panvk_bind_queue_submit_process_signals(struct panvk_bind_queue_submit *submit)
       return ret;
 
    if (submit->force_sync) {
-      int ret = drmSyncobjWait(device->drm_fd, &queue->syncobj_handle, 1,
-                               INT64_MAX, DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL,
-                               NULL);
+      ASSERTED int ret = drmSyncobjWait(device->drm_fd,
+                               &queue->syncobj_handle, 1, INT64_MAX,
+                               DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL, NULL);
       assert(!ret);
 
       drmSyncobjReset(device->drm_fd, &queue->syncobj_handle, 1);

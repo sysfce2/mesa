@@ -854,7 +854,7 @@ get_img_index(nir_builder *b, nir_deref_instr *deref,
    get_resource_deref_binding(deref, &set, &binding, &index_imm, &index_ssa,
                               &max_idx);
 
-   const struct panvk_descriptor_set_binding_layout *bind_layout =
+   ASSERTED const struct panvk_descriptor_set_binding_layout *bind_layout =
       get_binding_layout(set, binding, ctx);
    assert(bind_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ||
           bind_layout->type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER ||
@@ -947,9 +947,9 @@ record_binding(struct lower_desc_ctx *ctx, unsigned set, unsigned binding,
    const struct panvk_descriptor_set_layout *set_layout = ctx->set_layouts[set];
    const struct panvk_descriptor_set_binding_layout *binding_layout =
       &set_layout->bindings[binding];
-   uint32_t subdesc_idx = get_subdesc_idx(binding_layout, subdesc);
-   uint32_t desc_stride = panvk_get_desc_stride(binding_layout);
-   uint32_t max_desc_stride = MAX2(
+   ASSERTED uint32_t subdesc_idx = get_subdesc_idx(binding_layout, subdesc);
+   ASSERTED uint32_t desc_stride = panvk_get_desc_stride(binding_layout);
+   ASSERTED uint32_t max_desc_stride = MAX2(
       binding_layout->samplers_per_desc + binding_layout->textures_per_desc, 1);
 
    assert(desc_stride >= 1 && desc_stride <= max_desc_stride);

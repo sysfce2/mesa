@@ -1217,7 +1217,7 @@ bind_ms_images(struct panvk_device *dev, const VkBindImageMemoryInfo *bind_info)
          .memoryOffset = sub_image_offset,
       };
 
-      const VkResult res = panvk_image_bind(dev, &sub_bind_info);
+      ASSERTED const VkResult res = panvk_image_bind(dev, &sub_bind_info);
       assert(res == VK_SUCCESS);
 
       sub_image_offset += sub_sz[i];

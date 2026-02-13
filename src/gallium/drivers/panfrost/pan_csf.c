@@ -590,7 +590,7 @@ csf_submit_wait_and_dump(struct panfrost_batch *batch,
 
    /* Wait so we can get errors reported back */
    if (wait) {
-      int ret =
+      ASSERTED int ret =
          drmSyncobjTimelineWait(panfrost_device_fd(dev), &vm_sync_handle,
                                 &vm_sync_signal_point, 1, INT64_MAX, 0, NULL);
       assert(ret >= 0);
@@ -1117,7 +1117,7 @@ csf_emit_draw_state(struct panfrost_batch *batch,
    struct panfrost_compiled_shader *vs = ctx->prog[MESA_SHADER_VERTEX];
    struct panfrost_compiled_shader *fs = ctx->prog[MESA_SHADER_FRAGMENT];
 
-   bool idvs = vs->info.vs.idvs;
+   ASSERTED bool idvs = vs->info.vs.idvs;
    bool fs_required = panfrost_fs_required(
       fs, ctx->blend, &ctx->pipe_framebuffer, ctx->depth_stencil);
    bool secondary_shader = vs->info.vs.secondary_enable && fs_required;

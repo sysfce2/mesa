@@ -1040,7 +1040,7 @@ get_tiler_desc(struct panvk_cmd_buffer *cmdbuf)
    assert(fb->sample_count > 0 && fb->tile_size_px > 0);
 
    pan_pack(&tiler_tmpl, TILER_CONTEXT, cfg) {
-      unsigned max_levels = tiler_features.max_levels;
+      ASSERTED unsigned max_levels = tiler_features.max_levels;
       assert(max_levels >= 2);
 
       /* The tiler chunk start with a header of 64 bytes */
@@ -1355,7 +1355,7 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
       if (result != VK_SUCCESS)
          return result;
 
-      uint32_t new_fbd_flags =
+      ASSERTED uint32_t new_fbd_flags =
          GENX(pan_emit_fb_desc)(&fbd_info, scratch_fbd_init_memory);
 
       /* Make sure all FBDs have the same flags. */
@@ -2255,7 +2255,7 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *draw)
    const struct panvk_shader_variant *fs =
       panvk_shader_only_variant(get_fs(cmdbuf));
    struct panvk_descriptor_state *desc_state = &cmdbuf->state.gfx.desc_state;
-   bool idvs = vs->info.vs.idvs;
+   ASSERTED bool idvs = vs->info.vs.idvs;
    VkResult result;
 
    assert(vs);
@@ -2279,7 +2279,8 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *draw)
       return result;
 
    if (!cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable) {
-      const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
+      ASSERTED const struct pan_fb_layout *fb =
+         &cmdbuf->state.gfx.render.fb.layout;
       uint32_t *nr_samples = &cmdbuf->state.gfx.render.fb.nr_samples;
       uint32_t rasterization_samples =
          cmdbuf->vk.dynamic_graphics_state.ms.rasterization_samples;
@@ -3046,7 +3047,7 @@ panvk_per_arch(CmdBeginRendering)(VkCommandBuffer commandBuffer,
                                   const VkRenderingInfo *pRenderingInfo)
 {
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
-   struct panvk_cmd_graphics_state *state = &cmdbuf->state.gfx;
+   ASSERTED struct panvk_cmd_graphics_state *state = &cmdbuf->state.gfx;
    bool resuming = pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT;
 
    panvk_per_arch(cmd_init_render_state)(cmdbuf, pRenderingInfo);

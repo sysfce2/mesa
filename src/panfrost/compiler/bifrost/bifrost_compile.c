@@ -1652,7 +1652,7 @@ bi_emit_image_store(bi_builder *b, nir_intrinsic_instr *instr)
     * instead, which will match per the OpenCL spec. Of course this does
     * not work for 16-bit stores, but those are not available in OpenCL.
     */
-   nir_alu_type T = nir_intrinsic_src_type(instr);
+   ASSERTED nir_alu_type T = nir_intrinsic_src_type(instr);
    assert(nir_alu_type_get_type_size(T) == 32);
 
    bi_st_cvt(b, bi_src_index(&instr->src[3]), a[0], a[1], a[2],
@@ -6532,7 +6532,7 @@ lower_buf_image_access(nir_builder *b, nir_intrinsic_instr *intr, void *data)
        * instead, which will match per the OpenCL spec. Of course this does
        * not work for 16-bit stores, but those are not available in OpenCL.
        */
-      nir_alu_type T = nir_intrinsic_src_type(intr);
+      ASSERTED nir_alu_type T = nir_intrinsic_src_type(intr);
       assert(nir_alu_type_get_type_size(T) == 32);
 
       nir_def *value = intr->src[3].ssa;

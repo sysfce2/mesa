@@ -1273,7 +1273,8 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
    }
 
    if (!rs->rasterizer_discard_enable) {
-      const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
+      ASSERTED const struct pan_fb_layout *fb =
+         &cmdbuf->state.gfx.render.fb.layout;
       uint32_t *nr_samples = &cmdbuf->state.gfx.render.fb.nr_samples;
       uint32_t rasterization_samples =
          cmdbuf->vk.dynamic_graphics_state.ms.rasterization_samples;

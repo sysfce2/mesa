@@ -487,7 +487,7 @@ emit_linear_or_u_tiled_chroma_2p_plane(const struct pan_image_view *iview,
                                        unsigned mip_level,
                                        unsigned layer_or_z_slice, void *payload)
 {
-   const struct util_format_description *desc =
+   ASSERTED const struct util_format_description *desc =
       util_format_description(iview->format);
    const struct pan_image_plane_ref pref1 = pan_image_view_get_plane(iview, 1);
    const struct pan_image_props *props = &pref1.image->props;
@@ -697,11 +697,11 @@ emit_afrc_chroma_2p_plane(const struct pan_image_view *iview,
 {
    const struct pan_afrc_format_info finfo =
       pan_afrc_get_format_info(iview->format);
-   const struct util_format_description *desc =
+   ASSERTED const struct util_format_description *desc =
       util_format_description(iview->format);
    const struct pan_image_plane_ref pref1 =
       pan_image_view_get_plane(iview, 1);
-   const struct pan_image_plane_ref pref2 =
+   ASSERTED const struct pan_image_plane_ref pref2 =
       pan_image_view_get_plane(iview, 2);
 
    assert(pref1.image != NULL && pref2.image != NULL);
