@@ -567,6 +567,7 @@ enum pipe_query_type {
    PIPE_QUERY_GPU_FINISHED,
    PIPE_QUERY_PIPELINE_STATISTICS,
    PIPE_QUERY_PIPELINE_STATISTICS_SINGLE,
+   PIPE_QUERY_TIMESTAMP_RAW,
    PIPE_QUERY_TYPES,
    /* start of driver queries, see pipe_screen::get_driver_query_info */
    PIPE_QUERY_DRIVER_SPECIFIC = 256,
@@ -1167,6 +1168,15 @@ struct pipe_caps {
    float min_conservative_raster_dilate;
    float max_conservative_raster_dilate;
    float conservative_raster_dilate_granularity;
+
+   /**
+    * If the driver supports PIPE_QUERY_TIMESTAMP_RAW this should
+    * be set to the scaling factor to multiply the raw timestamp
+    * by to get nanoseconds.
+    *
+    * Should be zero if the driver does not implement the query.
+    */
+   float raw_timestamp_period;
 
    struct pipe_mesh_caps mesh;
 };

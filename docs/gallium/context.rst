@@ -465,6 +465,13 @@ scaled to nanoseconds, recorded after all commands issued prior to
 This query does not require a call to ``begin_query``.
 The result is an unsigned 64-bit integer.
 
+``PIPE_QUERY_TIMESTAMP_RAW`` returns a device/driver timestamp, recorded
+after all commands issued prior to ``end_query`` have been processed.
+This query does not require a call to ``begin_query``.
+The result is an unsigned 64-bit integer.  ``pipe_caps.raw_timestamp_period``
+should be set by the driver to provide the scaling factor the raw timestamp
+is multiplied by to get nanoseconds.
+
 ``PIPE_QUERY_TIMESTAMP_DISJOINT`` can be used to check the
 internal timer resolution and whether the timestamp counter has become
 unreliable due to things like throttling etc. - only if this is FALSE
