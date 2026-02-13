@@ -620,6 +620,34 @@ anv_nir_compute_push_layout(nir_shader *nir,
    return progress;
 }
 
+static bool
+shrink_push_constant_range_instr(nir_builder *b,
+                                 nir_intrinsic_instr *intrin,
+                                 void *data)
+{
+   if (!((intrin->intrinsic == nir_intrinsic_load_push_constant ||
+          intrin->intrinsic == nir_intrinsic_load_push_data_intel) &&
+         nir_src_is_const(intrin->src[0])))
+      return false;
+
+   b->cursor = nir_before_instr(&intrin->instr);
+
+   nir_intrinsic_set_base(intrin, nir_intrinsic_base(intrin) +
+                                  nir_src_as_uint(intrin->src[0]));
+   nir_intrinsic_set_range(intrin,
+                           intrin->def.num_components * intrin->def.bit_size / 8);
+
+   nir_src_rewrite(&intrin->src[0], nir_imm_zero(b, 1, 32));
+   return true;
+}
+
+bool
+anv_nir_shrink_push_constant_ranges(nir_shader *shader)
+{
+   return nir_shader_intrinsics_pass(shader, shrink_push_constant_range_instr,
+                                     nir_metadata_control_flow, NULL);
+}
+
 void
 anv_nir_validate_push_layout(const struct anv_physical_device *pdevice,
                              struct brw_stage_prog_data *prog_data,

@@ -1575,6 +1575,8 @@ anv_shader_lower_nir(struct anv_device *device,
 
    NIR_PASS(_, nir, anv_nir_update_resource_intel_block);
 
+   NIR_PASS(_, nir, anv_nir_shrink_push_constant_ranges);
+
    NIR_PASS(_, nir, anv_nir_compute_push_layout,
                pdevice, shader_data->key.base.robust_flags,
                &(struct anv_nir_push_layout_info) {
