@@ -144,8 +144,6 @@ render_state_set_color_attachment(struct panvk_cmd_buffer *cmdbuf,
                          &fbinfo->rts[index].preload);
 
    if (att->resolveMode != VK_RESOLVE_MODE_NONE) {
-      struct panvk_resolve_attachment *resolve_info =
-         &render->color_attachments.resolve[index];
       VK_FROM_HANDLE(panvk_image_view, resolve_iview, att->resolveImageView);
 
       /* VUID-VkRenderingAttachmentInfo-imageView-06862 and
@@ -154,14 +152,14 @@ render_state_set_color_attachment(struct panvk_cmd_buffer *cmdbuf,
        * resolveView == NULL iff. multisampledRenderToSingleSampledEnable */
       assert(ms2ss == (resolve_iview == NULL));
 
-      resolve_info->mode = att->resolveMode;
-      if (!ms2ss) {
-         resolve_info->dst_iview = resolve_iview;
-      } else {
-         assert(iview_ss);
-         resolve_info->dst_iview = iview_ss;
-         assert(resolve_info->dst_iview->pview.nr_samples == 1);
-      }
+      const struct panvk_resolve_attachment resolve = {
+         .dst_iview = ms2ss ? iview_ss : resolve_iview,
+         .mode = att->resolveMode,
+      };
+      assert(resolve.dst_iview != NULL);
+      assert(resolve.dst_iview->pview.nr_samples == 1);
+
+      render->color_attachments.resolve[index] = resolve;
    }
 }
 
@@ -229,18 +227,17 @@ render_state_set_z_attachment(struct panvk_cmd_buffer *cmdbuf,
    att_set_clear_preload(att, &fbinfo->zs.clear.z, &fbinfo->zs.preload.z);
 
    if (att->resolveMode != VK_RESOLVE_MODE_NONE) {
-      struct panvk_resolve_attachment *resolve_info =
-         &render->z_attachment.resolve;
       VK_FROM_HANDLE(panvk_image_view, resolve_iview, att->resolveImageView);
+      assert(ms2ss == (resolve_iview == NULL));
 
-      resolve_info->mode = att->resolveMode;
-      if (!ms2ss) {
-         resolve_info->dst_iview = resolve_iview;
-      } else {
-         assert(iview_ss);
-         resolve_info->dst_iview = iview_ss;
-         assert(resolve_info->dst_iview->pview.nr_samples == 1);
-      }
+      const struct panvk_resolve_attachment resolve = {
+         .dst_iview = ms2ss ? iview_ss : resolve_iview,
+         .mode = att->resolveMode,
+      };
+      assert(resolve.dst_iview != NULL);
+      assert(resolve.dst_iview->pview.nr_samples == 1);
+
+      render->z_attachment.resolve = resolve;
    }
 }
 
@@ -328,18 +325,17 @@ render_state_set_s_attachment(struct panvk_cmd_buffer *cmdbuf,
    att_set_clear_preload(att, &fbinfo->zs.clear.s, &fbinfo->zs.preload.s);
 
    if (att->resolveMode != VK_RESOLVE_MODE_NONE) {
-      struct panvk_resolve_attachment *resolve_info =
-         &render->s_attachment.resolve;
       VK_FROM_HANDLE(panvk_image_view, resolve_iview, att->resolveImageView);
+      assert(ms2ss == (resolve_iview == NULL));
 
-      resolve_info->mode = att->resolveMode;
-      if (!ms2ss) {
-         resolve_info->dst_iview = resolve_iview;
-      } else {
-         assert(iview_ss);
-         resolve_info->dst_iview = iview_ss;
-         assert(resolve_info->dst_iview->pview.nr_samples == 1);
-      }
+      const struct panvk_resolve_attachment resolve = {
+         .dst_iview = ms2ss ? iview_ss : resolve_iview,
+         .mode = att->resolveMode,
+      };
+      assert(resolve.dst_iview != NULL);
+      assert(resolve.dst_iview->pview.nr_samples == 1);
+
+      render->s_attachment.resolve = resolve;
    }
 }
 
