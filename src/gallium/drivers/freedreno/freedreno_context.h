@@ -242,7 +242,7 @@ enum fd_buffer_mask {
    FD_BUFFER_LRZ = BIT(15),
 };
 
-#define MAX_HW_SAMPLE_PROVIDERS 10
+#define MAX_HW_SAMPLE_PROVIDERS 11
 struct fd_hw_sample_provider;
 struct fd_hw_sample;
 

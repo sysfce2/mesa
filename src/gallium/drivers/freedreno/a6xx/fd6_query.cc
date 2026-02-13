@@ -368,6 +368,16 @@ timestamp_result_resource(struct fd_acc_query *aq, struct fd_ringbuffer *ring,
                offsetof(struct fd6_query_sample, start));
 }
 
+static void
+timestamp_raw_result_resource(struct fd_acc_query *aq, struct fd_ringbuffer *ring,
+                              enum pipe_query_value_type result_type,
+                              int index, struct fd_resource *dst,
+                              unsigned offset)
+{
+   copy_result(ring, result_type, dst, offset, fd_resource(aq->prsc),
+               offsetof(struct fd6_query_sample, start));
+}
+
 template <chip CHIP>
 static const struct fd_acc_sample_provider time_elapsed = {
    .query_type = PIPE_QUERY_TIME_ELAPSED,
@@ -395,6 +405,17 @@ static const struct fd_acc_sample_provider timestamp = {
    .pause = timestamp_pause,
    .result = timestamp_accumulate_result,
    .result_resource = timestamp_result_resource,
+};
+
+template <chip CHIP>
+static const struct fd_acc_sample_provider timestamp_raw = {
+   .query_type = PIPE_QUERY_TIMESTAMP_RAW,
+   .always = true,
+   .size = sizeof(struct fd6_query_sample),
+   .resume = timestamp_resume<CHIP>,
+   .pause = timestamp_pause,
+   .result = timestamp_accumulate_result,
+   .result_resource = timestamp_raw_result_resource,
 };
 
 struct PACKED fd6_pipeline_stats_sample {
@@ -1007,6 +1028,7 @@ fd6_query_context_init(struct pipe_context *pctx) disable_thread_safety_analysis
 
    fd_acc_query_register_provider(pctx, &time_elapsed<CHIP>);
    fd_acc_query_register_provider(pctx, &timestamp<CHIP>);
+   fd_acc_query_register_provider(pctx, &timestamp_raw<CHIP>);
 
    fd_acc_query_register_provider(pctx, &primitives_generated<CHIP>);
    fd_acc_query_register_provider(pctx, &pipeline_statistics_single<CHIP>);

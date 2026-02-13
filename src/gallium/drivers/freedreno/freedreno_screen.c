@@ -680,7 +680,11 @@ fd_init_screen_caps(struct fd_screen *screen)
    caps->max_texture_anisotropy = 16.0f;
    caps->max_texture_lod_bias = 15.0f;
 
-   caps->shader_clock = is_a6xx(screen);
+   if (is_a6xx(screen)) {
+      caps->shader_clock = true;
+      /*  PIPE_QUERY_TIMESTAMP_RAW: 19.2MHz RBBM always-on timer */
+      caps->raw_timestamp_period = 1000000000.0 / 19200000.0;
+   }
 }
 
 static const struct nir_shader_compiler_options *
