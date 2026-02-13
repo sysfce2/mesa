@@ -1169,15 +1169,6 @@ struct pipe_caps {
    float max_conservative_raster_dilate;
    float conservative_raster_dilate_granularity;
 
-   /**
-    * If the driver supports PIPE_QUERY_TIMESTAMP_RAW this should
-    * be set to the scaling factor to multiply the raw timestamp
-    * by to get nanoseconds.
-    *
-    * Should be zero if the driver does not implement the query.
-    */
-   float raw_timestamp_period;
-
    struct pipe_mesh_caps mesh;
 };
 

@@ -132,6 +132,12 @@ fd_screen_get_timestamp(struct pipe_screen *pscreen)
    }
 }
 
+static uint64_t
+fd_screen_convert_timestamp(struct pipe_screen *pscreen, uint64_t raw_timestamp)
+{
+   return ticks_to_ns(raw_timestamp);
+}
+
 static void
 fd_screen_destroy(struct pipe_screen *pscreen)
 {
@@ -682,8 +688,6 @@ fd_init_screen_caps(struct fd_screen *screen)
 
    if (is_a6xx(screen)) {
       caps->shader_clock = true;
-      /*  PIPE_QUERY_TIMESTAMP_RAW: 19.2MHz RBBM always-on timer */
-      caps->raw_timestamp_period = 1000000000.0 / 19200000.0;
    }
 }
 
@@ -1073,6 +1077,9 @@ fd_screen_create(int fd,
    pscreen->get_sample_pixel_grid = fd_get_sample_pixel_grid;
 
    pscreen->get_timestamp = fd_screen_get_timestamp;
+
+   if (is_a6xx(screen))
+      pscreen->convert_timestamp = fd_screen_convert_timestamp;
 
    pscreen->fence_reference = _fd_fence_ref;
    pscreen->fence_finish = fd_pipe_fence_finish;

@@ -165,6 +165,14 @@ struct pipe_screen {
    uint64_t (*get_timestamp)(struct pipe_screen *);
 
    /**
+    * If the driver supports PIPE_QUERY_TIMESTAMP_RAW, this function
+    * must be implemented to convert the drivers raw timestamp to ns.
+    * If the driver does not support PIPE_QUERY_TIMESTAMP_RAW, it should
+    * not implement this function.
+    */
+   uint64_t (*convert_timestamp)(struct pipe_screen *, uint64_t raw_timestamp);
+
+   /**
     * Return an equivalent canonical format which has the same component sizes
     * and swizzles as the original, and it is supported by the driver. Gallium
     * already does a first canonicalization step (see get_canonical_format()
