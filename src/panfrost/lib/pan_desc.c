@@ -1065,6 +1065,10 @@ pan_get_clean_tile_info(const struct pan_fb_info *fb)
          pan_image_view_get_zs_plane(fb->zs.view.zs).image : NULL;
       if (fb->zs.clear.z || pan_force_clean_write_on(img, fb->tile_size))
          clean_tile.write_zs = 1;
+      const bool zs_has_stencil = img &&
+         util_format_has_stencil(util_format_description(img->props.format));
+      if (zs_has_stencil && fb->zs.clear.s)
+         clean_tile.write_zs = 1;
    }
 
    if (!fb->zs.discard.s) {
