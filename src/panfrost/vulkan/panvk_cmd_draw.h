@@ -66,7 +66,7 @@ struct panvk_rendering_state {
 
    /* Used for separate Z/S images */
    struct {
-      struct pan_image_view load, spill, store;
+      struct pan_image_view load, spill, store, resolve;
    } z_pview, s_pview;
 
    struct {

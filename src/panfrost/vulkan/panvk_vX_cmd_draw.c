@@ -412,49 +412,102 @@ render_state_set_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
     * multisample resolves.
     */
 
+   struct panvk_resolve_attachment z_resolve = { };
+   if (z_att && z_att->resolveMode != VK_RESOLVE_MODE_NONE) {
+      VK_FROM_HANDLE(panvk_image_view, resolve_iview, z_att->resolveImageView);
+      assert(z_ms2ss == (resolve_iview == NULL));
+
+      z_resolve = (struct panvk_resolve_attachment) {
+         .dst_iview = z_ms2ss ? z_iview_ss : resolve_iview,
+         .mode = z_att->resolveMode,
+      };
+      assert(z_resolve.dst_iview != NULL);
+      assert(z_resolve.dst_iview->pview.nr_samples == 1);
+   }
+
+   struct panvk_resolve_attachment s_resolve = { };
+   if (s_att && s_att->resolveMode != VK_RESOLVE_MODE_NONE) {
+      VK_FROM_HANDLE(panvk_image_view, resolve_iview, s_att->resolveImageView);
+      assert(s_ms2ss == (resolve_iview == NULL));
+
+      s_resolve = (struct panvk_resolve_attachment) {
+         .dst_iview = s_ms2ss ? s_iview_ss : resolve_iview,
+         .mode = s_att->resolveMode,
+      };
+      assert(s_resolve.dst_iview != NULL);
+      assert(s_resolve.dst_iview->pview.nr_samples == 1);
+   }
+
    if (interleaved_zs) {
       /* Store both Z and S together */
       struct panvk_image_view *iview = z_iview ? z_iview : s_iview;
       render->z_pview.store = get_zs_pan_image_view(iview);
       render->fb.store.zs = pan_fb_store_iview(&render->z_pview.store);
+
+      /* It's probably possible to make resolve shaders work with interleaved
+       * Z/S but it's tricky at best.  For now, skip this optimization in the
+       * interleaved case.
+       */
+      render->z_attachment.resolve = z_resolve;
+      render->s_attachment.resolve = s_resolve;
    } else {
       if (z_iview) {
          render->z_pview.store = get_z_pan_image_view(z_iview);
-         render->fb.store.zs = pan_fb_store_iview(&render->z_pview.store);
+         if (z_att->storeOp == VK_ATTACHMENT_STORE_OP_STORE && !z_ms2ss)
+            render->fb.store.zs = pan_fb_store_iview(&render->z_pview.store);
       }
 
       if (s_iview) {
          render->s_pview.store = get_s_pan_image_view(s_iview);
-         render->fb.store.s = pan_fb_store_iview(&render->s_pview.store);
+         if (s_att->storeOp == VK_ATTACHMENT_STORE_OP_STORE && !s_ms2ss)
+            render->fb.store.s = pan_fb_store_iview(&render->s_pview.store);
       }
-   }
 
-   if (z_att && z_att->resolveMode != VK_RESOLVE_MODE_NONE) {
-      VK_FROM_HANDLE(panvk_image_view, resolve_iview, z_att->resolveImageView);
-      assert(z_ms2ss == (resolve_iview == NULL));
+      if (z_resolve.mode != VK_RESOLVE_MODE_NONE) {
+         if (z_ms2ss || z_att->storeOp != VK_ATTACHMENT_STORE_OP_STORE) {
+            render->z_pview.resolve = get_z_pan_image_view(z_resolve.dst_iview);
+            render->fb.resolve.z = (struct pan_fb_resolve_target) {
+               .in_bounds = {
+                  .resolve = PAN_FB_RESOLVE_Z,
+                  .msaa = vk_to_pan_fb_resolve_mode(z_att->resolveMode),
+               },
+               .border = {
+                  .resolve = PAN_FB_RESOLVE_IMAGE,
+                  .msaa = PAN_FB_MSAA_COPY_SINGLE,
+               },
+               .iview = &render->z_pview.resolve,
+            };
+            render->fb.store.zs =
+               pan_fb_always_store_iview_s0(&render->z_pview.resolve);
+         } else {
+            /* We need to store so we can do the MSAA resolve later */
+            render->fb.store.zs = pan_fb_store_iview(&render->z_pview.store);
+            render->z_attachment.resolve = z_resolve;
+         }
+      }
 
-      const struct panvk_resolve_attachment resolve = {
-         .dst_iview = z_ms2ss ? z_iview_ss : resolve_iview,
-         .mode = z_att->resolveMode,
-      };
-      assert(resolve.dst_iview != NULL);
-      assert(resolve.dst_iview->pview.nr_samples == 1);
-
-      render->z_attachment.resolve = resolve;
-   }
-
-   if (s_att && s_att->resolveMode != VK_RESOLVE_MODE_NONE) {
-      VK_FROM_HANDLE(panvk_image_view, resolve_iview, s_att->resolveImageView);
-      assert(s_ms2ss == (resolve_iview == NULL));
-
-      const struct panvk_resolve_attachment resolve = {
-         .dst_iview = s_ms2ss ? s_iview_ss : resolve_iview,
-         .mode = s_att->resolveMode,
-      };
-      assert(resolve.dst_iview != NULL);
-      assert(resolve.dst_iview->pview.nr_samples == 1);
-
-      render->s_attachment.resolve = resolve;
+      if (s_resolve.mode != VK_RESOLVE_MODE_NONE) {
+         if (s_ms2ss || s_att->storeOp != VK_ATTACHMENT_STORE_OP_STORE) {
+            render->s_pview.resolve = get_s_pan_image_view(s_resolve.dst_iview);
+            render->fb.resolve.s = (struct pan_fb_resolve_target) {
+               .in_bounds = {
+                  .resolve = PAN_FB_RESOLVE_S,
+                  .msaa = vk_to_pan_fb_resolve_mode(s_att->resolveMode),
+               },
+               .border = {
+                  .resolve = PAN_FB_RESOLVE_IMAGE,
+                  .msaa = PAN_FB_MSAA_COPY_SINGLE,
+               },
+               .iview = &render->s_pview.resolve,
+            };
+            render->fb.store.s =
+               pan_fb_always_store_iview_s0(&render->s_pview.resolve);
+         } else {
+            /* We need to store so we can do the MSAA resolve later */
+            render->fb.store.s = pan_fb_store_iview(&render->s_pview.store);
+            render->s_attachment.resolve = s_resolve;
+         }
+      }
    }
 }
 
