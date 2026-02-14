@@ -273,14 +273,10 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
    anv_batch_emit(batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr);
 #endif
 
-   anv_batch_emit(batch, GENX(3DSTATE_PUSH_CONSTANT_ALLOC_VS), alloc);
-   anv_batch_emit(batch, GENX(3DSTATE_PUSH_CONSTANT_ALLOC_HS), alloc);
-   anv_batch_emit(batch, GENX(3DSTATE_PUSH_CONSTANT_ALLOC_DS), alloc);
-   anv_batch_emit(batch, GENX(3DSTATE_PUSH_CONSTANT_ALLOC_GS), alloc);
-   anv_batch_emit(batch, GENX(3DSTATE_PUSH_CONSTANT_ALLOC_PS), alloc) {
-      alloc.ConstantBufferOffset = 0;
-      alloc.ConstantBufferSize   = device->info->max_constant_urb_size_kb;
-   }
+   VkShaderStageFlags push_stages =
+      genX(push_constant_alloc_stages)(VK_SHADER_STAGE_FRAGMENT_BIT);
+   genX(batch_emit_push_constants)(batch, device, push_stages);
+   state->cmd_buffer->state.gfx.push_constant_stages = push_stages;
 
 #if GFX_VERx10 == 125
    /* DG2: Wa_22011440098

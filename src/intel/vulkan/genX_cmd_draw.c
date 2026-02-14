@@ -35,31 +35,16 @@
 
 #include "genX_mi_builder.h"
 
-static void
-cmd_buffer_alloc_gfx_push_constants(struct anv_cmd_buffer *cmd_buffer)
+static VkShaderStageFlags
+batch_emit_push_constants(struct anv_batch *batch,
+                          struct anv_device *device,
+                          VkShaderStageFlags stages)
 {
-   struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
-   VkShaderStageFlags stages = gfx->active_stages;
-
-   /* In order to avoid thrash, we assume that vertex and fragment stages
-    * always exist.  In the rare case where one is missing *and* the other
-    * uses push concstants, this may be suboptimal.  However, avoiding stalls
-    * seems more important.
-    */
-   stages |= VK_SHADER_STAGE_FRAGMENT_BIT;
-   if (anv_gfx_has_stage(gfx, MESA_SHADER_VERTEX))
-      stages |= VK_SHADER_STAGE_VERTEX_BIT;
-
-   if (stages == cmd_buffer->state.gfx.push_constant_stages)
-      return;
-
    unsigned push_constant_kb;
-
-   const struct intel_device_info *devinfo = cmd_buffer->device->info;
-   if (anv_gfx_has_stage(gfx, MESA_SHADER_MESH))
-      push_constant_kb = devinfo->mesh_max_constant_urb_size_kb;
+   if (stages & VK_SHADER_STAGE_MESH_BIT_EXT)
+      push_constant_kb = device->info->mesh_max_constant_urb_size_kb;
    else
-      push_constant_kb = devinfo->max_constant_urb_size_kb;
+      push_constant_kb = device->info->max_constant_urb_size_kb;
 
    const unsigned num_stages =
       util_bitcount(stages & VK_SHADER_STAGE_ALL_GRAPHICS);
@@ -75,8 +60,7 @@ cmd_buffer_alloc_gfx_push_constants(struct anv_cmd_buffer *cmd_buffer)
    uint32_t kb_used = 0;
    for (int i = MESA_SHADER_VERTEX; i < MESA_SHADER_FRAGMENT; i++) {
       const unsigned push_size = (stages & (1 << i)) ? size_per_stage : 0;
-      anv_batch_emit(&cmd_buffer->batch,
-                     GENX(3DSTATE_PUSH_CONSTANT_ALLOC_VS), alloc) {
+      anv_batch_emit(batch, GENX(3DSTATE_PUSH_CONSTANT_ALLOC_VS), alloc) {
          alloc._3DCommandSubOpcode  = 18 + i;
          alloc.ConstantBufferOffset = (push_size > 0) ? kb_used : 0;
          alloc.ConstantBufferSize   = push_size;
@@ -84,8 +68,7 @@ cmd_buffer_alloc_gfx_push_constants(struct anv_cmd_buffer *cmd_buffer)
       kb_used += push_size;
    }
 
-   anv_batch_emit(&cmd_buffer->batch,
-                  GENX(3DSTATE_PUSH_CONSTANT_ALLOC_PS), alloc) {
+   anv_batch_emit(batch, GENX(3DSTATE_PUSH_CONSTANT_ALLOC_PS), alloc) {
       alloc.ConstantBufferOffset = kb_used;
       alloc.ConstantBufferSize = push_constant_kb - kb_used;
    }
@@ -98,14 +81,37 @@ cmd_buffer_alloc_gfx_push_constants(struct anv_cmd_buffer *cmd_buffer)
     * program push constant command(ZERO length) without any commit between
     * them.
     */
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CONSTANT_ALL), c) {
+   anv_batch_emit(batch, GENX(3DSTATE_CONSTANT_ALL), c) {
       /* Update empty push constants for all stages (bitmask = 11111b) */
       c.ShaderUpdateEnable = 0x1f;
-      c.MOCS = anv_mocs(cmd_buffer->device, NULL, 0);
+      c.MOCS = anv_mocs(device, NULL, 0);
    }
 #endif
 
-   cmd_buffer->state.gfx.push_constant_stages = stages;
+   return stages;
+}
+
+void
+genX(batch_emit_push_constants)(struct anv_batch *batch,
+                                struct anv_device *device,
+                                VkShaderStageFlags stages)
+{
+   batch_emit_push_constants(batch, device, stages);
+}
+
+static void
+cmd_buffer_alloc_gfx_push_constants(struct anv_cmd_buffer *cmd_buffer)
+{
+   struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
+   const VkShaderStageFlags stages =
+      genX(push_constant_alloc_stages)(gfx->active_stages);
+
+   if (cmd_buffer->state.gfx.push_constant_stages == stages)
+      return;
+
+   batch_emit_push_constants(&cmd_buffer->batch, cmd_buffer->device, stages);
+
+   gfx->push_constant_stages = stages;
 
    /* From the BDW PRM for 3DSTATE_PUSH_CONSTANT_ALLOC_VS:
     *

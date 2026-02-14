@@ -74,6 +74,25 @@ void genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
 
 void genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer);
 
+ALWAYS_INLINE static VkShaderStageFlags
+genX(push_constant_alloc_stages)(VkShaderStageFlags active_stages)
+{
+   /* In order to avoid thrash, we assume that vertex and fragment stages
+    * always exist. In the rare case where one is missing *and* the other uses
+    * push constants, this may be suboptimal. However, avoiding stalls seems
+    * more important.
+    */
+   VkShaderStageFlags stages = active_stages | VK_SHADER_STAGE_FRAGMENT_BIT;
+   if (!(stages & VK_SHADER_STAGE_MESH_BIT_EXT))
+      stages |= VK_SHADER_STAGE_VERTEX_BIT;
+
+   return stages;
+}
+
+void genX(batch_emit_push_constants)(struct anv_batch *batch,
+                                     struct anv_device *device,
+                                     VkShaderStageFlags stages);
+
 void
 genX(cmd_buffer_update_color_aux_op)(struct anv_cmd_buffer *cmd_buffer,
                                      enum isl_aux_op aux_op);
