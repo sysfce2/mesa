@@ -148,6 +148,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_calibrated_timestamps             = device->has_reg_timestamp,
       .KHR_compute_shader_derivatives        = true,
       .KHR_cooperative_matrix                = device->has_cooperative_matrix,
+      .NV_cooperative_matrix2                = device->has_cooperative_matrix,
       .KHR_copy_commands2                    = true,
       .KHR_create_renderpass2                = true,
       .KHR_dedicated_allocation              = true,
@@ -882,6 +883,9 @@ get_features(const struct anv_physical_device *pdevice,
 
       /* VK_KHR_cooperative_matrix */
       .cooperativeMatrix = pdevice->has_cooperative_matrix,
+
+      /* VK_NV_cooperative_matrix2 */
+      .cooperativeMatrixPerElementOperations = pdevice->has_cooperative_matrix,
 
       /* VK_KHR_shader_maximal_reconvergence */
       .shaderMaximalReconvergence = true,

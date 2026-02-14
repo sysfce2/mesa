@@ -1404,6 +1404,21 @@ anv_shader_lower_nir(struct anv_device *device,
        nir->info.cs.has_cooperative_matrix) {
       anv_fixup_subgroup_size(device, nir);
       NIR_PASS(_, nir, brw_nir_lower_cmat, nir->info.api_subgroup_size);
+
+      /* Lowering of nir_instr_type_cmat_call will produce new
+       * nir_instr_type_call instructions that need to be inlined.
+       */
+      bool inlined = false;
+      NIR_PASS(_, nir, nir_opt_dce);
+      NIR_PASS(inlined, nir, nir_inline_functions);
+      nir_remove_non_entrypoints(nir);
+      if (inlined) {
+         NIR_PASS(_, nir, nir_opt_copy_prop_vars);
+         NIR_PASS(_, nir, nir_opt_copy_prop);
+      }
+      NIR_PASS(_, nir, nir_opt_deref);
+      NIR_PASS(_, nir, nir_opt_dce);
+
       NIR_PASS(_, nir, nir_lower_indirect_derefs_to_if_else_trees,
                nir_var_function_temp, 16);
    }
