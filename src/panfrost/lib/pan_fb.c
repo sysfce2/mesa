@@ -146,6 +146,143 @@ GENX(pan_align_fb_tiling_area)(struct pan_fb_layout *fb,
    }
 }
 
+static void
+fold_sample_0_image_load(struct pan_fb_resolve_op_msaa *rm,
+                         const struct pan_image_view *iview,
+                         uint8_t fb_sample_count)
+{
+   if (rm->resolve != PAN_FB_RESOLVE_IMAGE)
+      return;
+
+   if (rm->msaa != PAN_FB_MSAA_COPY_ALL)
+      return;
+
+   assert(pan_image_view_get_nr_samples(iview) == fb_sample_count);
+
+   /* If we're loading all samples of the image but only storing SAMPLE_0,
+    * then we don't actually need all samples in the image.  Drop it to a
+    * SAMPLE_0 load to save bandwidth.
+    */
+   rm->msaa = PAN_FB_MSAA_COPY_SAMPLE_0;
+}
+
+static bool
+resolve_msaa_can_fold(struct pan_fb_resolve_op_msaa rm,
+                      enum pan_fb_resolve_op self_op,
+                      enum pipe_format format)
+{
+   if (rm.resolve == PAN_FB_RESOLVE_IMAGE) {
+      /* We already folded away COPY_ALL and all the other MSAA modes produce
+       * a single per-pixel result across all the samples, i.e. COPY_IDENTICAL.
+       * We can fold that with any resolve mode.
+       */
+      assert(rm.msaa != PAN_FB_MSAA_COPY_ALL);
+      return true;
+   }
+
+   if (rm.resolve != self_op)
+      return false;
+
+   /* PAN_FB_MSAA_COPY_IDENTICAL is always foldable */
+   if (rm.msaa == PAN_FB_MSAA_COPY_IDENTICAL)
+      return true;
+
+   if (self_op == PAN_FB_RESOLVE_Z || self_op == PAN_FB_RESOLVE_S) {
+      /* Z/S only supports SAMPLE_0 */
+      return rm.msaa == PAN_FB_MSAA_COPY_SAMPLE_0;
+   } else {
+      if (rm.msaa == PAN_FB_MSAA_COPY_AVERAGE &&
+          !GENX(pan_format_supports_msaa_average)(format))
+         return false;
+
+      /* The color hardware supports SAMPLE_0 and AVERAGE */
+      return rm.msaa == PAN_FB_MSAA_COPY_SAMPLE_0 ||
+             rm.msaa == PAN_FB_MSAA_COPY_AVERAGE;
+   }
+}
+
+static void
+fold_resolve_into_store_target(enum pipe_format format,
+                               uint8_t fb_sample_count,
+                               enum pan_fb_resolve_op self_op,
+                               struct pan_fb_resolve_target *resolve,
+                               struct pan_fb_store_target *store)
+{
+   if (format == PIPE_FORMAT_NONE)
+      return;
+
+   /* We need SAMPLE_0 if we're going to fold in the resolve */
+   if (store->msaa != PAN_FB_MSAA_COPY_SAMPLE_0)
+      return;
+
+   fold_sample_0_image_load(&resolve->in_bounds, resolve->iview,
+                            fb_sample_count);
+   fold_sample_0_image_load(&resolve->in_bounds, resolve->iview,
+                            fb_sample_count);
+
+   if (!resolve_msaa_can_fold(resolve->in_bounds, self_op, format) ||
+       !resolve_msaa_can_fold(resolve->border, self_op, format))
+      return;
+
+   enum pan_fb_msaa_copy_op msaa;
+   if (resolve->in_bounds.resolve == PAN_FB_RESOLVE_IMAGE) {
+      /* If they're both IMAGE, there's nothing to fold */
+      if (resolve->border.resolve == PAN_FB_RESOLVE_IMAGE)
+         return;
+      msaa = resolve->border.msaa;
+   } else if (resolve->border.resolve == PAN_FB_RESOLVE_IMAGE) {
+      msaa = resolve->in_bounds.msaa;
+   } else {
+      /* If neither is an image resolve, the MSAA copy op has to match or one
+       * of them has to be PAN_FB_MSAA_COPY_IDENTICAL.
+       */
+      if (resolve->in_bounds.msaa != PAN_FB_MSAA_COPY_IDENTICAL) {
+         if (resolve->border.msaa != PAN_FB_MSAA_COPY_IDENTICAL &&
+             resolve->border.msaa != resolve->in_bounds.msaa)
+            return;
+         msaa = resolve->in_bounds.msaa;
+      } else {
+         msaa = resolve->border.msaa;
+      }
+   }
+
+   /* PAN_FB_MSAA_COPY_IDENTICAL isn't real. Use SAMPLE_0 */
+   if (msaa == PAN_FB_MSAA_COPY_IDENTICAL)
+      msaa = PAN_FB_MSAA_COPY_SAMPLE_0;
+
+   /* At this point, we know we can fold the resolve */
+   store->msaa = msaa;
+
+   if (resolve->in_bounds.resolve != PAN_FB_RESOLVE_IMAGE) {
+      resolve->in_bounds.resolve = PAN_FB_RESOLVE_NONE;
+      resolve->in_bounds.msaa = PAN_FB_MSAA_COPY_ALL;
+   }
+
+   if (resolve->border.resolve != PAN_FB_RESOLVE_IMAGE) {
+      resolve->border.resolve = PAN_FB_RESOLVE_NONE;
+      resolve->border.msaa = PAN_FB_MSAA_COPY_ALL;
+   }
+}
+
+void
+GENX(pan_fb_fold_resolve_into_store)(const struct pan_fb_layout *fb,
+                                     struct pan_fb_resolve *resolve,
+                                     struct pan_fb_store *store)
+{
+   if (fb->sample_count == 1)
+      return;
+
+   fold_resolve_into_store_target(fb->z_format, fb->sample_count,
+                                  PAN_FB_RESOLVE_Z, &resolve->z, &store->zs);
+   fold_resolve_into_store_target(fb->s_format, fb->sample_count,
+                                  PAN_FB_RESOLVE_S, &resolve->s, &store->s);
+   for (unsigned rt = 0; rt < fb->rt_count; rt++) {
+      fold_resolve_into_store_target(fb->rt_formats[rt], fb->sample_count,
+                                     PAN_FB_RESOLVE_RT(rt),
+                                     &resolve->rts[rt], &store->rts[rt]);
+   }
+}
+
 void
 GENX(pan_fill_fb_info)(const struct pan_fb_desc_info *info,
                        struct pan_fb_info *fbinfo)

@@ -630,6 +630,11 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
    GENX(pan_align_fb_tiling_area)(&render->fb.layout, &render->fb.store);
    GENX(pan_align_fb_tiling_area)(&render->fb.layout, &render->fb.spill.store);
 
+   /* Try to optimize and remove unnecessary resolves if we can */
+   GENX(pan_fb_fold_resolve_into_store)(&render->fb.layout,
+                                        &render->fb.resolve,
+                                        &render->fb.store);
+
    const bool has_partial_tiles =
       pan_fb_has_partial_tiles(&render->fb.layout);
    if (!(pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT) &&
