@@ -108,7 +108,8 @@ files_libradeonsi = files(
 
 radeonsi_include_dirs = [inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_amd_common,
                          inc_amd_common_llvm, inc_gallium_drivers, inc_compiler, inc_amd, inc_amd_vpe, inc_virtio_gpu]
-radeonsi_deps = [dep_llvm, dep_clock, dep_libdrm, idep_nir_headers, idep_amdgfxregs_h, idep_mesautil, idep_aco, idep_u_tracepoints, idep_si_tracepoints]
+radeonsi_deps = [dep_llvm, dep_clock, dep_libdrm, idep_nir_headers, idep_amd_generated_headers,
+                 idep_mesautil, idep_aco, idep_u_tracepoints, idep_si_tracepoints]
 
 if with_perfetto
   radeonsi_deps += dep_perfetto
@@ -156,7 +157,7 @@ endif
 
 libradeonsi = static_library(
   'radeonsi',
-  [files_libradeonsi, sid_tables_h],
+  [files_libradeonsi],
   c_args : libradeonsi_cflags,
   include_directories : radeonsi_include_dirs,
   gnu_symbol_visibility : 'hidden',

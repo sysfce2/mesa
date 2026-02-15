@@ -6,7 +6,7 @@ libradeonwinsys_c_args = []
 amd_common_libs = []
 
 if with_gallium_radeonsi
-  libradeonwinsys_deps += [idep_amdgfxregs_h]
+  libradeonwinsys_deps += [idep_amd_generated_headers]
   libradeonwinsys_c_args = ['-DHAVE_GALLIUM_RADEONSI']
   amd_common_libs += [libamd_common]
 endif
