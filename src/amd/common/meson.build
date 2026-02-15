@@ -23,6 +23,27 @@ amd_register_files = [
   '../registers/registers-manually-defined.json',
 ]
 
+amd_packet_files = [
+  # The python script expects parameters in this order.
+  '../packets/cp_pm4_table_data_gfx11.json',
+  '../packets/pm4_it_opcodes_gfx11.h',
+
+  '../packets/cp_pm4_table_data_gfx12.json',
+  '../packets/pm4_it_opcodes_gfx12.h',
+]
+
+amd_packet_headers = []
+
+foreach gen : ['gfx11', 'gfx12']
+  amd_packet_headers += custom_target(
+    'amd_cp_packets_' + gen + '.h',
+    input : ['../packets/parse_cp_pm4_table_data_json.py', amd_packet_files],
+    output : 'amd_cp_packets_' + gen + '.h',
+    command : [prog_python, '@INPUT@', gen],
+    capture : true,
+  )
+endforeach
+
 sid_tables_h = custom_target(
   'sid_tables_h',
   input : ['sid_tables.py', 'sid.h'] + amd_register_files,
@@ -168,7 +189,7 @@ if dep_elf.found()
 endif
 
 idep_amd_generated_headers = declare_dependency(
-  sources : [amdgfxregs_h, sid_tables_h]
+  sources : [amdgfxregs_h, sid_tables_h, amd_packet_headers]
 )
 
 libamd_common = static_library(

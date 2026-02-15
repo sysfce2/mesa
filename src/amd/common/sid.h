@@ -9,6 +9,9 @@
 
 #include "amdgfxregs.h"
 
+#include "amd_cp_packets_gfx11.h"
+#include "amd_cp_packets_gfx12.h"
+
 /* si values */
 #define SI_CONFIG_REG_OFFSET       0x00008000
 #define SI_CONFIG_REG_END          0x0000B000
