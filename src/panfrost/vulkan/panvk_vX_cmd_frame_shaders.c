@@ -754,6 +754,10 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
       cfg.shader.fau = faus.gpu;
 #endif
       cfg.flags_2.write_mask = rt_written;
+#if PAN_ARCH >= 11
+      cfg.flags_2.no_shader_depth_read = true;
+      cfg.flags_2.no_shader_stencil_read = true;
+#endif
    }
 
    if (key->type == PANVK_META_OBJECT_KEY_FB_COLOR_PRELOAD_SHADER) {
