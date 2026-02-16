@@ -67,7 +67,7 @@ struct radv_physical_device_cache_key {
    uint32_t mitigate_smem_oob : 1;
    uint32_t rt_cps : 1;
 
-   uint32_t reserved : 7;
+   uint32_t reserved : 6;
 };
 
 enum radv_video_enc_hw_ver {
