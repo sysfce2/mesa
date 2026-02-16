@@ -136,6 +136,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_color_write_enable = true,
       .EXT_custom_border_color = true,
       .EXT_depth_bias_control = true,
+      .EXT_depth_clamp_control = true,
       .EXT_depth_clamp_zero_one = true,
       .EXT_depth_clip_enable = true,
       .EXT_depth_clip_control = true,
@@ -456,6 +457,9 @@ panvk_per_arch(get_physical_device_features)(
       .leastRepresentableValueForceUnormRepresentation = false,
       .floatRepresentation = false,
       .depthBiasExact = true,
+
+      /* VK_EXT_depth_clamp_control */
+      .depthClampControl = true,
 
       /* VK_EXT_depth_clip_control */
       .depthClipControl = true,

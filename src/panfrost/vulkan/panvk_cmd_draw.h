@@ -240,6 +240,12 @@ panvk_depth_range(const struct panvk_cmd_graphics_state *state,
                   const struct vk_viewport_state *vp,
                   float *z_min, float *z_max)
 {
+   if (vp->depth_clamp_mode == VK_DEPTH_CLAMP_MODE_USER_DEFINED_RANGE_EXT) {
+      *z_min = vp->depth_clamp_range.minDepthClamp;
+      *z_max = vp->depth_clamp_range.maxDepthClamp;
+      return;
+   }
+
    float a = vp->depth_clip_negative_one_to_one ?
       state->sysvals.viewport.offset.z - state->sysvals.viewport.scale.z :
       state->sysvals.viewport.offset.z;

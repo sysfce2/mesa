@@ -731,7 +731,8 @@ prepare_vp(struct panvk_cmd_buffer *cmdbuf)
    if (dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORTS) ||
        dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE) ||
        dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLIP_ENABLE) ||
-       dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLAMP_ENABLE)) {
+       dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLAMP_ENABLE) ||
+       dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLAMP_RANGE)) {
       struct mali_viewport_packed mali_viewport;
       pan_pack(&mali_viewport, VIEWPORT, cfg) {
          /* The spec says "width must be greater than 0.0" */
@@ -757,9 +758,10 @@ prepare_vp(struct panvk_cmd_buffer *cmdbuf)
 
          float z_min, z_max;
          panvk_depth_range(&cmdbuf->state.gfx,
-                           &cmdbuf->vk.dynamic_graphics_state.vp, &z_min, &z_max);
-         cfg.min_depth = CLAMP(z_min, 0.0f, 1.0f);
-         cfg.max_depth = CLAMP(z_max, 0.0f, 1.0f);
+                           &cmdbuf->vk.dynamic_graphics_state.vp,
+                           &z_min, &z_max);
+         cfg.min_depth = z_min;
+         cfg.max_depth = z_max;
       }
 
       uint64_t *mali_viewport_ptr = (uint64_t *)&mali_viewport;
@@ -820,7 +822,8 @@ prepare_vp(struct panvk_cmd_buffer *cmdbuf)
    if (dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORTS) ||
        dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE) ||
        dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLIP_ENABLE) ||
-       dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLAMP_ENABLE)) {
+       dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLAMP_ENABLE) ||
+       dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLAMP_RANGE)) {
       float z_min, z_max;
       panvk_depth_range(&cmdbuf->state.gfx,
                         &cmdbuf->vk.dynamic_graphics_state.vp, &z_min, &z_max);
