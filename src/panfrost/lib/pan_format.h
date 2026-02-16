@@ -336,6 +336,12 @@ GENX(pan_dithered_format_from_pipe_format)(enum pipe_format f, bool dithered)
    return pixfmt ?: GENX(pan_format_from_pipe_format)(f)->hw;
 }
 #endif
+
+static inline bool
+GENX(pan_format_supports_hw_blend)(enum pipe_format format)
+{
+   return GENX(pan_blendable_format_from_pipe_format)(format)->internal;
+}
 #endif
 
 #endif

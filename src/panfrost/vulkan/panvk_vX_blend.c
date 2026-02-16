@@ -226,7 +226,7 @@ blend_needs_shader(const struct pan_blend_state *state, unsigned rt_idx,
       return false;
 
    /* Not all formats can be blended by fixed-function hardware */
-   if (!GENX(pan_blendable_format_from_pipe_format)(rt->format)->internal)
+   if (!GENX(pan_format_supports_hw_blend)(rt->format))
       return true;
 
    bool supports_2src = pan_blend_supports_2src(PAN_ARCH);
