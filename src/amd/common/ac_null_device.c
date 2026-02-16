@@ -49,22 +49,15 @@ ac_null_device_create(struct radeon_info *gpu_info, const char *family)
 
    gpu_info->has_timeline_syncobj = true;
    gpu_info->has_vm_always_valid = true;
-   gpu_info->has_3d_cube_border_color_mipmap = true;
    gpu_info->has_image_opcodes = true;
    gpu_info->has_attr_ring = gpu_info->gfx_level >= GFX11;
    gpu_info->has_attr_ring_wait_bug = gpu_info->gfx_level == GFX11 || gpu_info->gfx_level == GFX11_5;
    gpu_info->has_ngg_fully_culled_bug = gpu_info->gfx_level == GFX10;
-   gpu_info->has_ngg_passthru_no_msg = gpu_info->family >= CHIP_NAVI23;
 
    gpu_info->lds_size_per_workgroup = gpu_info->gfx_level >= GFX7 ? 64 * 1024 : 32 * 1024;
    gpu_info->max_render_backends = pci_ids[gpu_info->family].num_render_backends;
 
    gpu_info->has_dedicated_vram = pci_ids[gpu_info->family].has_dedicated_vram;
-
-   gpu_info->has_cb_lt16bit_int_clamp_bug = gpu_info->gfx_level <= GFX7 &&
-                                            gpu_info->family != CHIP_HAWAII;
-
-   gpu_info->has_image_load_dcc_bug = gpu_info->family == CHIP_NAVI23 || gpu_info->family == CHIP_VANGOGH;
 
    gpu_info->has_distributed_tess =
       gpu_info->gfx_level >= GFX10 || (gpu_info->gfx_level >= GFX8 && gpu_info->max_se >= 2);
@@ -80,7 +73,6 @@ ac_null_device_create(struct radeon_info *gpu_info, const char *family)
    gpu_info->has_gang_submit = true;
    gpu_info->mesh_fast_launch_2 = gpu_info->gfx_level >= GFX11;
    gpu_info->hs_offchip_workgroup_dw_size = gpu_info->family == CHIP_HAWAII ? 4096 : 8192;
-   gpu_info->has_ls_vgpr_init_bug = gpu_info->family == CHIP_VEGA10 || gpu_info->family == CHIP_RAVEN;
    gpu_info->has_graphics = true;
    gpu_info->ip[AMD_IP_GFX].num_queues = 1;
 

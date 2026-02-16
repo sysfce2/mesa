@@ -52,7 +52,6 @@ si_fill_aco_options(struct si_screen *screen, mesa_shader_stage stage,
    options->record_ir = screen->record_llvm_ir;
    options->is_opengl = true;
 
-   options->has_ls_vgpr_init_bug = screen->info.has_ls_vgpr_init_bug;
    options->family = screen->info.family;
    options->gfx_level = screen->info.gfx_level;
    options->address32_hi = screen->info.address32_hi;

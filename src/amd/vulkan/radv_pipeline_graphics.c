@@ -1828,8 +1828,8 @@ radv_generate_ps_epilog_key(const struct radv_device *device, const struct radv_
                                          state->alpha_to_coverage_via_mrtz);
 
    key.spi_shader_col_format = col_format;
-   key.color_is_int8 = pdev->info.has_cb_lt16bit_int_clamp_bug ? is_int8 : 0;
-   key.color_is_int10 = pdev->info.has_cb_lt16bit_int_clamp_bug ? is_int10 : 0;
+   key.color_is_int8 = pdev->info.cu_info.has_cb_lt16bit_int_clamp_bug ? is_int8 : 0;
+   key.color_is_int10 = pdev->info.cu_info.has_cb_lt16bit_int_clamp_bug ? is_int10 : 0;
    key.enable_mrt_output_nan_fixup = instance->drirc.debug.enable_mrt_output_nan_fixup ? is_float32 : 0;
    key.colors_written = state->colors_written;
    key.mrt0_is_dual_src = state->mrt0_is_dual_src && key.colors_needed & 0xf;
@@ -2380,7 +2380,7 @@ radv_create_gs_copy_shader(struct radv_device *device, struct vk_pipeline_cache 
    NIR_PASS(_, nir, ac_nir_lower_intrinsics_to_args, &gs_copy_stage.args.ac,
             &(ac_nir_lower_intrinsics_to_args_options){
                .gfx_level = pdev->info.gfx_level,
-               .has_ls_vgpr_init_bug = pdev->info.has_ls_vgpr_init_bug,
+               .has_ls_vgpr_init_bug = pdev->info.cu_info.has_ls_vgpr_init_bug,
                .hw_stage = AC_HW_VERTEX_SHADER,
                .wave_size = 64,
                .workgroup_size = 64,

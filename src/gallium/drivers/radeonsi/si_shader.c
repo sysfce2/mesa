@@ -941,7 +941,7 @@ static void si_postprocess_nir(struct si_nir_shader_ctx *ctx)
    NIR_PASS(progress, nir, ac_nir_lower_image_tex,
             &(ac_nir_lower_image_tex_options){
                .gfx_level = sel->screen->info.gfx_level,
-               .lower_array_layer_round_even = !sel->screen->info.conformant_trunc_coord,
+               .lower_array_layer_round_even = !sel->screen->info.cu_info.conformant_trunc_coord,
             });
 
    if (nir->info.uses_resource_info_query)
@@ -1138,7 +1138,7 @@ static void si_postprocess_nir(struct si_nir_shader_ctx *ctx)
    NIR_PASS(progress, nir, ac_nir_lower_intrinsics_to_args, &ctx->args.ac,
             &(ac_nir_lower_intrinsics_to_args_options){
                .gfx_level = sel->screen->info.gfx_level,
-               .has_ls_vgpr_init_bug = sel->screen->info.has_ls_vgpr_init_bug,
+               .has_ls_vgpr_init_bug = sel->screen->info.cu_info.has_ls_vgpr_init_bug,
                .hw_stage = si_select_hw_stage(nir->info.stage, key, sel->screen->info.gfx_level),
                .wave_size = shader->wave_size,
                .workgroup_size = si_get_max_workgroup_size(shader),
@@ -1379,7 +1379,7 @@ si_nir_generate_gs_copy_shader(struct si_screen *sscreen,
    NIR_PASS(_, nir, ac_nir_lower_intrinsics_to_args, &linked.consumer.args.ac,
             &(ac_nir_lower_intrinsics_to_args_options){
                .gfx_level = sscreen->info.gfx_level,
-               .has_ls_vgpr_init_bug = sscreen->info.has_ls_vgpr_init_bug,
+               .has_ls_vgpr_init_bug = sscreen->info.cu_info.has_ls_vgpr_init_bug,
                .hw_stage = AC_HW_VERTEX_SHADER,
                .wave_size = 64,
                .workgroup_size = 64,

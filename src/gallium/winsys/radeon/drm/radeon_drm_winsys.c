@@ -632,7 +632,6 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
    ws->info.max_alignment = 1024*1024;
    ws->info.has_graphics = true;
    ws->info.cpdma_prefetch_writes_memory = true;
-   ws->info.has_3d_cube_border_color_mipmap = true;
    ws->info.has_image_opcodes = true;
    ws->info.spi_cu_en_has_effect = false;
    ws->info.spi_cu_en = 0xffff;

@@ -130,7 +130,6 @@ radv_aco_convert_opts(struct aco_compiler_options *aco_info, const struct radv_n
    aco_info->gfx_level = radv->info->gfx_level;
    aco_info->family = radv->info->family;
    aco_info->address32_hi = radv->info->address32_hi;
-   aco_info->has_ls_vgpr_init_bug = radv->info->has_ls_vgpr_init_bug;
 }
 #undef ASSIGN_VS_STATE_FIELD
 #undef ASSIGN_VS_STATE_FIELD_CP

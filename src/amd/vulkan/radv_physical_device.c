@@ -283,7 +283,7 @@ radv_physical_device_init_cache_key(struct radv_physical_device *pdev)
 
    key->family = pdev->info.family;
    key->ptr_size = sizeof(void *);
-   key->conformant_trunc_coord = pdev->info.conformant_trunc_coord;
+   key->conformant_trunc_coord = pdev->info.cu_info.conformant_trunc_coord;
 
    key->clear_lds = instance->drirc.misc.clear_lds;
    key->cs_wave32 = pdev->cs_wave_size == 32;

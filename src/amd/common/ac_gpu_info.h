@@ -134,14 +134,47 @@ struct ac_cu_info {
     * image_bvh*_intersect_ray instructions
     */
    uint32_t has_image_bvh_intersect_ray : 1;
+   /* Whether PRIMGEN_PASSTHRU_NO_MSG is supported. */
+   uint32_t has_ngg_passthru_no_msg : 1;
+
+   uint32_t has_3d_cube_border_color_mipmap : 1;
+
+   /* conformant_trunc_coord is equal to TA_CNTL2.TRUNCATE_COORD_MODE, which exists since gfx11.
+    *
+    * If TA_CNTL2.TRUNCATE_COORD_MODE == 0, coordinate truncation is the same as gfx10 and older.
+    *
+    * If TA_CNTL2.TRUNCATE_COORD_MODE == 1, coordinate truncation is adjusted to be D3D9/GL/Vulkan
+    * conformant if you also set TRUNC_COORD. Coordinate truncation uses D3D10+ behaviour if
+    * TRUNC_COORD is unset.
+    *
+    * Behavior if TA_CNTL2.TRUNCATE_COORD_MODE == 1:
+    *    truncate_coord_xy = TRUNC_COORD && (xy_filter == Point && !gather);
+    *    truncate_coord_z = TRUNC_COORD && (z_filter == Point);
+    *    truncate_coord_layer = false;
+    *
+    * Behavior if TA_CNTL2.TRUNCATE_COORD_MODE == 0:
+    *    truncate_coord_xy = TRUNC_COORD;
+    *    truncate_coord_z = TRUNC_COORD;
+    *    truncate_coord_layer = TRUNC_COORD;
+    *
+    * AnisoPoint is treated as Point.
+    */
+   uint32_t conformant_trunc_coord : 1;
+
    /* Some GFX6 GPUs have a bug where it only looks at the x writemask component. */
    uint32_t has_gfx6_mrt_export_bug : 1;
    /* Pre-GFX9: A bug where the alpha component of 10_10_10_2 formats is always unsigned.*/
    uint32_t has_vtx_format_alpha_adjust_bug : 1;
    /* GFX6-7: SMEM accesses memory even when it's out of bounds */
    uint32_t has_smem_oob_access_bug : 1;
+   /* GFX10.3: WRITE_COMPRESS_ENABLE must be 0 for all image loads. */
+   uint32_t has_image_load_dcc_bug : 1;
+   /* GFX9: If there are no HS threads, SPI mistakenly loads the LS VGPRs starting at VGPR 0. */
+   uint32_t has_ls_vgpr_init_bug : 1;
+   /* GFX6-7: FS exports are not clamped correctly in certain situations. */
+   uint32_t has_cb_lt16bit_int_clamp_bug : 1;
 
-   uint32_t reserved : 20;
+   uint32_t reserved : 14;
 };
 
 struct radeon_info {
@@ -206,11 +239,8 @@ struct radeon_info {
    bool has_htile_tc_z_clear_bug_without_stencil;
    bool has_htile_tc_z_clear_bug_with_stencil;
    bool has_small_prim_filter_sample_loc_bug;
-   bool has_ls_vgpr_init_bug;
    bool has_pops_missed_overlap_bug;
-   bool has_cb_lt16bit_int_clamp_bug;
    bool has_zero_index_buffer_bug;
-   bool has_image_load_dcc_bug;
    bool has_two_planes_iterate256_bug;
    bool has_vgt_flush_ngg_legacy_bug;
    bool has_prim_restart_sync_bug;
@@ -218,7 +248,6 @@ struct radeon_info {
    bool has_async_compute_threadgroup_bug;
    bool has_async_compute_align32_bug;
    bool has_32bit_predication;
-   bool has_3d_cube_border_color_mipmap;
    bool has_image_opcodes;
    bool never_stop_sq_perf_counters;
    bool has_sqtt_rb_harvest_bug;
@@ -226,7 +255,6 @@ struct radeon_info {
    bool never_send_perfcounter_stop;
    bool discardable_allows_big_page;
    bool has_ngg_fully_culled_bug;
-   bool has_ngg_passthru_no_msg;
    bool has_export_conflict_bug;
    bool has_attr_ring_wait_bug;
    bool cp_dma_supports_sparse;
@@ -243,27 +271,6 @@ struct radeon_info {
                              * the LLVM version doesn't work with multiparts shaders.
                              */
 
-   /* conformant_trunc_coord is equal to TA_CNTL2.TRUNCATE_COORD_MODE, which exists since gfx11.
-    *
-    * If TA_CNTL2.TRUNCATE_COORD_MODE == 0, coordinate truncation is the same as gfx10 and older.
-    *
-    * If TA_CNTL2.TRUNCATE_COORD_MODE == 1, coordinate truncation is adjusted to be D3D9/GL/Vulkan
-    * conformant if you also set TRUNC_COORD. Coordinate truncation uses D3D10+ behaviour if
-    * TRUNC_COORD is unset.
-    *
-    * Behavior if TA_CNTL2.TRUNCATE_COORD_MODE == 1:
-    *    truncate_coord_xy = TRUNC_COORD && (xy_filter == Point && !gather);
-    *    truncate_coord_z = TRUNC_COORD && (z_filter == Point);
-    *    truncate_coord_layer = false;
-    *
-    * Behavior if TA_CNTL2.TRUNCATE_COORD_MODE == 0:
-    *    truncate_coord_xy = TRUNC_COORD;
-    *    truncate_coord_z = TRUNC_COORD;
-    *    truncate_coord_layer = TRUNC_COORD;
-    *
-    * AnisoPoint is treated as Point.
-    */
-   bool conformant_trunc_coord;
    /* Support GS_FAST_LAUNCH(2) for mesh shaders. */
    bool mesh_fast_launch_2;
 
