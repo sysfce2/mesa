@@ -364,7 +364,6 @@ ac_nir_lower_ps_early(nir_shader *nir, const ac_nir_lower_ps_early_options *opti
  */
 typedef struct {
    enum amd_gfx_level gfx_level;
-   enum radeon_family family;
    bool use_aco;
 
    /* System values. */

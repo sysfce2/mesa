@@ -425,7 +425,6 @@ radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_stat
    } else if (stage->stage == MESA_SHADER_FRAGMENT) {
       ac_nir_lower_ps_late_options late_options = {
          .gfx_level = gfx_level,
-         .family = pdev->info.family,
          .use_aco = !radv_use_llvm_for_stage(pdev, stage->stage),
          .bc_optimize_for_persp = G_0286CC_PERSP_CENTER_ENA(stage->info.ps.spi_ps_input_ena) &&
                                   G_0286CC_PERSP_CENTROID_ENA(stage->info.ps.spi_ps_input_ena),

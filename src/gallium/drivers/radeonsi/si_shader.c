@@ -1015,7 +1015,6 @@ static void si_postprocess_nir(struct si_nir_shader_ctx *ctx)
    } else if (nir->info.stage == MESA_SHADER_FRAGMENT && shader->is_monolithic) {
       ac_nir_lower_ps_late_options late_options = {
          .gfx_level = sel->screen->info.gfx_level,
-         .family = sel->screen->info.family,
          .use_aco = nir->info.use_aco_amd,
          .bc_optimize_for_persp = key->ps.part.prolog.bc_optimize_for_persp,
          .bc_optimize_for_linear = key->ps.part.prolog.bc_optimize_for_linear,
