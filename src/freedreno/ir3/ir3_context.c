@@ -28,7 +28,7 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader *shader,
          ctx->astc_srgb = so->key.vastc_srgb;
          memcpy(ctx->sampler_swizzles, so->key.vsampler_swizzles, sizeof(ctx->sampler_swizzles));
       } else if (so->type == MESA_SHADER_FRAGMENT ||
-            so->type == MESA_SHADER_COMPUTE) {
+            ir3_shader_compute(so)) {
          ctx->astc_srgb = so->key.fastc_srgb;
          memcpy(ctx->sampler_swizzles, so->key.fsampler_swizzles, sizeof(ctx->sampler_swizzles));
       }

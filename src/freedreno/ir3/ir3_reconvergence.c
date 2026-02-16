@@ -406,8 +406,7 @@ ir3_calc_reconvergence(struct ir3_shader_variant *so)
    so->branchstack = 0;
 
    if (so->compiler->info->props.has_dual_wave_dispatch &&
-       (so->type == MESA_SHADER_COMPUTE ||
-        so->type == MESA_SHADER_KERNEL ||
+       (ir3_shader_compute(so) ||
         so->type == MESA_SHADER_FRAGMENT)) {
       calc_reconvergence(so, true);
 

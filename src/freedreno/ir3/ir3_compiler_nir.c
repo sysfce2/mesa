@@ -3126,9 +3126,9 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
       create_rpt = true;
       break;
    case nir_intrinsic_load_subgroup_size: {
-      assert(ctx->so->type == MESA_SHADER_COMPUTE ||
+      assert(ir3_shader_compute(ctx->so) ||
              ctx->so->type == MESA_SHADER_FRAGMENT);
-      unsigned size = ctx->so->type == MESA_SHADER_COMPUTE ?
+      unsigned size = ctx->so->type != MESA_SHADER_FRAGMENT ?
          IR3_DP_CS(subgroup_size) : IR3_DP_FS(subgroup_size);
       dst[0] = create_driver_param(ctx, size);
       break;
@@ -6136,7 +6136,7 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
     */
    IR3_PASS(ir, ir3_legalize, so, &max_bary);
 
-   if (ctx->compiler->cs_lock_unlock_quirk && so->type == MESA_SHADER_COMPUTE) {
+   if (ctx->compiler->cs_lock_unlock_quirk && ir3_shader_compute(so)) {
       struct ir3_instruction *end = ir3_find_end(so->ir);
       struct ir3_instruction *lock =
          ir3_build_instr(&ctx->build, OPC_LOCK, 0, 0);

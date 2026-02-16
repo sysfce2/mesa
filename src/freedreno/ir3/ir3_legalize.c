@@ -804,8 +804,8 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
       }
 
       if (ctx->compiler->samgq_workaround &&
-          ctx->type != MESA_SHADER_FRAGMENT &&
-          ctx->type != MESA_SHADER_COMPUTE && n->opc == OPC_SAMGQ) {
+          !is_compute_or_frag(ctx->type) &&
+          n->opc == OPC_SAMGQ) {
          struct ir3_instruction *samgp;
 
          list_delinit(&n->node);
@@ -2566,7 +2566,7 @@ ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary)
    if (so->type == MESA_SHADER_FRAGMENT)
       kill_sched(ir, so);
 
-   if ((so->type == MESA_SHADER_FRAGMENT || so->type == MESA_SHADER_COMPUTE) &&
+   if ((so->type == MESA_SHADER_FRAGMENT || ir3_shader_compute(so)) &&
        so->compiler->info->props.has_eolm_eogm) {
       feature_usage_sched(ctx, ir, so, needs_eolm, is_cheap_for_eolm_eogm,
                           IR3_INSTR_EOLM);

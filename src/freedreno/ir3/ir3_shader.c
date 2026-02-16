@@ -182,8 +182,7 @@ ir3_shader_assemble(struct ir3_shader_variant *v)
     * index.
     */
    v->pvtmem_per_wave = compiler->gen >= 6 && !info->multi_dword_ldp_stp &&
-                        ((v->type == MESA_SHADER_COMPUTE) ||
-                         (v->type == MESA_SHADER_KERNEL));
+                        ir3_shader_compute(v);
 
    return bin;
 }
@@ -621,8 +620,7 @@ create_variant(struct ir3_shader *shader, const struct ir3_shader_key *key,
       shader->nir_finalized = true;
    }
 
-   if (v->type == MESA_SHADER_COMPUTE ||
-       v->type == MESA_SHADER_KERNEL) {
+   if (ir3_shader_compute(v)) {
       v->cs.force_linear_dispatch = shader->cs.force_linear_dispatch;
 
       v->local_size[0] = shader->nir->info.workgroup_size[0];
@@ -783,7 +781,8 @@ ir3_setup_used_key(struct ir3_shader *shader)
     * ucp_enables to determine whether to lower legacy clip planes to
     * gl_ClipDistance.
     */
-   if (info->stage != MESA_SHADER_COMPUTE && (info->stage != MESA_SHADER_FRAGMENT || !shader->compiler->has_clip_cull))
+   if (!mesa_shader_stage_is_compute(info->stage) &&
+       (info->stage != MESA_SHADER_FRAGMENT || !shader->compiler->has_clip_cull))
       key->ucp_enables = 0xff;
 
    if (info->stage == MESA_SHADER_FRAGMENT) {
@@ -810,7 +809,7 @@ ir3_setup_used_key(struct ir3_shader *shader)
        * enabled:
        */
       key->force_dual_color_blend = shader->compiler->options.dual_color_blend_by_location;
-   } else if (info->stage == MESA_SHADER_COMPUTE) {
+   } else if (mesa_shader_stage_is_compute(info->stage)) {
       key->fastc_srgb = ~0;
       key->fsamples = ~0;
       memset(key->fsampler_swizzles, 0xff, sizeof(key->fsampler_swizzles));
@@ -1344,7 +1343,7 @@ ir3_shader_get_subgroup_size(const struct ir3_compiler *compiler,
        * translating from NIR. Otherwise use the "real" wavesize obtained as
        * a driver param.
        */
-      if (stage != MESA_SHADER_COMPUTE && stage != MESA_SHADER_FRAGMENT) {
+      if (!is_compute_or_frag(stage)) {
          *subgroup_size = *max_subgroup_size = compiler->info->threadsize_base;
       } else {
          *subgroup_size = 0;

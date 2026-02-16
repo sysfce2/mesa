@@ -961,6 +961,12 @@ struct ir3_shader_variant {
    struct ir3_stream_output_info stream_output;
 };
 
+static inline bool
+ir3_shader_compute(const struct ir3_shader_variant *v)
+{
+   return mesa_shader_stage_is_compute(v->type);
+}
+
 static inline const char *
 ir3_shader_stage(struct ir3_shader_variant *v)
 {
@@ -1129,8 +1135,7 @@ _ir3_max_const(const struct ir3_shader_variant *v, bool safe_constlen)
       ALIGN_POT(MAX2(DIV_ROUND_UP(shared_consts_size_geom, 4),
                      DIV_ROUND_UP(shared_consts_size, 5)), 4) : 0;
 
-   if ((v->type == MESA_SHADER_COMPUTE) ||
-       (v->type == MESA_SHADER_KERNEL)) {
+   if (ir3_shader_compute(v)) {
       return ir3_max_const_compute(v, compiler) - shared_consts_size;
    } else if (safe_constlen) {
       return compiler->max_const_safe - safe_shared_consts_size;
