@@ -1706,7 +1706,7 @@ radv_get_physical_device_properties(struct radv_physical_device *pdev)
       .maxFragmentOutputAttachments = 8,
       .maxFragmentDualSrcAttachments = 1,
       .maxFragmentCombinedOutputResources = max_descriptor_set_size,
-      .maxComputeSharedMemorySize = pdev->max_shared_size,
+      .maxComputeSharedMemorySize = pdev->info.lds_size_per_workgroup,
       .maxComputeWorkGroupCount = {4294967295, 65535, 65535},
       .maxComputeWorkGroupInvocations = 1024,
       .maxComputeWorkGroupSize = {1024, 1024, 1024},
@@ -2529,8 +2529,6 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
 
    radv_probe_video_decode(pdev);
    radv_probe_video_encode(pdev);
-
-   pdev->max_shared_size = pdev->info.gfx_level >= GFX7 ? 65536 : 32768;
 
    radv_physical_device_init_mem_types(pdev);
 
