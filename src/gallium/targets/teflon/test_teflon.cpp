@@ -134,7 +134,7 @@ test_model(void *buf, size_t buf_size, std::string cache_dir, unsigned tolerance
             break;
          }
          default:
-            assert(!"Unsupported data type for output tensor");
+            FAIL() << "Unsupported data type for output tensor";
          }
       }
    }
