@@ -328,6 +328,9 @@ ac_fill_cu_info(struct radeon_info *info, struct drm_amdgpu_info_device *device_
     */
    cu_info->has_ngg_passthru_no_msg = info->family >= CHIP_NAVI23;
 
+   cu_info->local_invocation_ids_packed =
+      info->gfx_level >= GFX11 || (!info->has_graphics && info->family >= CHIP_MI200);
+
    cu_info->has_3d_cube_border_color_mipmap = info->has_graphics || info->family == CHIP_MI100;
 
    cu_info->conformant_trunc_coord =

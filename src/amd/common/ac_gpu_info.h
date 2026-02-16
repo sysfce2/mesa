@@ -136,6 +136,8 @@ struct ac_cu_info {
    uint32_t has_image_bvh_intersect_ray : 1;
    /* Whether PRIMGEN_PASSTHRU_NO_MSG is supported. */
    uint32_t has_ngg_passthru_no_msg : 1;
+   /* Whether local invocation IDs are packed in a single VGPR. */
+   uint32_t local_invocation_ids_packed : 1;
 
    uint32_t has_3d_cube_border_color_mipmap : 1;
 
@@ -176,7 +178,7 @@ struct ac_cu_info {
    /* GFX10.3: whether frag_pos.z needs adjusting when VRS is used. */
    uint32_t has_vrs_frag_pos_z_bug : 1;
 
-   uint32_t reserved : 13;
+   uint32_t reserved : 12;
 };
 
 struct radeon_info {
