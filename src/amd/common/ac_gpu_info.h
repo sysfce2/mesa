@@ -173,8 +173,10 @@ struct ac_cu_info {
    uint32_t has_ls_vgpr_init_bug : 1;
    /* GFX6-7: FS exports are not clamped correctly in certain situations. */
    uint32_t has_cb_lt16bit_int_clamp_bug : 1;
+   /* GFX10.3: whether frag_pos.z needs adjusting when VRS is used. */
+   uint32_t has_vrs_frag_pos_z_bug : 1;
 
-   uint32_t reserved : 14;
+   uint32_t reserved : 13;
 };
 
 struct radeon_info {

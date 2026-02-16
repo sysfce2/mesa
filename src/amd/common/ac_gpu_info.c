@@ -361,6 +361,9 @@ ac_fill_cu_info(struct radeon_info *info, struct drm_amdgpu_info_device *device_
     */
    cu_info->has_cb_lt16bit_int_clamp_bug = info->gfx_level <= GFX7 &&
                                            info->family != CHIP_HAWAII;
+
+   cu_info->has_vrs_frag_pos_z_bug =
+      info->family == CHIP_NAVI21 || info->family == CHIP_NAVI22 || info->family == CHIP_VANGOGH;
 }
 
 enum ac_query_gpu_info_result

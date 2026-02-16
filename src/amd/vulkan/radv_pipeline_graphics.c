@@ -2015,8 +2015,7 @@ radv_generate_graphics_state_key(const struct radv_device *device, const struct 
 
    key.ps.force_vrs_enabled = device->force_vrs_enabled && !radv_is_static_vrs_enabled(state);
 
-   if ((radv_is_vrs_enabled(state) || key.ps.force_vrs_enabled) &&
-       (pdev->info.family == CHIP_NAVI21 || pdev->info.family == CHIP_NAVI22 || pdev->info.family == CHIP_VANGOGH))
+   if ((radv_is_vrs_enabled(state) || key.ps.force_vrs_enabled) && pdev->info.cu_info.has_vrs_frag_pos_z_bug)
       key.adjust_frag_coord_z = true;
 
    if (radv_pipeline_needs_ps_epilog(state, lib_flags))
