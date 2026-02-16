@@ -236,6 +236,8 @@ static bool handle_env_var_force_family(struct radeon_info *info)
 void
 ac_fill_cu_info(struct radeon_info *info, struct drm_amdgpu_info_device *device_info)
 {
+   STATIC_ASSERT(sizeof(struct ac_cu_info) == 44);
+
    struct ac_cu_info *cu_info = &info->cu_info;
 
    if (info->gfx_level >= GFX10_3)

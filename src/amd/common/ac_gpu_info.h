@@ -113,33 +113,35 @@ struct ac_cu_info {
    uint32_t wave64_vgpr_alloc_granularity;
 
    /* Flags */
-   bool has_lds_bank_count_16 : 1;
-   bool has_sram_ecc_enabled : 1;
+   uint32_t has_lds_bank_count_16 : 1;
+   uint32_t has_sram_ecc_enabled : 1;
    /* Whether image_sample* instructions can be either a sampler or no-sampler access.*/
-   bool has_point_sample_accel : 1;
-   bool has_fast_fma32 : 1;
+   uint32_t has_point_sample_accel : 1;
+   uint32_t has_fast_fma32 : 1;
    /* Whether chips support fused v_fma_mix* instructions.
     * Otherwise, unfused v_mad_mix* is available on GFX9.
     */
-   bool has_fma_mix : 1;
+   uint32_t has_fma_mix : 1;
    /* Whether chips support unfused multiply-add instructions. */
-   bool has_mad32 : 1;
+   uint32_t has_mad32 : 1;
    /* Whether chips support double rate packed math instructions. */
-   bool has_packed_math_16bit : 1;
+   uint32_t has_packed_math_16bit : 1;
    /* Whether chips support dot product instructions. A subset of these support a smaller
     * instruction encoding which accumulates with the destination.
     */
-   bool has_accelerated_dot_product : 1;
+   uint32_t has_accelerated_dot_product : 1;
    /* Device supports hardware-accelerated raytracing using
     * image_bvh*_intersect_ray instructions
     */
-   bool has_image_bvh_intersect_ray : 1;
+   uint32_t has_image_bvh_intersect_ray : 1;
    /* Some GFX6 GPUs have a bug where it only looks at the x writemask component. */
-   bool has_gfx6_mrt_export_bug : 1;
+   uint32_t has_gfx6_mrt_export_bug : 1;
    /* Pre-GFX9: A bug where the alpha component of 10_10_10_2 formats is always unsigned.*/
-   bool has_vtx_format_alpha_adjust_bug : 1;
+   uint32_t has_vtx_format_alpha_adjust_bug : 1;
    /* GFX6-7: SMEM accesses memory even when it's out of bounds */
-   bool has_smem_oob_access_bug : 1;
+   uint32_t has_smem_oob_access_bug : 1;
+
+   uint32_t reserved : 20;
 };
 
 struct radeon_info {
