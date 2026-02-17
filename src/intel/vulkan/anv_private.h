@@ -7155,6 +7155,29 @@ anv_emit_device_memory_report(struct vk_device* device,
 #define ANV_DMR_SP_FREE(_obj, _pool, _state) \
       ANV_DMR_SP_REPORT(_obj, _pool, _state, VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_FREE_EXT)
 
+/* Address binding report macro helpers for VK_EXT_device_address_binding_report.
+ *
+ * Macros with _ADDR variants for usage with struct anv_address
+ */
+
+#define ANV_ADDR_BINDING_REPORT_ADDR(_device, _vk_obj_base, _addr, _size, _type) \
+   do { \
+      struct anv_address __addr = (_addr); \
+      uint64_t __va = anv_address_physical(__addr); \
+      if (__va != 0) { \
+         vk_address_binding_report(&(_device)->physical->instance->vk, \
+                                   (_vk_obj_base), __va, (_size), (_type)); \
+      } \
+   } while (0)
+
+#define ANV_ADDR_BINDING_REPORT_ADDR_BIND(_device, _vk_obj_base, _addr, _size) \
+      ANV_ADDR_BINDING_REPORT_ADDR((_device), (_vk_obj_base), (_addr), (_size), \
+                                   VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT)
+
+#define ANV_ADDR_BINDING_REPORT_ADDR_UNBIND(_device, _vk_obj_base, _addr, _size) \
+      ANV_ADDR_BINDING_REPORT_ADDR((_device), (_vk_obj_base), (_addr), (_size), \
+                                   VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT)
+
 #ifdef __cplusplus
 }
 #endif
