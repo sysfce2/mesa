@@ -753,6 +753,8 @@ etna_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
       ctx->blitter = util_blitter_create(pctx);
       if (!ctx->blitter)
          goto fail;
+
+      ctx->blitter->use_single_triangle = true;
    }
 
    slab_create_child(&ctx->transfer_pool, &screen->transfer_pool);
