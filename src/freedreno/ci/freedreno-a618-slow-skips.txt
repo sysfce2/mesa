@@ -63,3 +63,15 @@ spec@glsl-4.20@execution@conversion@frag-conversion-implicit-mat4-dmat4-zero-sig
 # Just use the scalar/vec2 cases, which are fast enough for CI.
 dEQP-VK.subgroups.clustered.compute.subgroupclustered(min|max|mul|and|or|xor|add)_[iu]64vec[34].*
 dEQP-VK.subgroups.clustered.compute.subgroupclustered(min|max|mul|and|or|xor|add)_[iu]vec[34].*
+dEQP-VK.subgroups.clustered.compute.subgroupclustered(min|max|mul|and|or|xor|add)_bvec[34].*
+
+# Speed up pre-merge testing by removing redundant coverage in force-gmem mode
+gmem-dEQP-VK.api.*
+gmem-dEQP-VK.renderpass\..*
+gmem-dEQP-VK.synchronization\..*
+gmem-dEQP-VK.wsi.*
+
+# Slow single-threaded tests (~45s each).
+# Running both adds ~90s, which is too much for pre-merge.
+dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap
+dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap_map2
