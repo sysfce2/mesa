@@ -1740,6 +1740,8 @@ radv_precompute_registers_hw_gs(struct radv_device *device, const struct radv_sh
    }
 
    regs->vgt_gs_max_vert_out = gs_info->gs.vertices_out;
+
+   radv_get_esgs_gsvs_ring_size(device, regs, NULL, gs_info);
 }
 
 void

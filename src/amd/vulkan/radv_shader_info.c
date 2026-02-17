@@ -644,23 +644,11 @@ gather_shader_info_tes(struct radv_device *device, const nir_shader *nir, struct
 }
 
 void
-radv_get_legacy_gs_info(const struct radv_device *device, struct radv_shader_info *es_info, struct radv_shader_info *gs_info)
+radv_get_esgs_gsvs_ring_size(const struct radv_device *device, struct radv_shader_regs *regs,
+                             const struct radv_shader_info *es_info, const struct radv_shader_info *gs_info)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   struct radv_legacy_gs_info *out = &gs_info->legacy_gs_info;
-   const unsigned esgs_vertex_stride = es_info ? es_info->esgs_itemsize : out->esgs_itemsize;
-   ac_legacy_gs_subgroup_info info;
-
-   ac_legacy_gs_compute_subgroup_info(gs_info->gs.input_prim, gs_info->gs.vertices_out, gs_info->gs.invocations,
-                                      esgs_vertex_stride, &info);
-
-   const uint32_t lds_granularity = ac_shader_get_lds_alloc_granularity(pdev->info.gfx_level);
-   const uint32_t total_lds_bytes = align(info.esgs_lds_size * 4, lds_granularity);
-
-   out->gs_inst_prims_in_subgroup = info.gs_inst_prims_in_subgroup;
-   out->es_verts_per_subgroup = info.es_verts_per_subgroup;
-   out->gs_prims_per_subgroup = info.gs_prims_per_subgroup;
-   out->lds_size = total_lds_bytes;
+   const unsigned esgs_vertex_stride = es_info ? es_info->esgs_itemsize : gs_info->legacy_gs_info.esgs_itemsize;
 
    unsigned num_se = pdev->info.max_se;
    unsigned wave_size = 64;
@@ -690,9 +678,30 @@ radv_get_legacy_gs_info(const struct radv_device *device, struct radv_shader_inf
    gsvs_ring_size = align(gsvs_ring_size, alignment);
 
    if (pdev->info.gfx_level <= GFX8)
-      out->esgs_ring_size = CLAMP(esgs_ring_size, min_esgs_ring_size, max_size);
+      regs->gs.esgs_ring_size = CLAMP(esgs_ring_size, min_esgs_ring_size, max_size);
 
-   out->gsvs_ring_size = MIN2(gsvs_ring_size, max_size);
+   regs->gs.gsvs_ring_size = MIN2(gsvs_ring_size, max_size);
+}
+
+void
+radv_get_legacy_gs_info(const struct radv_device *device, struct radv_shader_info *es_info,
+                        struct radv_shader_info *gs_info)
+{
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+   struct radv_legacy_gs_info *out = &gs_info->legacy_gs_info;
+   const unsigned esgs_vertex_stride = es_info ? es_info->esgs_itemsize : out->esgs_itemsize;
+   ac_legacy_gs_subgroup_info info;
+
+   ac_legacy_gs_compute_subgroup_info(gs_info->gs.input_prim, gs_info->gs.vertices_out, gs_info->gs.invocations,
+                                      esgs_vertex_stride, &info);
+
+   const uint32_t lds_granularity = ac_shader_get_lds_alloc_granularity(pdev->info.gfx_level);
+   const uint32_t total_lds_bytes = align(info.esgs_lds_size * 4, lds_granularity);
+
+   out->gs_inst_prims_in_subgroup = info.gs_inst_prims_in_subgroup;
+   out->es_verts_per_subgroup = info.es_verts_per_subgroup;
+   out->gs_prims_per_subgroup = info.gs_prims_per_subgroup;
+   out->lds_size = total_lds_bytes;
 }
 
 static void

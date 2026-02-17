@@ -63,8 +63,6 @@ struct radv_legacy_gs_info {
    uint32_t gs_prims_per_subgroup;
    uint32_t esgs_itemsize;
    uint32_t lds_size;
-   uint32_t esgs_ring_size;
-   uint32_t gsvs_ring_size;
 };
 
 struct gfx10_ngg_info {
@@ -282,6 +280,8 @@ struct radv_shader_regs {
          uint32_t vgt_gs_vert_itemsize[4];
          uint32_t vgt_gsvs_ring_itemsize;
          uint32_t vgt_gsvs_ring_offset[3];
+         uint32_t esgs_ring_size;
+         uint32_t gsvs_ring_size;
       } gs;
 
       struct {
@@ -334,6 +334,8 @@ void radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shad
                                const enum radv_pipeline_type pipeline_type, bool consider_force_vrs,
                                struct radv_shader_info *info);
 
+void radv_get_esgs_gsvs_ring_size(const struct radv_device *device, struct radv_shader_regs *regs,
+                                  const struct radv_shader_info *es_info, const struct radv_shader_info *gs_info);
 void radv_get_legacy_gs_info(const struct radv_device *device, struct radv_shader_info *es_info, struct radv_shader_info *gs_info);
 
 void gfx10_get_ngg_info(const struct radv_device *device, struct radv_shader_info *es_info,

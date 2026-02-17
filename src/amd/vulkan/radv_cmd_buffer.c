@@ -8553,11 +8553,9 @@ radv_bind_geometry_shader(struct radv_cmd_buffer *cmd_buffer, const struct radv_
 {
    radv_bind_pre_rast_shader(cmd_buffer, gs);
 
-   if (!gs->info.is_ngg) {
-      cmd_buffer->esgs_ring_size_needed =
-         MAX2(cmd_buffer->esgs_ring_size_needed, gs->info.legacy_gs_info.esgs_ring_size);
-      cmd_buffer->gsvs_ring_size_needed =
-         MAX2(cmd_buffer->gsvs_ring_size_needed, gs->info.legacy_gs_info.gsvs_ring_size);
+   if (!gs->info.is_ngg && !gs->info.merged_shader_compiled_separately) {
+      cmd_buffer->esgs_ring_size_needed = MAX2(cmd_buffer->esgs_ring_size_needed, gs->regs.gs.esgs_ring_size);
+      cmd_buffer->gsvs_ring_size_needed = MAX2(cmd_buffer->gsvs_ring_size_needed, gs->regs.gs.gsvs_ring_size);
    }
 
    /* Re-emit the VS prolog when the geometry shader is compiled separately because shader configs
@@ -12818,10 +12816,8 @@ radv_bind_graphics_shaders(struct radv_cmd_buffer *cmd_buffer)
          radv_get_legacy_gs_info(device, &es->info, &gs->info);
          radv_precompute_registers_hw_gs(device, &es->info, gs);
 
-         cmd_buffer->esgs_ring_size_needed =
-            MAX2(cmd_buffer->esgs_ring_size_needed, gs->info.legacy_gs_info.esgs_ring_size);
-         cmd_buffer->gsvs_ring_size_needed =
-            MAX2(cmd_buffer->gsvs_ring_size_needed, gs->info.legacy_gs_info.gsvs_ring_size);
+         cmd_buffer->esgs_ring_size_needed = MAX2(cmd_buffer->esgs_ring_size_needed, gs->regs.gs.esgs_ring_size);
+         cmd_buffer->gsvs_ring_size_needed = MAX2(cmd_buffer->gsvs_ring_size_needed, gs->regs.gs.gsvs_ring_size);
       }
    }
 
