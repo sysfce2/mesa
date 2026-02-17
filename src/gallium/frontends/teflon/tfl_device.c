@@ -611,6 +611,8 @@ tflite_builtin_op_name(TfLiteBuiltinOperator op)
    switch (op) {
    case kTfLiteBuiltinAdd:
       return "ADD";
+   case kTfLiteBuiltinConcatenation:
+      return "CONCAT";
    case kTfLiteBuiltinAveragePool2d:
       return "AVGPOOL";
    case kTfLiteBuiltinMaxPool2d:
