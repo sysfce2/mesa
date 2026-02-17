@@ -98,6 +98,7 @@ struct blitter_context
    bool running;
 
    bool use_index_buffer;
+   bool use_single_triangle;
 
    /* Private members, really. */
    struct pipe_context *pipe; /**< pipe context */

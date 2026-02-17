@@ -63,6 +63,8 @@ struct blitter_context_priv
 
    float vertices[4][2][4];   /**< {pos, color} or {pos, texcoord} */
 
+   bool single_triangle_active;
+
    /* Templates for various state objects. */
 
    /* Constant state objects. */
@@ -1390,6 +1392,23 @@ static void blitter_draw(struct blitter_context_priv *ctx,
 
    blitter_set_rectangle(ctx, x1, y1, x2, y2, depth);
 
+   if (ctx->single_triangle_active) {
+      /* Transform the 4-vertex quad into a 3-vertex oversized right triangle.
+       * Vertex 0 stays as the anchor (x1, y1). Vertex 1 is extended to
+       * (2*x2-x1, y1) and vertex 2 is extended to (x1, 2*y2-y1).
+       * The original rect is fully covered by this triangle and the scissor
+       * clips fragments outside the rect. Using a single triangle eliminates
+       * the diagonal seam that causes NEAREST filter inconsistencies.
+       */
+      for (unsigned attr = 0; attr < 2; attr++) {
+         for (unsigned comp = 0; comp < 4; comp++) {
+            float v0 = ctx->vertices[0][attr][comp];
+            ctx->vertices[1][attr][comp] = 2.0f * ctx->vertices[1][attr][comp] - v0;
+            ctx->vertices[2][attr][comp] = 2.0f * ctx->vertices[3][attr][comp] - v0;
+         }
+      }
+   }
+
    u_upload_data(pipe->stream_uploader, 0, sizeof(ctx->vertices), 4, ctx->vertices,
                  &vb.buffer_offset, &vb.buffer.resource, &releasebuf);
    if (!vb.buffer.resource)
@@ -1401,7 +1420,10 @@ static void blitter_draw(struct blitter_context_priv *ctx,
    pipe->bind_vs_state(pipe, get_vs(&ctx->base));
    ctx->must_unset_vbuf = true;
 
-   if (ctx->base.use_index_buffer) {
+   if (ctx->single_triangle_active) {
+      util_draw_arrays_instanced(pipe, MESA_PRIM_TRIANGLES, 0, 3,
+                                 0, num_instances);
+   } else if (ctx->base.use_index_buffer) {
       /* Note that for V3D,
        * dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_* require
        * that the last vert of the two tris be the same.
@@ -2205,15 +2227,31 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
                                 0, 1, &sampler_state);
    }
 
+   /* When using single-triangle mode, always enable scissor to clip the
+    * oversized triangle to the destination rect.
+    */
+   struct pipe_scissor_state synth_scissor;
+   if (ctx->base.use_single_triangle && !scissor &&
+       filter == PIPE_TEX_FILTER_NEAREST) {
+      synth_scissor.minx = MAX2(dstbox->x, 0);
+      synth_scissor.miny = MAX2(dstbox->y, 0);
+      synth_scissor.maxx = dstbox->x + dstbox->width;
+      synth_scissor.maxy = dstbox->y + dstbox->height;
+      scissor = &synth_scissor;
+   }
+
    if (scissor) {
       pipe->set_scissor_states(pipe, 0, 1, scissor);
    }
 
    blitter_set_common_draw_rect_state(ctx, scissor != NULL, dst_samples > 1);
 
+   ctx->single_triangle_active = ctx->base.use_single_triangle &&
+                                 (filter == PIPE_TEX_FILTER_NEAREST);
    do_blits(ctx, dst, dstbox, src, src_width0, src_height0,
             srcbox, dst_has_depth || dst_has_stencil, use_txf, sample0_only,
             dst_sample);
+   ctx->single_triangle_active = false;
    util_blitter_unset_running_flag(blitter);
 out:
    util_blitter_restore_vertex_states(blitter);
