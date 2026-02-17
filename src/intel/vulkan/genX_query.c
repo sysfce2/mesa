@@ -336,6 +336,8 @@ VkResult genX(CreateQueryPool)(
 
    ANV_RMV(query_pool_create, device, pool, false);
 
+   ANV_ADDR_BINDING_REPORT_BO_BIND(device, &pool->vk.base, pool->bo);
+
    *pQueryPool = anv_query_pool_to_handle(pool);
 
    return VK_SUCCESS;
@@ -357,6 +359,7 @@ void genX(DestroyQueryPool)(
    if (!pool)
       return;
 
+   ANV_ADDR_BINDING_REPORT_BO_UNBIND(device, &pool->vk.base, pool->bo);
    ANV_RMV(resource_destroy, device, pool);
    ANV_DMR_BO_FREE(&pool->vk.base, pool->bo);
    anv_device_release_bo(device, pool->bo);
