@@ -1083,6 +1083,57 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
    case SpvOpSUDotAccSatKHR:
       UNREACHABLE("Should have called vtn_handle_integer_dot instead.");
 
+   case SpvOpFDot2MixAcc32VALVE: {
+      vtn_assert(glsl_get_base_type(vtn_src[2]->type) == GLSL_TYPE_FLOAT);
+      if (glsl_get_base_type(vtn_src[0]->type) == GLSL_TYPE_FLOAT16) {
+         vtn_assert(glsl_get_base_type(vtn_src[1]->type) == GLSL_TYPE_FLOAT16);
+         dest->def = nir_f16dot2_fadd(&b->nb, src[0], src[1], src[2]);
+      } else {
+         vtn_assert(glsl_get_base_type(vtn_src[0]->type) == GLSL_TYPE_BFLOAT16);
+         vtn_assert(glsl_get_base_type(vtn_src[1]->type) == GLSL_TYPE_BFLOAT16);
+         dest->def = nir_bfdot2_fadd(&b->nb, src[0], src[1], src[2]);
+      }
+      break;
+   }
+
+   case SpvOpFDot2MixAcc16VALVE: {
+      if (glsl_get_base_type(vtn_src[0]->type) == GLSL_TYPE_FLOAT16) {
+         vtn_assert(glsl_get_base_type(vtn_src[1]->type) == GLSL_TYPE_FLOAT16);
+         vtn_assert(glsl_get_base_type(vtn_src[2]->type) == GLSL_TYPE_FLOAT16);
+         dest->def = nir_f16dot2_fadd(&b->nb, src[0], src[1], src[2]);
+      } else {
+         vtn_assert(glsl_get_base_type(vtn_src[0]->type) == GLSL_TYPE_BFLOAT16);
+         vtn_assert(glsl_get_base_type(vtn_src[1]->type) == GLSL_TYPE_BFLOAT16);
+         vtn_assert(glsl_get_base_type(vtn_src[2]->type) == GLSL_TYPE_BFLOAT16);
+         dest->def = nir_bfdot2_bfadd(&b->nb, src[0], src[1], src[2]);
+      }
+      break;
+   }
+
+   case SpvOpFDot4MixAcc32VALVE: {
+      vtn_assert(glsl_get_base_type(vtn_src[2]->type) == GLSL_TYPE_FLOAT);
+      src[0] = nir_pack_32_4x8(&b->nb, src[0]);
+      src[1] = nir_pack_32_4x8(&b->nb, src[1]);
+
+      if (glsl_get_base_type(vtn_src[0]->type) == GLSL_TYPE_FLOAT_E4M3FN) {
+         if (glsl_get_base_type(vtn_src[1]->type) == GLSL_TYPE_FLOAT_E4M3FN) {
+            dest->def = nir_e4m3fn_dot4_fadd(&b->nb, src[0], src[1], src[2]);
+         } else {
+            vtn_assert(glsl_get_base_type(vtn_src[1]->type) == GLSL_TYPE_FLOAT_E5M2);
+            dest->def = nir_e4m3fn_e5m2_dot4_fadd(&b->nb, src[0], src[1], src[2]);
+         }
+      } else {
+         vtn_assert(glsl_get_base_type(vtn_src[0]->type) == GLSL_TYPE_FLOAT_E5M2);
+         if (glsl_get_base_type(vtn_src[1]->type) == GLSL_TYPE_FLOAT_E4M3FN) {
+            dest->def = nir_e4m3fn_e5m2_dot4_fadd(&b->nb, src[1], src[0], src[2]);
+         } else {
+            vtn_assert(glsl_get_base_type(vtn_src[1]->type) == GLSL_TYPE_FLOAT_E5M2);
+            dest->def = nir_e5m2_dot4_fadd(&b->nb, src[0], src[1], src[2]);
+         }
+      }
+      break;
+   }
+
    default: {
       bool swap;
       unsigned extra_fp_math_ctrl;

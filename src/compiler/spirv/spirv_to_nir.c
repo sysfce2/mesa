@@ -83,6 +83,10 @@ static const struct spirv_capabilities implemented_capabilities = {
    .DerivativeControl = true,
    .DeviceGroup = true,
    .DotProduct = true,
+   .DotProductBFloat16AccVALVE = true,
+   .DotProductFloat16AccFloat16VALVE = true,
+   .DotProductFloat16AccFloat32VALVE = true,
+   .DotProductFloat8AccFloat32VALVE = true,
    .DotProductInput4x8Bit = true,
    .DotProductInput4x8BitPacked = true,
    .DotProductInputAll = true,
@@ -6847,6 +6851,9 @@ vtn_handle_body_instruction(struct vtn_builder *b, SpvOp opcode,
    case SpvOpUSubSatINTEL:
    case SpvOpIMul32x16INTEL:
    case SpvOpUMul32x16INTEL:
+   case SpvOpFDot2MixAcc32VALVE:
+   case SpvOpFDot2MixAcc16VALVE:
+   case SpvOpFDot4MixAcc32VALVE:
       vtn_handle_alu(b, opcode, w, count);
       break;
 
