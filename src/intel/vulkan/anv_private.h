@@ -7158,6 +7158,7 @@ anv_emit_device_memory_report(struct vk_device* device,
 /* Address binding report macro helpers for VK_EXT_device_address_binding_report.
  *
  * Macros with _ADDR variants for usage with struct anv_address
+ * Macros with _BO variants for usage with BO and generating anv_address from BO
  */
 
 #define ANV_ADDR_BINDING_REPORT_ADDR(_device, _vk_obj_base, _addr, _size, _type) \
@@ -7177,6 +7178,28 @@ anv_emit_device_memory_report(struct vk_device* device,
 #define ANV_ADDR_BINDING_REPORT_ADDR_UNBIND(_device, _vk_obj_base, _addr, _size) \
       ANV_ADDR_BINDING_REPORT_ADDR((_device), (_vk_obj_base), (_addr), (_size), \
                                    VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT)
+
+#define ANV_ADDR_BINDING_REPORT_BO(_device, _vk_obj_base, _bo, _type) \
+   do { \
+      if ((_bo) != NULL) { \
+         struct anv_address _addr = { \
+            .bo = (_bo), \
+            .offset = 0, \
+         }; \
+         ANV_ADDR_BINDING_REPORT_ADDR((_device), (_vk_obj_base), _addr, \
+                                      (_bo)->actual_size ? (_bo)->actual_size :\
+                                      (_bo)->size, \
+                                      (_type)); \
+      } \
+   }while (0)
+
+#define ANV_ADDR_BINDING_REPORT_BO_BIND(_device, _vk_obj_base, _bo) \
+   ANV_ADDR_BINDING_REPORT_BO((_device), (_vk_obj_base), (_bo), \
+                              VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT)
+
+#define ANV_ADDR_BINDING_REPORT_BO_UNBIND(_device, _vk_obj_base, _bo) \
+   ANV_ADDR_BINDING_REPORT_BO((_device), (_vk_obj_base), (_bo), \
+                              VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT)
 
 #ifdef __cplusplus
 }
