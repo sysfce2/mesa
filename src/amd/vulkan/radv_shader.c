@@ -823,7 +823,7 @@ radv_shader_spirv_to_nir(struct radv_device *device, const struct radv_shader_st
     * considered too large for unrolling.
     */
    bool indirect_derefs_lowered = false;
-   NIR_PASS(indirect_derefs_lowered, nir, ac_nir_lower_indirect_derefs, pdev->info.gfx_level);
+   NIR_PASS(indirect_derefs_lowered, nir, ac_nir_lower_indirect_derefs);
    NIR_PASS(_, nir, nir_lower_vars_to_ssa);
 
    if (indirect_derefs_lowered && !stage->key.optimisations_disabled &&

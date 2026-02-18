@@ -911,7 +911,7 @@ static void si_preprocess_nir(struct si_nir_shader_ctx *ctx)
    NIR_PASS(progress, nir, nir_opt_large_constants, glsl_get_natural_size_align_bytes, 16);
 
    /* Lower all other indirect indexing to if-else ladders or scratch. */
-   progress |= ac_nir_lower_indirect_derefs(nir, sel->screen->info.gfx_level);
+   progress |= ac_nir_lower_indirect_derefs(nir);
 
    NIR_PASS(_, nir, si_nir_mark_divergent_texture_non_uniform);
    NIR_PASS(progress, nir, nir_lower_explicit_io, nir_var_mem_shared, nir_address_format_32bit_offset);

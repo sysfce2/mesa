@@ -176,8 +176,7 @@ ac_nir_lower_gs_inputs_to_mem(nir_shader *shader,
                               bool triangle_strip_adjacency_fix);
 
 bool
-ac_nir_lower_indirect_derefs(nir_shader *shader,
-                             enum amd_gfx_level gfx_level);
+ac_nir_lower_indirect_derefs(nir_shader *shader);
 
 typedef struct {
    const struct radeon_info *hw_info;

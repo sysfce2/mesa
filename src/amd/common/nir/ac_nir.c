@@ -218,8 +218,7 @@ ac_nir_unpack_arg(nir_builder *b, const struct ac_shader_args *ac_args, struct a
 }
 
 bool
-ac_nir_lower_indirect_derefs(nir_shader *shader,
-                             enum amd_gfx_level gfx_level)
+ac_nir_lower_indirect_derefs(nir_shader *shader)
 {
    bool progress = false;
 
