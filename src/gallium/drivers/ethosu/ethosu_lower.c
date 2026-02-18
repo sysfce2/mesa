@@ -18,7 +18,7 @@ is_depthwise(const struct pipe_ml_operation *poperation)
 }
 
 static unsigned
-needed_total_padding(unsigned input_size, unsigned stride, unsigned filter_size)
+needed_total_padding(int input_size, int stride, int filter_size)
 {
    if (input_size % stride == 0)
       return MAX2(filter_size - stride, 0);
