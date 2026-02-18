@@ -200,6 +200,7 @@
          <stat name="Scratch size">Scratch size per instance in bytes</stat>
          <stat name="Spill count">Number of spilled registers per instance</stat>
          <stat name="Temp count">Number of allocated temp registers</stat>
+         <stat name="Vtxin count">Number of used vertex input registers</stat>
          <stat name="Loop count">Number of not unrolled loops in the shader</stat>
          <stat name="Inst group count">Total number of instruction groups</stat>
          <stat name="Main inst group count">Number of main instruction groups</stat>

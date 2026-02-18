@@ -1187,8 +1187,10 @@ static void pco_print_func(pco_print_state *state, pco_func *func)
 {
    pco_printfi(state, "func");
    pco_print_func_sig(state, func, false);
-   if (state->is_grouped)
+   if (state->is_grouped) {
       pco_printf(state, " /* temps: %u */", func->temps);
+      pco_printf(state, " /* vtxins: %u */", func->vtxins);
+   }
    pco_printf(state, "\n");
 
    pco_printfi(state, "{\n");

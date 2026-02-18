@@ -2139,6 +2139,9 @@ PowerVR driver environment variables
    ``no_pred_cf``
       No predicated execution in CF.
 
+   ``alloc_extra_vtxins``
+      Allocates additional vertex input registers.
+
 .. envvar:: PCO_SKIP_PASSES
 
    A comma-separated list of passes to skip.

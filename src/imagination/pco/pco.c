@@ -370,6 +370,7 @@ struct pvr_stats pco_get_pvr_stats(pco_shader *shader)
          .scratch_size = shader->data.common.scratch,
          .spill_count = shader->data.common.spilled_temps,
          .temp_count = shader->data.common.temps,
+         .vtxin_count = shader->data.common.vtxins,
          .loop_count = loop_count,
          .inst_group_count = igrp_count,
          .main_inst_group_count = main_count,

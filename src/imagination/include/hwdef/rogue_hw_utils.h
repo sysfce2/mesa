@@ -478,6 +478,12 @@ rogue_max_wg_temps(const struct pvr_device_info *dev_info,
    return temps;
 }
 
+static inline uint32_t rogue_get_vtxins(void)
+{
+   /* TODO: use highest safe number of vertex input registers. */
+   return 12;
+}
+
 static inline uint32_t
 rogue_num_uscs_per_tile(const struct pvr_device_info *dev_info)
 {

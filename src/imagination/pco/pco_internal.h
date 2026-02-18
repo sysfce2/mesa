@@ -57,6 +57,7 @@ enum pco_debug {
    PCO_DEBUG_VAL_SKIP = BITFIELD64_BIT(0),
    PCO_DEBUG_REINDEX = BITFIELD64_BIT(1),
    PCO_DEBUG_NO_PRED_CF = BITFIELD64_BIT(2),
+   PCO_DEBUG_ALLOC_EXTRA_VTXINS = BITFIELD64_BIT(3),
 };
 
 extern uint64_t pco_debug;
@@ -353,6 +354,7 @@ typedef struct _pco_func {
    unsigned next_loop; /** Next loop index. */
 
    unsigned temps; /** Number of temps allocated. */
+   unsigned vtxins; /** Number of vertex input registers used. */
 
    pco_ref emc; /** Execution mask counter register. */
 
@@ -730,6 +732,10 @@ PCO_DEFINE_CAST(pco_cf_node_as_func,
 #define pco_foreach_instr_src_hwreg(psrc, instr) \
    pco_foreach_instr_src (psrc, instr)           \
       if (pco_ref_is_hwreg(*psrc))
+
+#define pco_foreach_instr_src_vtxin_reg(psrc, instr) \
+   pco_foreach_instr_src (psrc, instr)               \
+      if (pco_ref_is_vtxin(*psrc))
 
 #define pco_cf_node_head(list) list_first_entry(list, pco_cf_node, link)
 #define pco_cf_node_tail(list) list_last_entry(list, pco_cf_node, link)
@@ -1983,6 +1989,17 @@ static inline bool pco_ref_is_drc(pco_ref ref)
 static inline bool pco_ref_is_scalar(pco_ref ref)
 {
    return !ref.chans;
+}
+
+/**
+ * \brief Return whether a reference is a vertex input register.
+ *
+ * \param[in] ref PCO reference.
+ * \return True if the reference is a vertex input register.
+ */
+static inline bool pco_ref_is_vtxin(pco_ref ref)
+{
+   return ref.type == PCO_REF_TYPE_REG && ref.reg_class == PCO_REG_CLASS_VTXIN;
 }
 
 /* PCO ref getters. */
