@@ -615,38 +615,41 @@ ra_interval_dump(struct log_stream *stream, struct ra_interval *interval)
 }
 
 static void
-ra_file_dump(struct log_stream *stream, struct ra_file *file)
+ra_file_dump(struct log_stream *stream, struct ra_file *file, const char *name)
 {
+   mesa_log_stream_printf(stream, "%s:\n", name);
    rb_tree_foreach (struct ra_interval, interval, &file->physreg_intervals,
                     physreg_node) {
       ra_interval_dump(stream, interval);
    }
 
    unsigned start, end;
-   mesa_log_stream_printf(stream, "available:\n");
+   mesa_log_stream_printf(stream, "%s available: ", name);
    BITSET_FOREACH_RANGE (start, end, file->available, file->size) {
       mesa_log_stream_printf(stream, "%u-%u ", start, end);
    }
    mesa_log_stream_printf(stream, "\n");
 
-   mesa_log_stream_printf(stream, "available to evict:\n");
+   mesa_log_stream_printf(stream, "%s available to evict: ", name);
    BITSET_FOREACH_RANGE (start, end, file->available_to_evict, file->size) {
       mesa_log_stream_printf(stream, "%u-%u ", start, end);
    }
    mesa_log_stream_printf(stream, "\n");
-   mesa_log_stream_printf(stream, "start: %u\n", file->start);
+   mesa_log_stream_printf(stream, "%s start: %u\n", name, file->start);
 }
 
 static void
 ra_ctx_dump(struct ra_ctx *ctx)
 {
    struct log_stream *stream = mesa_log_streami();
-   mesa_log_stream_printf(stream, "full:\n");
-   ra_file_dump(stream, &ctx->full);
-   mesa_log_stream_printf(stream, "half:\n");
-   ra_file_dump(stream, &ctx->half);
-   mesa_log_stream_printf(stream, "shared:\n");
-   ra_file_dump(stream, &ctx->shared);
+   ra_file_dump(stream, &ctx->full, "full");
+   if (ctx->half.size != 0) {
+      /* No need to print this file in the mergedregs case when nothing can
+       * allocate to it.
+       */
+      ra_file_dump(stream, &ctx->half, "half");
+   }
+   ra_file_dump(stream, &ctx->shared, "shared");
    mesa_log_stream_destroy(stream);
 }
 
