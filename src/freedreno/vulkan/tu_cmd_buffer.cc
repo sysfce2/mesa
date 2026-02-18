@@ -4213,7 +4213,7 @@ tu_cmd_render_tiles(struct tu_cmd_buffer *cmd,
     * via the patchpoints, so we need to re-emit them if they are reused for a
     * later render pass.
     */
-   if (cmd->state.pass->has_fdm)
+   if (cmd->fdm_bin_patchpoints.size != 0)
       cmd->state.dirty |= TU_CMD_DIRTY_FDM;
 
    /* Reset the gmem store CS entry lists so that the next render pass
