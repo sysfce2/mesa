@@ -1873,7 +1873,7 @@ copy_query_results_with_shader(struct anv_cmd_buffer *cmd_buffer,
       if (anv_cmd_buffer_is_render_queue(cmd_buffer))
          genX(flush_pipeline_select_3d)(cmd_buffer);
       else
-         genX(flush_pipeline_select_gpgpu)(cmd_buffer);
+         genX(flush_pipeline_select_gpgpu)(cmd_buffer, false);
    }
 
    if ((cmd_buffer->state.queries.buffer_write_bits |

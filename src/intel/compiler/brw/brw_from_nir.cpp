@@ -4356,7 +4356,9 @@ brw_from_nir_emit_cs_intrinsic(nir_to_brw_state &ntb,
                 rcount)
          ->saturate = nir_intrinsic_saturate(instr);
 
-      cs_prog_data->uses_systolic = true;
+      if (!ntb.s.compiler->lower_dpas)
+         cs_prog_data->uses_systolic = true;
+
       break;
    }
 

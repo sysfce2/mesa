@@ -116,9 +116,11 @@ void genX(urb_workaround)(struct anv_cmd_buffer *cmd_buffer,
                           const struct intel_urb_config *urb_cfg);
 
 void genX(flush_pipeline_select_3d)(struct anv_cmd_buffer *cmd_buffer);
-void genX(flush_pipeline_select_gpgpu)(struct anv_cmd_buffer *cmd_buffer);
+void genX(flush_pipeline_select_gpgpu)(struct anv_cmd_buffer *cmd_buffer,
+                                       bool uses_systolic);
 void genX(emit_pipeline_select)(struct anv_batch *batch, uint32_t pipeline,
-                                const struct anv_device *device);
+                                const struct anv_device *device,
+                                bool uses_systolic);
 
 void genX(apply_task_urb_workaround)(struct anv_cmd_buffer *cmd_buffer);
 

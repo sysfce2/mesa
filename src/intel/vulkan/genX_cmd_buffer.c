@@ -50,7 +50,8 @@ static void emit_pipe_control(struct anv_batch *batch,
                               enum anv_pipe_bits bits);
 
 static void genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
-                                        uint32_t pipeline);
+                                        uint32_t pipeline,
+                                        bool uses_systolic);
 
 static enum anv_pipe_bits
 convert_pc_to_bits(struct GENX(PIPE_CONTROL) *pc) {
@@ -327,9 +328,12 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
    /* Wa_1607854226:
     *
     *  Put the pipeline back into its current mode.
+    *
+    * This workaround is on platforms where PIPELINE_SELECT doesn't carry
+    * systolic mode state, so there's no need to save/restore it here.
     */
    if (gfx12_wa_pipeline != UINT32_MAX)
-      genX(flush_pipeline_select)(cmd_buffer, gfx12_wa_pipeline);
+      genX(flush_pipeline_select)(cmd_buffer, gfx12_wa_pipeline, false);
 #endif
 
    /* After re-setting the surface state base address, we have to do some
@@ -3792,6 +3796,7 @@ genX(BeginCommandBuffer)(
        * pipeline mode is 3D. This avoid some stalling/state-emission.
        */
       cmd_buffer->state.current_pipeline = _3D;
+      cmd_buffer->state.current_pipeline_systolic = false;
    }
 
 
@@ -4274,8 +4279,11 @@ genX(CmdExecuteCommands)(
 
       /* Set the current pipeline state to the secondary's state if it did
        * program the PIPELINE_SELECT instruction. */
-      if (secondary->state.current_pipeline != UINT32_MAX)
+      if (secondary->state.current_pipeline != UINT32_MAX) {
          container->state.current_pipeline = secondary->state.current_pipeline;
+         container->state.current_pipeline_systolic =
+            secondary->state.current_pipeline_systolic;
+      }
    }
 
    /* The secondary isn't counted in our VF cache tracking so we need to
@@ -4364,6 +4372,7 @@ genX(CmdExecuteCommands)(
 
       /* Memcpy is done using the 3D pipeline. */
       container->state.current_pipeline = _3D;
+      container->state.current_pipeline_systolic = false;
    }
 }
 
@@ -5360,7 +5369,8 @@ genX(batch_emit_breakpoint)(struct anv_batch *batch,
  */
 void
 genX(emit_pipeline_select)(struct anv_batch *batch, uint32_t pipeline,
-                           const struct anv_device *device)
+                           const struct anv_device *device,
+                           bool uses_systolic)
 {
    /* Bspec 55860: Xe2+ no longer requires PIPELINE_SELECT */
 #if GFX_VER < 20
@@ -5371,12 +5381,7 @@ genX(emit_pipeline_select)(struct anv_batch *batch, uint32_t pipeline,
 #endif
       ps.PipelineSelection = pipeline;
 #if GFX_VERx10 == 125
-      /* It might still be better to only enable this when the compute
-       * pipeline will have DPAS instructions.
-       */
-      ps.SystolicModeEnable = pipeline == GPGPU &&
-         device->vk.enabled_extensions.KHR_cooperative_matrix &&
-         device->vk.enabled_features.cooperativeMatrix;
+      ps.SystolicModeEnable = uses_systolic;
 #endif
    }
 #endif /* if GFX_VER < 20 */
@@ -5384,11 +5389,14 @@ genX(emit_pipeline_select)(struct anv_batch *batch, uint32_t pipeline,
 
 static void
 genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
-                            uint32_t pipeline)
+                            uint32_t pipeline,
+                            bool uses_systolic)
 {
    UNUSED const struct intel_device_info *devinfo = cmd_buffer->device->info;
 
-   if (cmd_buffer->state.current_pipeline == pipeline)
+   /* Track systolic for PIPELINE_SELECT only in Gfx125. */
+   if (cmd_buffer->state.current_pipeline == pipeline &&
+       (GFX_VERx10 != 125 || cmd_buffer->state.current_pipeline_systolic == uses_systolic))
       return;
 
 #if GFX_VER < 20
@@ -5539,7 +5547,8 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
    }
 #endif
 
-   genX(emit_pipeline_select)(&cmd_buffer->batch, pipeline, cmd_buffer->device);
+   genX(emit_pipeline_select)(&cmd_buffer->batch, pipeline, cmd_buffer->device,
+                              uses_systolic);
 
 #if GFX_VER == 9
    if (devinfo->platform == INTEL_PLATFORM_GLK) {
@@ -5573,18 +5582,21 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
 #endif
 #endif /* GFX_VER < 20 */
    cmd_buffer->state.current_pipeline = pipeline;
+   cmd_buffer->state.current_pipeline_systolic = uses_systolic;
 }
 
 void
 genX(flush_pipeline_select_3d)(struct anv_cmd_buffer *cmd_buffer)
 {
-   genX(flush_pipeline_select)(cmd_buffer, _3D);
+   const bool uses_systolic = false;
+   genX(flush_pipeline_select)(cmd_buffer, _3D, uses_systolic);
 }
 
 void
-genX(flush_pipeline_select_gpgpu)(struct anv_cmd_buffer *cmd_buffer)
+genX(flush_pipeline_select_gpgpu)(struct anv_cmd_buffer *cmd_buffer,
+                                  bool uses_systolic)
 {
-   genX(flush_pipeline_select)(cmd_buffer, GPGPU);
+   genX(flush_pipeline_select)(cmd_buffer, GPGPU, uses_systolic);
 }
 
 void

@@ -411,7 +411,7 @@ init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
 
    struct anv_batch *batch = &submit->batch;
 
-   genX(emit_pipeline_select)(batch, _3D, device);
+   genX(emit_pipeline_select)(batch, _3D, device, false);
 
 #if GFX_VER == 9
    anv_batch_write_reg(batch, GENX(CACHE_MODE_1), cm1) {
@@ -718,7 +718,7 @@ init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
                                       ANV_PIPE_FLUSH_BITS | ANV_PIPE_INVALIDATE_BITS);
 #endif
 
-   genX(emit_pipeline_select)(batch, GPGPU, device);
+   genX(emit_pipeline_select)(batch, GPGPU, device, false);
    anv_batch_emit(batch, GENX(CFE_STATE), cfe) {
       cfe.MaximumNumberofThreads =
          devinfo->max_cs_threads * devinfo->subslice_total;
@@ -734,7 +734,7 @@ init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
                                       ANV_PIPE_FLUSH_BITS | ANV_PIPE_INVALIDATE_BITS);
 #endif
 
-   genX(emit_pipeline_select)(batch, _3D, device);
+   genX(emit_pipeline_select)(batch, _3D, device, false);
 #endif
 
 #if GFX_VERx10 >= 125
@@ -793,7 +793,7 @@ init_compute_queue_state(struct anv_queue *queue)
 
    struct anv_batch *batch = &submit->batch;
 
-   genX(emit_pipeline_select)(batch, GPGPU, queue->device);
+   genX(emit_pipeline_select)(batch, GPGPU, queue->device, false);
 
 #if GFX_VER == 12
    if (queue->device->info->has_aux_map) {

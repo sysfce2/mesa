@@ -119,7 +119,8 @@ cmd_buffer_flush_compute_state(struct anv_cmd_buffer *cmd_buffer)
    genX(flush_descriptor_buffers)(cmd_buffer, &comp_state->base,
                                   VK_SHADER_STAGE_COMPUTE_BIT);
 
-   genX(flush_pipeline_select_gpgpu)(cmd_buffer);
+   const bool uses_systolic = get_cs_prog_data(comp_state)->uses_systolic;
+   genX(flush_pipeline_select_gpgpu)(cmd_buffer, uses_systolic);
 
    /* Apply any pending pipeline flushes we may have.  We want to apply them
     * now because, if any of those flushes are for things like push constants,
@@ -1150,7 +1151,7 @@ cmd_buffer_trace_rays(struct anv_cmd_buffer *cmd_buffer,
    genX(flush_descriptor_buffers)(cmd_buffer, &rt->base,
                                   ANV_RT_STAGE_BITS);
 
-   genX(flush_pipeline_select_gpgpu)(cmd_buffer);
+   genX(flush_pipeline_select_gpgpu)(cmd_buffer, false);
 
    cmd_buffer->state.rt.pipeline_dirty = false;
 

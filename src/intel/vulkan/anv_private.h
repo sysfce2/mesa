@@ -4729,6 +4729,10 @@ enum anv_cmd_descriptor_buffer_mode {
 struct anv_cmd_state {
    /* PIPELINE_SELECT.PipelineSelection */
    uint32_t                                     current_pipeline;
+
+   /* PIPELINE_SELECT.SystolicModeEnable (Gfx125 only). */
+   bool                                         current_pipeline_systolic;
+
    const struct intel_l3_config *               current_l3_config;
    uint32_t                                     last_aux_map_state;
 
