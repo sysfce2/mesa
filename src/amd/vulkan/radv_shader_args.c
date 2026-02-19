@@ -102,6 +102,11 @@ declare_global_input_sgprs(const enum amd_gfx_level gfx_level, const struct radv
 
       if (info->merged_shader_compiled_separately || info->loads_dynamic_offsets) {
          add_ud_arg(args, 1, AC_ARG_CONST_ADDR, &args->ac.dynamic_descriptors, AC_UD_DYNAMIC_DESCRIPTORS);
+
+         if (info->loads_dynamic_descriptors_offset_addr) {
+            add_ud_arg(args, 1, AC_ARG_CONST_ADDR, &args->ac.dynamic_descriptors_offset_addr,
+                       AC_UD_DYNAMIC_DESCRIPTORS_OFFSET_ADDR);
+         }
       }
 
       for (unsigned i = 0; i < util_bitcount64(user_sgpr_info->inline_push_constant_mask); i++) {
@@ -851,8 +856,11 @@ radv_declare_shader_args(const struct radv_device *device, const struct radv_gra
    uint32_t num_user_sgprs = args->num_user_sgprs;
    if (info->loads_push_constants)
       num_user_sgprs++;
-   if (info->loads_dynamic_offsets)
+   if (info->loads_dynamic_offsets) {
       num_user_sgprs++;
+      if (info->loads_dynamic_descriptors_offset_addr)
+         num_user_sgprs++;
+   }
 
    const struct radv_physical_device *pdev = radv_device_physical(device);
    const enum amd_gfx_level gfx_level = pdev->info.gfx_level;

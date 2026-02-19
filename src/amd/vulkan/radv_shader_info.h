@@ -103,6 +103,7 @@ struct radv_shader_info {
    bool can_inline_all_push_constants : 1;
    bool loads_push_constants : 1;
    bool loads_dynamic_offsets : 1;
+   bool loads_dynamic_descriptors_offset_addr : 1;
    bool uses_view_index : 1;
    bool uses_invocation_id : 1;
    bool uses_prim_id : 1;

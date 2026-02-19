@@ -55,6 +55,7 @@ radv_pipeline_layout_hash(struct radv_pipeline_layout *layout)
 
       _mesa_blake3_update(&ctx, set_layout->hash, sizeof(set_layout->hash));
    }
+   _mesa_blake3_update(&ctx, &layout->independent_sets, sizeof(layout->independent_sets));
    _mesa_blake3_final(&ctx, layout->hash);
 }
 

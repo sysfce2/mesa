@@ -257,6 +257,8 @@ struct radv_shader_layout {
 
    uint32_t dynamic_offset_count;
    bool use_dynamic_descriptors;
+
+   bool independent_sets;
 };
 
 struct radv_shader_stage {
@@ -691,6 +693,13 @@ static inline bool
 radv_shader_need_push_constants_upload(const struct radv_shader *shader)
 {
    const struct radv_userdata_info *loc = radv_get_user_sgpr_info(shader, AC_UD_PUSH_CONSTANTS);
+   return loc->sgpr_idx != -1;
+}
+
+static inline bool
+radv_shader_need_dynamic_descriptors_offset_addr(const struct radv_shader *shader)
+{
+   const struct radv_userdata_info *loc = radv_get_user_sgpr_info(shader, AC_UD_DYNAMIC_DESCRIPTORS_OFFSET_ADDR);
    return loc->sgpr_idx != -1;
 }
 

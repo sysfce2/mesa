@@ -6476,6 +6476,54 @@ radv_flush_constants(struct radv_cmd_buffer *cmd_buffer, VkShaderStageFlags stag
 }
 
 static void
+radv_upload_dynamic_descriptors_offsets(struct radv_cmd_buffer *cmd_buffer,
+                                        const struct radv_descriptor_state *descriptors_state, uint64_t *va)
+{
+   const uint32_t last_valid_desc = util_last_bit(descriptors_state->valid);
+   const uint32_t size = last_valid_desc * 4;
+   unsigned offset;
+   void *ptr;
+
+   if (!radv_cmd_buffer_upload_alloc(cmd_buffer, size, &offset, &ptr))
+      return;
+
+   memcpy(ptr, descriptors_state->dynamic_descriptors_offsets, size);
+
+   *va = radv_buffer_get_va(cmd_buffer->upload.upload_bo) + offset;
+}
+
+static void
+radv_flush_dynamic_descriptors_offsets(struct radv_cmd_buffer *cmd_buffer, VkShaderStageFlags stages,
+                                       VkPipelineBindPoint bind_point)
+{
+   const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+   struct radv_descriptor_state *descriptors_state = radv_get_descriptors_state(cmd_buffer, bind_point);
+   struct radv_cmd_stream *cs = radv_get_pm4_cs(cmd_buffer);
+   uint64_t va = 0;
+
+   assert(stages & RADV_GRAPHICS_STAGE_BITS);
+
+   radv_upload_dynamic_descriptors_offsets(cmd_buffer, descriptors_state, &va);
+
+   ASSERTED unsigned cdw_max = radeon_check_space(device->ws, cs->b, MESA_SHADER_MESH_STAGES * 4);
+
+   radv_foreach_stage (stage, stages & ~VK_SHADER_STAGE_TASK_BIT_EXT) {
+      if (!cmd_buffer->state.shaders[stage])
+         continue;
+
+      radv_emit_userdata_address(device, cs, cmd_buffer->state.shaders[stage], AC_UD_DYNAMIC_DESCRIPTORS_OFFSET_ADDR,
+                                 va);
+   }
+
+   if (stages & VK_SHADER_STAGE_TASK_BIT_EXT) {
+      radv_emit_userdata_address(device, cmd_buffer->gang.cs, cmd_buffer->state.shaders[MESA_SHADER_TASK],
+                                 AC_UD_DYNAMIC_DESCRIPTORS_OFFSET_ADDR, va);
+   }
+
+   assert(cs->b->cdw <= cdw_max);
+}
+
+static void
 radv_upload_dynamic_descriptors(struct radv_cmd_buffer *cmd_buffer,
                                 const struct radv_descriptor_state *descriptors_state, uint64_t *va)
 {
@@ -6525,6 +6573,9 @@ radv_flush_dynamic_descriptors(struct radv_cmd_buffer *cmd_buffer, VkShaderStage
    }
 
    assert(cs->b->cdw <= cdw_max);
+
+   if (descriptors_state->need_dynamic_descriptors_offset_addr)
+      radv_flush_dynamic_descriptors_offsets(cmd_buffer, stages, bind_point);
 }
 
 ALWAYS_INLINE void
@@ -7935,7 +7986,8 @@ radv_bind_descriptor_sets(struct radv_cmd_buffer *cmd_buffer, const VkBindDescri
       }
 
       for (unsigned j = 0; j < set->header.layout->dynamic_offset_count; ++j, ++dyn_idx) {
-         unsigned idx = j + layout->set[i + pBindDescriptorSetsInfo->firstSet].dynamic_offset_start;
+         const uint32_t dynamic_offset_start = layout->set[set_idx].dynamic_offset_start;
+         unsigned idx = j + dynamic_offset_start;
          uint32_t *dst = descriptors_state->dynamic_buffers + idx * 4;
          assert(dyn_idx < pBindDescriptorSetsInfo->dynamicOffsetCount);
 
@@ -7950,6 +8002,7 @@ radv_bind_descriptor_sets(struct radv_cmd_buffer *cmd_buffer, const VkBindDescri
             ac_build_raw_buffer_descriptor(pdev->info.gfx_level, va, size, dst);
          }
 
+         descriptors_state->dynamic_descriptors_offsets[set_idx] = dynamic_offset_start;
          descriptors_state->dirty_dynamic = true;
       }
    }
@@ -8867,6 +8920,8 @@ radv_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipeline
    cmd_buffer->push_constant_state[vk_to_bind_point(pipelineBindPoint)].need_upload =
       pipeline->need_push_constants_upload;
    cmd_buffer->descriptors[vk_to_bind_point(pipelineBindPoint)].dynamic_offset_count = pipeline->dynamic_offset_count;
+   cmd_buffer->descriptors[vk_to_bind_point(pipelineBindPoint)].need_dynamic_descriptors_offset_addr =
+      pipeline->need_dynamic_descriptors_offset_addr;
    cmd_buffer->descriptors[vk_to_bind_point(pipelineBindPoint)].need_indirect_descriptors =
       pipeline->need_indirect_descriptors;
 

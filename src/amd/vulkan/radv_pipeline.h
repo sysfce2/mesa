@@ -57,6 +57,9 @@ struct radv_pipeline {
 
    /* Pipeline layout info. */
    uint32_t push_constant_size;
+
+   /* Dynamic buffers info. */
+   bool need_dynamic_descriptors_offset_addr;
    uint32_t dynamic_offset_count;
 };
 

@@ -3306,6 +3306,8 @@ radv_pipeline_init_shader_stages_state(const struct radv_device *device, struct 
                radv_shader_need_indirect_descriptors(pipeline->base.shaders[i]);
             pipeline->base.need_push_constants_upload |=
                radv_shader_need_push_constants_upload(pipeline->base.shaders[i]);
+            pipeline->base.need_dynamic_descriptors_offset_addr |=
+               radv_shader_need_dynamic_descriptors_offset_addr(pipeline->base.shaders[i]);
          }
       }
    }

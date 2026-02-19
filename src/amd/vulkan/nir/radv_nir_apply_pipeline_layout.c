@@ -69,6 +69,25 @@ convert_pointer_to_64_bit(nir_builder *b, apply_layout_state *state, nir_def *pt
 }
 
 static nir_def *
+get_dynamic_descriptors_offset(nir_builder *b, apply_layout_state *state, uint32_t desc_set, uint32_t binding)
+{
+   struct radv_descriptor_set_layout *layout = state->layout->set[desc_set].layout;
+   nir_def *dynamic_offset_start;
+
+   if (state->layout->independent_sets) {
+      nir_def *addr = get_scalar_arg(b, 1, state->args->ac.dynamic_descriptors_offset_addr);
+      addr = convert_pointer_to_64_bit(b, state, addr);
+      dynamic_offset_start = ac_nir_load_smem(b, 1, addr, nir_imm_int(b, desc_set * 4), 4, 0);
+   } else {
+      dynamic_offset_start = nir_imm_int(b, state->layout->set[desc_set].dynamic_offset_start);
+   }
+
+   nir_def *offset = nir_iadd_imm(b, dynamic_offset_start, layout->binding[binding].dynamic_offset_offset);
+
+   return nir_imul_imm(b, offset, 16);
+}
+
+static nir_def *
 load_desc_ptr(nir_builder *b, apply_layout_state *state, unsigned set)
 {
    const struct radv_userdata_locations *user_sgprs_locs = &state->info->user_sgprs_locs;
@@ -89,22 +108,21 @@ visit_vulkan_resource_index(nir_builder *b, apply_layout_state *state, nir_intri
    unsigned desc_set = nir_intrinsic_desc_set(intrin);
    unsigned binding = nir_intrinsic_binding(intrin);
    struct radv_descriptor_set_layout *layout = state->layout->set[desc_set].layout;
-   unsigned offset = layout->binding[binding].offset;
    unsigned stride;
 
-   nir_def *set_ptr;
+   nir_def *set_ptr, *offset;
    if (vk_descriptor_type_is_dynamic(layout->binding[binding].type)) {
-      unsigned idx = state->layout->set[desc_set].dynamic_offset_start + layout->binding[binding].dynamic_offset_offset;
       set_ptr = get_dynamic_descriptors_addr(b, state);
-      offset = idx * 16;
+      offset = get_dynamic_descriptors_offset(b, state, desc_set, binding);
       stride = 16;
    } else {
       set_ptr = load_desc_ptr(b, state, desc_set);
+      offset = nir_imm_int(b, layout->binding[binding].offset);
       stride = layout->binding[binding].size;
    }
 
    nir_def *binding_ptr = nir_imul_imm_nuw(b, intrin->src[0].ssa, stride);
-   binding_ptr = nir_iadd_imm_nuw(b, binding_ptr, offset);
+   binding_ptr = nir_iadd_nuw(b, binding_ptr, offset);
 
    if (layout->binding[binding].type == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR) {
       assert(stride == 16);

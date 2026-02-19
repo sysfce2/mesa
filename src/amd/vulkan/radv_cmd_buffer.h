@@ -247,6 +247,8 @@ struct radv_descriptor_state {
    struct radv_push_descriptor_set push_set;
    uint32_t dynamic_buffers[4 * MAX_DYNAMIC_BUFFERS];
    uint32_t dynamic_offset_count;
+   bool need_dynamic_descriptors_offset_addr;
+   uint32_t dynamic_descriptors_offsets[MAX_SETS];
    bool dirty_dynamic;
    uint64_t descriptor_buffers[MAX_SETS];
    bool need_indirect_descriptors;
