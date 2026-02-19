@@ -1464,7 +1464,7 @@ static LLVMValueRef build_tex_intrinsic(struct ac_nir_context *ctx, const nir_te
    }
 
    /* MI200 doesn't have image_sample_lz, but image_sample behaves like lz. */
-   if (!ctx->ac.info->cu_info.has_3d_cube_border_color_mipmap)
+   if (!ctx->ac.info->has_3d_cube_border_color_mipmap)
       args->level_zero = false;
 
    if (instr->op == nir_texop_tg4 && ctx->ac.gfx_level <= GFX8 &&
@@ -3678,7 +3678,7 @@ static void visit_tex(struct ac_nir_context *ctx, nir_tex_instr *instr)
    }
 
    /* Set TRUNC_COORD=0 for textureGather(). */
-   if (instr->op == nir_texop_tg4 && !ctx->ac.info->cu_info.conformant_trunc_coord) {
+   if (instr->op == nir_texop_tg4 && !ctx->ac.info->conformant_trunc_coord) {
       LLVMValueRef dword0 = LLVMBuildExtractElement(ctx->ac.builder, args.sampler, ctx->ac.i32_0, "");
       dword0 = LLVMBuildAnd(ctx->ac.builder, dword0, LLVMConstInt(ctx->ac.i32, C_008F30_TRUNC_COORD, 0), "");
       args.sampler = LLVMBuildInsertElement(ctx->ac.builder, args.sampler, dword0, ctx->ac.i32_0, "");

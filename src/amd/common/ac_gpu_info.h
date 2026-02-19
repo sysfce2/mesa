@@ -101,6 +101,7 @@ struct amd_ip_info {
 };
 
 struct ac_cu_info {
+   enum amd_gfx_level gfx_level;
    uint32_t max_waves_per_simd;
    uint32_t num_physical_sgprs_per_simd;
    uint32_t num_physical_wave64_vgprs_per_simd;
