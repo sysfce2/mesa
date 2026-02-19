@@ -763,7 +763,11 @@ ir3_finalize_nir(struct ir3_compiler *compiler,
    NIR_PASS(_, s, ir3_nir_lower_sparse_residency);
    NIR_PASS(_, s, ir3_nir_min_lod_workaround);
 
-   if (compiler->array_index_add_half)
+   /* for opencl kernels, TPL1_MODE_CNTL should be configured for
+    * isammode=CL and .arraycoordroundmode = ROUND_NEAREST_EVEN,
+    * as opposed to gl/vk compute shaders which follow GL rules:
+    */
+   if (compiler->array_index_add_half && (s->info.stage != MESA_SHADER_KERNEL))
       OPT(s, ir3_nir_lower_array_sampler);
 
    OPT(s, ir3_nir_lower_image_processing);

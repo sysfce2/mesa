@@ -45,11 +45,42 @@ template <chip CHIP>
 static void
 emit_shader_regs(struct fd_context *ctx, fd_cs &cs, const struct ir3_shader_variant *so)
 {
-   fd_crb crb(cs, 12);
+   fd_crb crb(cs, 14);
 
    mesa_shader_stage type = so->type;
-   if (type == MESA_SHADER_KERNEL)
+   enum a6xx_isam_mode isam_mode = ISAMMODE_GL;
+
+   if (type == MESA_SHADER_KERNEL) {
+      isam_mode = ISAMMODE_CL;
       type = MESA_SHADER_COMPUTE;
+   }
+
+   crb.add(A6XX_SP_MODE_CNTL(
+      .constant_demotion_enable = true,
+      .isammode = isam_mode,
+      .shared_consts_enable = false,
+   ));
+
+   if (isam_mode == ISAMMODE_GL) {
+      crb.add(TPL1_MODE_CNTL(CHIP,
+         .isammode = ISAMMODE_GL,
+         .texcoordroundmode = COORD_TRUNCATE,
+         .arraycoordroundmode = COORD_TRUNCATE,
+         .nearestmipsnap = CLAMP_ROUND_TRUNCATE,
+         .destdatatypeoverride = true,
+         .clamp_disable = true,
+      ));
+   } else {
+      assert(isam_mode == ISAMMODE_CL);
+      crb.add(TPL1_MODE_CNTL(CHIP,
+         .isammode = ISAMMODE_CL,
+         .texcoordroundmode = COORD_TRUNCATE,
+         .arraycoordroundmode = COORD_ROUND_NEAREST_EVEN,
+         .nearestmipsnap = ROUND_CLAMP_TRUNCATE,
+         .destdatatypeoverride = false,
+         .clamp_disable = false,
+      ));
+   }
 
    enum a6xx_threadsize thrsz =
       so->info.double_threadsize ? THREAD128 : THREAD64;

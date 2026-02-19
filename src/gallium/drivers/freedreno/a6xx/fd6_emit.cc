@@ -949,13 +949,6 @@ fd6_emit_static_context_regs(struct fd_context *ctx, fd_cs &cs)
 
    crb.add(A6XX_SP_UNKNOWN_A9A8());
 
-   crb.add(A6XX_SP_MODE_CNTL(
-         .constant_demotion_enable = true,
-         .isammode = ISAMMODE_GL,
-         .shared_consts_enable = false,
-      )
-   );
-
    crb.add(A6XX_VFD_MODE_CNTL(.vertex = true, .instance = true));
    if (CHIP == A6XX)
       crb.add(VPC_UNKNOWN_9107(CHIP));
@@ -995,14 +988,6 @@ fd6_emit_static_context_regs(struct fd_context *ctx, fd_cs &cs)
    if (CHIP == A6XX) {
       crb.add(VPC_UNKNOWN_9210(CHIP));
    }
-
-   crb.add(TPL1_MODE_CNTL(CHIP,
-         .isammode = ISAMMODE_GL,
-         .texcoordroundmode = COORD_TRUNCATE,
-         .nearestmipsnap = CLAMP_ROUND_TRUNCATE,
-         .destdatatypeoverride = true,
-         .clamp_disable = true,
-   ));
 
    crb.add(SP_REG_PROG_ID_3(
          CHIP,
