@@ -2773,6 +2773,8 @@ ir3_ra_get_reg_file_limits(struct ir3_shader_variant *v)
          MIN2(limit_pressure.full, v->compiler->reg_size_vec4 / 2 * 16);
    }
 
+   assert(limit_pressure.full <= RA_FULL_SIZE);
+
    return limit_pressure;
 }
 
@@ -2871,6 +2873,7 @@ ir3_ra(struct ir3_shader_variant *v)
    ctx->blocks = rzalloc_array(ctx, struct ra_block_state, live->block_count);
 
    ctx->full.size = calc_target_full_pressure(v, max_pressure.full);
+   assert(ctx->full.size <= RA_FULL_SIZE);
    d("full size: %u", ctx->full.size);
 
    if (!v->mergedregs)
