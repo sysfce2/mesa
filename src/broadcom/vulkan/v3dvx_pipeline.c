@@ -105,7 +105,8 @@ pack_blend(struct v3dv_pipeline *pipeline,
 
       color_write_masks |= (~b_state->colorWriteMask & 0xf) << (4 * i);
 
-      if (!b_state->blendEnable)
+      /* Vulkan requires ignoring blending if logic operations are enabled */
+      if (!b_state->blendEnable || cb_info->logicOpEnable)
          continue;
 
       const struct v3dv_format *format = v3dX(get_format)(vk_format);
