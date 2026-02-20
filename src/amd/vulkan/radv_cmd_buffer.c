@@ -14499,19 +14499,19 @@ static void
 radv_retile_transition(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image, VkImageLayout src_layout,
                        VkImageLayout dst_layout, unsigned dst_queue_mask)
 {
-   /* If the image is read-only, we don't have to retile DCC because it can't change. */
-   if (!(image->vk.usage & RADV_IMAGE_USAGE_WRITE_BITS))
-      return;
-
    if (src_layout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR &&
        (dst_layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR || (dst_queue_mask & (1u << RADV_QUEUE_FOREIGN))))
       radv_retile_dcc(cmd_buffer, image);
 }
 
 static bool
-radv_image_need_retile(const struct radv_cmd_buffer *cmd_buffer, const struct radv_image *image)
+radv_image_need_retile(const struct radv_image *image)
 {
-   return cmd_buffer->qf != RADV_QUEUE_TRANSFER && image->planes[0].surface.display_dcc_offset &&
+   /* If the image is read-only, we don't have to retile DCC because it can't change. */
+   if (!(image->vk.usage & RADV_IMAGE_USAGE_WRITE_BITS))
+      return false;
+
+   return image->planes[0].surface.display_dcc_offset &&
           image->planes[0].surface.display_dcc_offset != image->planes[0].surface.meta_offset;
 }
 
@@ -14533,7 +14533,7 @@ radv_handle_color_image_transition(struct radv_cmd_buffer *cmd_buffer, struct ra
    if (src_layout == VK_IMAGE_LAYOUT_UNDEFINED || src_layout == VK_IMAGE_LAYOUT_ZERO_INITIALIZED_EXT) {
       radv_init_color_image_metadata(cmd_buffer, image, src_layout, dst_layout, src_queue_mask, dst_queue_mask, range);
 
-      if (radv_image_need_retile(cmd_buffer, image)) {
+      if (radv_image_need_retile(image)) {
          /* Initialize displayable DCC to something sensible unless the
           * underlying memory has already been zeroed. */
          if (src_layout != VK_IMAGE_LAYOUT_ZERO_INITIALIZED_EXT)
@@ -14550,7 +14550,7 @@ radv_handle_color_image_transition(struct radv_cmd_buffer *cmd_buffer, struct ra
          needs_dcc_decompress = true;
       }
 
-      if (radv_image_need_retile(cmd_buffer, image))
+      if (radv_image_need_retile(image))
          needs_dcc_retile = true;
    }
 

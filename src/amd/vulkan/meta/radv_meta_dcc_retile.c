@@ -114,6 +114,7 @@ radv_retile_dcc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image)
    VkPipeline pipeline;
    VkResult result;
 
+   assert(cmd_buffer->qf == RADV_QUEUE_GENERAL || cmd_buffer->qf == RADV_QUEUE_COMPUTE);
    assert(image->vk.image_type == VK_IMAGE_TYPE_2D);
    assert(image->vk.array_layers == 1 && image->vk.mip_levels == 1);
 
