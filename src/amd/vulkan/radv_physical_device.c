@@ -882,6 +882,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .NV_compute_shader_derivatives = true,
       .NV_cooperative_matrix2 = radv_cooperative_matrix2_nv_enabled(pdev),
       .VALVE_mutable_descriptor_type = true,
+      .VALVE_shader_mixed_float_dot_product = pdev->info.cu_info.has_accelerated_dot_product,
       .VALVE_video_encode_rgb_conversion =
          pdev->video_encode_enabled && pdev->info.vcn_ip_version >= VCN_2_0_0 && pdev->info.vcn_ip_version != VCN_2_2_0,
    };
@@ -1518,6 +1519,12 @@ radv_physical_device_get_features(const struct radv_physical_device *pdev, struc
 
       /* VK_KHR_internally_synchronized_queues */
       .internallySynchronizedQueues = true,
+
+      /* VK_VALVE_shader_mixed_float_dot_product */
+      .shaderMixedFloatDotProductFloat16AccFloat32 = true,
+      .shaderMixedFloatDotProductFloat16AccFloat16 = pdev->info.gfx_level >= GFX11,
+      .shaderMixedFloatDotProductBFloat16Acc = radv_bfloat16_enabled(pdev),
+      .shaderMixedFloatDotProductFloat8AccFloat32 = pdev->info.gfx_level >= GFX12,
    };
 }
 
