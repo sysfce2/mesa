@@ -9914,7 +9914,8 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
       screen_scissor.width = MIN2(screen_scissor.width, iview->vk.extent.width);
       screen_scissor.height = MIN2(screen_scissor.height, iview->vk.extent.height);
 
-      if (color_att[i].flags & VK_RENDERING_ATTACHMENT_INPUT_ATTACHMENT_FEEDBACK_BIT_KHR) {
+      if (!(pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT) &&
+          color_att[i].flags & VK_RENDERING_ATTACHMENT_INPUT_ATTACHMENT_FEEDBACK_BIT_KHR) {
          radv_handle_color_fbfetch_output(cmd_buffer, &color_att[i], pRenderingInfo->layerCount,
                                           pRenderingInfo->viewMask);
       }
@@ -9996,7 +9997,8 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
       screen_scissor.width = MIN2(screen_scissor.width, ds_att.iview->vk.extent.width);
       screen_scissor.height = MIN2(screen_scissor.height, ds_att.iview->vk.extent.height);
 
-      if (ds_att.flags & VK_RENDERING_ATTACHMENT_INPUT_ATTACHMENT_FEEDBACK_BIT_KHR) {
+      if (!(pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT) &&
+          ds_att.flags & VK_RENDERING_ATTACHMENT_INPUT_ATTACHMENT_FEEDBACK_BIT_KHR) {
          radv_handle_depth_fbfetch_output(cmd_buffer, &ds_att, pRenderingInfo->layerCount, pRenderingInfo->viewMask,
                                           sample_locs_info);
       }
@@ -10016,44 +10018,47 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
       vrs_texel_size = fsr_info->shadingRateAttachmentTexelSize;
    }
 
-   if (vrs_att.iview && pdev->info.gfx_level == GFX10_3) {
-      VkRect2D render_area = pRenderingInfo->renderArea;
-      if (ds_att.iview && radv_htile_enabled(ds_att.iview->image, ds_att.iview->vk.base_mip_level)) {
-         /* When we have a VRS attachment and a depth/stencil attachment, we just need to copy the
-          * VRS rates to the HTILE buffer of the attachment.
-          */
-         struct radv_image_view *ds_iview = ds_att.iview;
-         struct radv_image *ds_image = ds_iview->image;
-         uint32_t level = ds_iview->vk.base_mip_level;
+   if (!(pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT)) {
+      if (vrs_att.iview && pdev->info.gfx_level == GFX10_3) {
+         VkRect2D render_area = pRenderingInfo->renderArea;
+         if (ds_att.iview && radv_htile_enabled(ds_att.iview->image, ds_att.iview->vk.base_mip_level)) {
+            /* When we have a VRS attachment and a depth/stencil attachment, we just need to copy the
+             * VRS rates to the HTILE buffer of the attachment.
+             */
+            struct radv_image_view *ds_iview = ds_att.iview;
+            struct radv_image *ds_image = ds_iview->image;
+            uint32_t level = ds_iview->vk.base_mip_level;
 
-         /* HTILE buffer */
-         uint64_t htile_offset =
-            ds_image->planes[0].surface.meta_offset + ds_image->planes[0].surface.u.gfx9.meta_levels[level].offset;
-         const uint64_t htile_va = ds_image->bindings[0].addr + htile_offset;
-
-         assert(render_area.offset.x + render_area.extent.width <= ds_image->vk.extent.width &&
-                render_area.offset.x + render_area.extent.height <= ds_image->vk.extent.height);
-
-         /* Copy the VRS rates to the HTILE buffer. */
-         radv_copy_vrs_htile(cmd_buffer, vrs_att.iview, &render_area, ds_image, htile_va, true);
-      } else {
-         /* When a subpass uses a VRS attachment without binding a depth/stencil attachment, or when
-          * HTILE isn't enabled, we use a fallback that copies the VRS rates to our internal HTILE buffer.
-          */
-         struct radv_image *ds_image = radv_cmd_buffer_get_vrs_image(cmd_buffer);
-
-         if (ds_image && render_area.offset.x < ds_image->vk.extent.width &&
-             render_area.offset.y < ds_image->vk.extent.height) {
             /* HTILE buffer */
-            struct radv_buffer *htile_buffer = device->vrs.buffer;
-            const uint64_t htile_va = htile_buffer->vk.device_address;
+            uint64_t htile_offset =
+               ds_image->planes[0].surface.meta_offset + ds_image->planes[0].surface.u.gfx9.meta_levels[level].offset;
+            const uint64_t htile_va = ds_image->bindings[0].addr + htile_offset;
 
-            render_area.extent.width = MIN2(render_area.extent.width, ds_image->vk.extent.width - render_area.offset.x);
-            render_area.extent.height =
-               MIN2(render_area.extent.height, ds_image->vk.extent.height - render_area.offset.y);
+            assert(render_area.offset.x + render_area.extent.width <= ds_image->vk.extent.width &&
+                   render_area.offset.x + render_area.extent.height <= ds_image->vk.extent.height);
 
             /* Copy the VRS rates to the HTILE buffer. */
-            radv_copy_vrs_htile(cmd_buffer, vrs_att.iview, &render_area, ds_image, htile_va, false);
+            radv_copy_vrs_htile(cmd_buffer, vrs_att.iview, &render_area, ds_image, htile_va, true);
+         } else {
+            /* When a subpass uses a VRS attachment without binding a depth/stencil attachment, or when
+             * HTILE isn't enabled, we use a fallback that copies the VRS rates to our internal HTILE buffer.
+             */
+            struct radv_image *ds_image = radv_cmd_buffer_get_vrs_image(cmd_buffer);
+
+            if (ds_image && render_area.offset.x < ds_image->vk.extent.width &&
+                render_area.offset.y < ds_image->vk.extent.height) {
+               /* HTILE buffer */
+               struct radv_buffer *htile_buffer = device->vrs.buffer;
+               const uint64_t htile_va = htile_buffer->vk.device_address;
+
+               render_area.extent.width =
+                  MIN2(render_area.extent.width, ds_image->vk.extent.width - render_area.offset.x);
+               render_area.extent.height =
+                  MIN2(render_area.extent.height, ds_image->vk.extent.height - render_area.offset.y);
+
+               /* Copy the VRS rates to the HTILE buffer. */
+               radv_copy_vrs_htile(cmd_buffer, vrs_att.iview, &render_area, ds_image, htile_va, false);
+            }
          }
       }
    }
