@@ -10111,6 +10111,9 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
    const uint32_t maxx = minx + render->area.extent.width;
    const uint32_t maxy = miny + render->area.extent.height;
 
+   if (pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT)
+      return;
+
    radeon_check_space(device->ws, cs->b, 10);
 
    radeon_begin(cs);
@@ -10151,8 +10154,7 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
 
    radv_emit_framebuffer_state(cmd_buffer);
 
-   if (!(pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT))
-      radv_cmd_buffer_clear_rendering(cmd_buffer, pRenderingInfo);
+   radv_cmd_buffer_clear_rendering(cmd_buffer, pRenderingInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
