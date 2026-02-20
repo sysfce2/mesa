@@ -54,6 +54,8 @@ pass(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
       if (!(nir_def_components_read(&intrin->def) & (1 << 2)))
          return false;
 
+      b->fp_math_ctrl = nir_fp_no_fast_math;
+
       nir_def *frag_z = nir_channel(b, &intrin->def, 2);
 
       /* adjusted_frag_z = dFdxFine(frag_z) * 0.0625 + frag_z */
@@ -70,6 +72,8 @@ pass(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
 
       nir_def *new_dest = nir_vector_insert_imm(b, &intrin->def, frag_z, 2);
       nir_def_rewrite_uses_after(&intrin->def, new_dest);
+
+      b->fp_math_ctrl = 0;
       return true;
    }
    case nir_intrinsic_load_barycentric_at_sample: {
