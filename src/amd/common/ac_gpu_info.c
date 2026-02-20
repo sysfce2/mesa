@@ -2332,11 +2332,8 @@ static uint16_t get_task_num_entries(enum radeon_family fam)
     * Use a low number on smaller chips so we don't waste space,
     * but keep it high on bigger chips so it doesn't inhibit parallelism.
     *
-    * This number is compiled into task/mesh shaders as a constant.
-    * In order to ensure this works fine with the shader cache, we must
-    * base this decision on the chip family, not the number of CUs in
-    * the current GPU. (So, the cache remains consistent for all
-    * chips in the same family.)
+    * TODO: should we base this decision on the number of CUs in the
+    * current GPU instead of the family?
     */
    switch (fam) {
    case CHIP_VANGOGH:
