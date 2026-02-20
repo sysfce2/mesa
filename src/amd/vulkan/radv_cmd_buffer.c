@@ -14370,6 +14370,8 @@ radv_init_color_image_metadata(struct radv_cmd_buffer *cmd_buffer, struct radv_i
                                const VkImageSubresourceRange *range)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+   bool need_dcc_init = false, need_metadata_init = false;
+   uint32_t dcc_init_value = 0;
    uint32_t flush_bits = 0;
 
    /* Transitioning from LAYOUT_UNDEFINED layout not everyone is
@@ -14395,16 +14397,30 @@ radv_init_color_image_metadata(struct radv_cmd_buffer *cmd_buffer, struct radv_i
    }
 
    if (radv_dcc_enabled(image, range->baseMipLevel)) {
-      uint32_t value = DCC_UNCOMPRESSED; /* Fully expanded mode. */
+      dcc_init_value = DCC_UNCOMPRESSED; /* Fully expanded mode. */
 
       if (radv_layout_dcc_compressed(device, image, range->baseMipLevel, dst_layout, dst_queue_mask)) {
-         value = DCC_CLEAR_0000;
+         dcc_init_value = DCC_CLEAR_0000;
       }
 
-      flush_bits |= radv_init_dcc(cmd_buffer, image, range, value);
+      need_dcc_init = true;
    }
 
    if (radv_image_has_cmask(image) || radv_dcc_enabled(image, range->baseMipLevel)) {
+      need_metadata_init = true;
+   }
+
+   /* Skip redundant operations when the image is already zero-initialized. */
+   if (src_layout == VK_IMAGE_LAYOUT_ZERO_INITIALIZED_EXT) {
+      need_dcc_init = dcc_init_value != DCC_CLEAR_0000;
+      need_metadata_init = false;
+   }
+
+   if (need_dcc_init) {
+      flush_bits |= radv_init_dcc(cmd_buffer, image, range, dcc_init_value);
+   }
+
+   if (need_metadata_init) {
       radv_update_fce_metadata(cmd_buffer, image, range, false);
 
       uint32_t color_values[2] = {0};
