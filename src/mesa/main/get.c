@@ -558,7 +558,6 @@ EXTRA_EXT(ARB_seamless_cube_map);
 EXTRA_EXT(ARB_sync);
 EXTRA_EXT(ARB_vertex_shader);
 EXTRA_EXT(EXT_transform_feedback);
-EXTRA_EXT(ARB_transform_feedback3);
 EXTRA_EXT(ARB_vertex_program);
 EXTRA_EXT2(ARB_vertex_program, ARB_fragment_program);
 EXTRA_EXT(ARB_color_buffer_float);
@@ -651,6 +650,12 @@ static const int extra_version_32_OES_geometry_shader[] = {
 static const int extra_gl40_ARB_sample_shading[] = {
    EXTRA_VERSION_40,
    EXT(ARB_sample_shading),
+   EXTRA_END
+};
+
+static const int extra_gl40_ARB_transform_feedback3[] = {
+   EXTRA_VERSION_40,
+   EXT(ARB_transform_feedback3),
    EXTRA_END
 };
 
