@@ -980,15 +980,19 @@ build_subgroup_gt_mask(nir_builder *b,
 }
 
 static nir_def *
-build_quad_vote_any(nir_builder *b, nir_def *src,
-                    const nir_lower_subgroups_options *options)
+build_vote(nir_builder *b, nir_def *src,
+           const nir_lower_subgroups_options *options,
+           unsigned cluster_size, bool all)
 {
    nir_def *ballot = nir_ballot(b, options->ballot_components,
                                 options->ballot_bit_size,
-                                src);
-   nir_def *mask = build_cluster_mask(b, 4, options);
+                                all ? nir_inot(b, src) : src);
+   if (cluster_size) {
+      nir_def *mask = build_cluster_mask(b, cluster_size, options);
+      ballot = nir_iand(b, ballot, mask);
+   }
 
-   return nir_ine_imm(b, nir_iand(b, ballot, mask), 0);
+   return all ? nir_ieq_imm(b, ballot, 0) : nir_ine_imm(b, ballot, 0);
 }
 
 static nir_def *
@@ -1088,8 +1092,12 @@ lower_subgroups_instr(nir_builder *b, nir_instr *instr, void *_options)
    switch (intrin->intrinsic) {
    case nir_intrinsic_vote_any:
    case nir_intrinsic_vote_all:
-      if (options->lower_vote_trivial)
+      if (options->lower_vote_trivial) {
          return intrin->src[0].ssa;
+      } else if (options->lower_vote) {
+         return build_vote(b, intrin->src[0].ssa, options, 0,
+                           intrin->intrinsic == nir_intrinsic_vote_all);
+      }
       break;
 
    case nir_intrinsic_vote_feq:
@@ -1337,14 +1345,10 @@ lower_subgroups_instr(nir_builder *b, nir_instr *instr, void *_options)
       break;
 
    case nir_intrinsic_quad_vote_any:
-      if (options->lower_quad_vote)
-         return build_quad_vote_any(b, intrin->src[0].ssa, options);
-      break;
    case nir_intrinsic_quad_vote_all:
       if (options->lower_quad_vote) {
-         nir_def *not_src = nir_inot(b, intrin->src[0].ssa);
-         nir_def *any_not = build_quad_vote_any(b, not_src, options);
-         return nir_inot(b, any_not);
+         return build_vote(b, intrin->src[0].ssa, options, 4,
+                           intrin->intrinsic == nir_intrinsic_quad_vote_all);
       }
       break;
 
