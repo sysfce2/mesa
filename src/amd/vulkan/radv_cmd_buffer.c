@@ -10104,6 +10104,8 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
    if (pdev->info.gfx_level >= GFX12)
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_GFX12_HIZ_WA_STATE;
 
+   radv_emit_fb_mip_change_flush(cmd_buffer);
+
    const uint32_t minx = render->area.offset.x;
    const uint32_t miny = render->area.offset.y;
    const uint32_t maxx = minx + render->area.extent.width;
@@ -10146,8 +10148,6 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
       }
    }
    radeon_end();
-
-   radv_emit_fb_mip_change_flush(cmd_buffer);
 
    radv_emit_framebuffer_state(cmd_buffer);
 
