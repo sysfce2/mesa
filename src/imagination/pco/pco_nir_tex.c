@@ -19,6 +19,7 @@
 #include "pco_common.h"
 #include "pco_internal.h"
 #include "pco_usclib.h"
+#include "pvr_iface.h"
 #include "util/macros.h"
 
 #include <assert.h>
@@ -926,108 +927,11 @@ static nir_def *lower_image(nir_builder *b, nir_instr *instr, void *cb_data)
             nir_type_to_pipe_format(type, desc->nr_channels);
 
          if (format != data_format) {
-            enum pco_pck_format pck_format = ~0;
             bool scale = false;
             bool roundzero = false;
             bool split = false;
-
-            switch (format) {
-            case PIPE_FORMAT_R8_UNORM:
-            case PIPE_FORMAT_R8G8_UNORM:
-            case PIPE_FORMAT_R8G8B8_UNORM:
-            case PIPE_FORMAT_R8G8B8A8_UNORM:
-               pck_format = PCO_PCK_FORMAT_U8888;
-               scale = true;
-               break;
-
-            case PIPE_FORMAT_R8_SNORM:
-            case PIPE_FORMAT_R8G8_SNORM:
-            case PIPE_FORMAT_R8G8B8_SNORM:
-            case PIPE_FORMAT_R8G8B8A8_SNORM:
-               pck_format = PCO_PCK_FORMAT_S8888;
-               scale = true;
-               break;
-
-            case PIPE_FORMAT_R11G11B10_FLOAT:
-               pck_format = PCO_PCK_FORMAT_F111110;
-               break;
-
-            case PIPE_FORMAT_R10G10B10A2_UNORM:
-               pck_format = PCO_PCK_FORMAT_U1010102;
-               scale = true;
-               break;
-
-            case PIPE_FORMAT_R10G10B10A2_SNORM:
-               pck_format = PCO_PCK_FORMAT_S1010102;
-               scale = true;
-               break;
-
-            case PIPE_FORMAT_R16_FLOAT:
-            case PIPE_FORMAT_R16G16_FLOAT:
-            case PIPE_FORMAT_R16G16B16_FLOAT:
-            case PIPE_FORMAT_R16G16B16A16_FLOAT:
-               pck_format = PCO_PCK_FORMAT_F16F16;
-               split = true;
-               break;
-
-            case PIPE_FORMAT_R16_UNORM:
-            case PIPE_FORMAT_R16G16_UNORM:
-            case PIPE_FORMAT_R16G16B16_UNORM:
-            case PIPE_FORMAT_R16G16B16A16_UNORM:
-               pck_format = PCO_PCK_FORMAT_U1616;
-               scale = true;
-               split = true;
-               break;
-
-            case PIPE_FORMAT_R16_SNORM:
-            case PIPE_FORMAT_R16G16_SNORM:
-            case PIPE_FORMAT_R16G16B16_SNORM:
-            case PIPE_FORMAT_R16G16B16A16_SNORM:
-               pck_format = PCO_PCK_FORMAT_S1616;
-               scale = true;
-               split = true;
-               break;
-
-            case PIPE_FORMAT_R8_UINT:
-            case PIPE_FORMAT_R8G8_UINT:
-            case PIPE_FORMAT_R8G8B8_UINT:
-            case PIPE_FORMAT_R8G8B8A8_UINT:
-
-            case PIPE_FORMAT_R8_SINT:
-            case PIPE_FORMAT_R8G8_SINT:
-            case PIPE_FORMAT_R8G8B8_SINT:
-            case PIPE_FORMAT_R8G8B8A8_SINT:
-
-            case PIPE_FORMAT_R10G10B10A2_UINT:
-            case PIPE_FORMAT_R10G10B10A2_SINT:
-
-            case PIPE_FORMAT_R16_UINT:
-            case PIPE_FORMAT_R16G16_UINT:
-            case PIPE_FORMAT_R16G16B16_UINT:
-            case PIPE_FORMAT_R16G16B16A16_UINT:
-
-            case PIPE_FORMAT_R16_SINT:
-            case PIPE_FORMAT_R16G16_SINT:
-            case PIPE_FORMAT_R16G16B16_SINT:
-            case PIPE_FORMAT_R16G16B16A16_SINT:
-
-            case PIPE_FORMAT_R32_UINT:
-            case PIPE_FORMAT_R32G32_UINT:
-            case PIPE_FORMAT_R32G32B32_UINT:
-            case PIPE_FORMAT_R32G32B32A32_UINT:
-
-            case PIPE_FORMAT_R32_SINT:
-            case PIPE_FORMAT_R32G32_SINT:
-            case PIPE_FORMAT_R32G32B32_SINT:
-            case PIPE_FORMAT_R32G32B32A32_SINT:
-               /* No conversion needed. */
-               break;
-
-            default:
-               printf("Unsupported image write pack format %s.\n",
-                      util_format_name(format));
-               UNREACHABLE("");
-            }
+            enum pco_pck_format pck_format =
+               pco_pipe_to_pck_format(data_format, &scale, &roundzero, &split);
 
             if (pck_format != ~0) {
                if (split) {
@@ -1067,13 +971,20 @@ static nir_def *lower_image(nir_builder *b, nir_instr *instr, void *cb_data)
                                                    .binding = binding);
 
          nir_def *pck_info = nir_channel(b, tex_meta, PCO_IMAGE_META_PCK_INFO);
-         nir_def *pck_format = nir_ubitfield_extract_imm(b, pck_info, 0, 5);
-         nir_def *pck_skip = nir_ieq_imm(b, pck_format, 0b11111);
-         nir_def *pck_split = nir_ubitfield_extract_imm(b, pck_info, 5, 1);
+         nir_def *pck_format =
+            nir_ubitfield_extract_imm(b,
+                                      pck_info,
+                                      PVR_PCK_INFO_FORMAT_OFFSET,
+                                      PVR_PCK_INFO_FORMAT_LENGTH);
+         nir_def *pck_skip = nir_ieq_imm(b, pck_format, PVR_PCK_FORMAT_INVALID);
+         nir_def *pck_split =
+            nir_ubitfield_extract_imm(b, pck_info, PVR_PCK_INFO_SPLIT_OFFSET, 1);
          pck_split = nir_ine_imm(b, pck_split, 0);
-         nir_def *pck_scale = nir_ubitfield_extract_imm(b, pck_info, 6, 1);
+         nir_def *pck_scale =
+            nir_ubitfield_extract_imm(b, pck_info, PVR_PCK_INFO_SCALE_OFFSET, 1);
          pck_scale = nir_ine_imm(b, pck_scale, 0);
-         /* nir_def *pck_roundzero = nir_ubitfield_extract_imm(b, pck_info, 7,
+         /* nir_def *pck_roundzero = nir_ubitfield_extract_imm(b, pck_info,
+          * PVR_PCK_INFO_ROUNDZERO_OFFSET,
           * 1); */
          /* pck_roundzero = nir_ine_imm(b, pck_roundzero, 0); */
 

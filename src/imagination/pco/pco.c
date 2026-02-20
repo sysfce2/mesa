@@ -379,3 +379,79 @@ struct pvr_stats pco_get_pvr_stats(pco_shader *shader)
       },
    };
 }
+
+enum pco_pck_format pco_pipe_to_pck_format(enum pipe_format format,
+                                           bool *scale,
+                                           bool *roundzero,
+                                           bool *split)
+{
+   enum pco_pck_format pck_format = ~0;
+   *scale = false;
+   *roundzero = false;
+   *split = false;
+
+   switch (format) {
+   case PIPE_FORMAT_R8_UNORM:
+   case PIPE_FORMAT_R8G8_UNORM:
+   case PIPE_FORMAT_R8G8B8_UNORM:
+   case PIPE_FORMAT_R8G8B8A8_UNORM:
+      pck_format = PCO_PCK_FORMAT_U8888;
+      *scale = true;
+      break;
+
+   case PIPE_FORMAT_R8_SNORM:
+   case PIPE_FORMAT_R8G8_SNORM:
+   case PIPE_FORMAT_R8G8B8_SNORM:
+   case PIPE_FORMAT_R8G8B8A8_SNORM:
+      pck_format = PCO_PCK_FORMAT_S8888;
+      *scale = true;
+      break;
+
+   case PIPE_FORMAT_R11G11B10_FLOAT:
+      pck_format = PCO_PCK_FORMAT_F111110;
+      break;
+
+   /* TODO: better way to do the 1x2 component. */
+   case PIPE_FORMAT_R10G10B10A2_UNORM:
+      pck_format = PCO_PCK_FORMAT_U1010102;
+      *scale = true;
+      break;
+
+   /* TODO: better way to do the 1x2 component. */
+   case PIPE_FORMAT_R10G10B10A2_SNORM:
+      pck_format = PCO_PCK_FORMAT_S1010102;
+      *scale = true;
+      break;
+
+   case PIPE_FORMAT_R16_FLOAT:
+   case PIPE_FORMAT_R16G16_FLOAT:
+   case PIPE_FORMAT_R16G16B16_FLOAT:
+   case PIPE_FORMAT_R16G16B16A16_FLOAT:
+      pck_format = PCO_PCK_FORMAT_F16F16;
+      *split = true;
+      break;
+
+   case PIPE_FORMAT_R16_UNORM:
+   case PIPE_FORMAT_R16G16_UNORM:
+   case PIPE_FORMAT_R16G16B16_UNORM:
+   case PIPE_FORMAT_R16G16B16A16_UNORM:
+      pck_format = PCO_PCK_FORMAT_U1616;
+      *scale = true;
+      *split = true;
+      break;
+
+   case PIPE_FORMAT_R16_SNORM:
+   case PIPE_FORMAT_R16G16_SNORM:
+   case PIPE_FORMAT_R16G16B16_SNORM:
+   case PIPE_FORMAT_R16G16B16A16_SNORM:
+      pck_format = PCO_PCK_FORMAT_S1616;
+      *scale = true;
+      *split = true;
+      break;
+
+   default:
+      break;
+   }
+
+   return pck_format;
+}

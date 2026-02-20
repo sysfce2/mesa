@@ -83,92 +83,30 @@ pvr_chroma_swap_format(enum ROGUE_TEXSTATE_FORMAT format)
 
 static uint32_t setup_pck_info(VkFormat vk_format)
 {
-   /* TODO NEXT: commonize this.*/
    enum pipe_format format = vk_format_to_pipe_format(vk_format);
-   enum pco_pck_format pck_format = ~0;
    bool scale = false;
    bool roundzero = false;
    bool split = false;
+   enum pco_pck_format pck_format =
+      pco_pipe_to_pck_format(format, &scale, &roundzero, &split);
 
-   switch (format) {
-   case PIPE_FORMAT_R8_UNORM:
-   case PIPE_FORMAT_R8G8_UNORM:
-   case PIPE_FORMAT_R8G8B8_UNORM:
-   case PIPE_FORMAT_R8G8B8A8_UNORM:
-      pck_format = PCO_PCK_FORMAT_U8888;
-      scale = true;
-      break;
-
-   case PIPE_FORMAT_R8_SNORM:
-   case PIPE_FORMAT_R8G8_SNORM:
-   case PIPE_FORMAT_R8G8B8_SNORM:
-   case PIPE_FORMAT_R8G8B8A8_SNORM:
-      pck_format = PCO_PCK_FORMAT_S8888;
-      scale = true;
-      break;
-
-   case PIPE_FORMAT_R11G11B10_FLOAT:
-      pck_format = PCO_PCK_FORMAT_F111110;
-      break;
-
-   /* TODO: better way to do the 1x2 component. */
-   case PIPE_FORMAT_R10G10B10A2_UNORM:
-      pck_format = PCO_PCK_FORMAT_U1010102;
-      scale = true;
-      break;
-
-   /* TODO: better way to do the 1x2 component. */
-   case PIPE_FORMAT_R10G10B10A2_SNORM:
-      pck_format = PCO_PCK_FORMAT_S1010102;
-      scale = true;
-      break;
-
-   case PIPE_FORMAT_R16_FLOAT:
-   case PIPE_FORMAT_R16G16_FLOAT:
-   case PIPE_FORMAT_R16G16B16_FLOAT:
-   case PIPE_FORMAT_R16G16B16A16_FLOAT:
-      pck_format = PCO_PCK_FORMAT_F16F16;
-      split = true;
-      break;
-
-   case PIPE_FORMAT_R16_UNORM:
-   case PIPE_FORMAT_R16G16_UNORM:
-   case PIPE_FORMAT_R16G16B16_UNORM:
-   case PIPE_FORMAT_R16G16B16A16_UNORM:
-      pck_format = PCO_PCK_FORMAT_U1616;
-      scale = true;
-      split = true;
-      break;
-
-   case PIPE_FORMAT_R16_SNORM:
-   case PIPE_FORMAT_R16G16_SNORM:
-   case PIPE_FORMAT_R16G16B16_SNORM:
-   case PIPE_FORMAT_R16G16B16A16_SNORM:
-      pck_format = PCO_PCK_FORMAT_S1616;
-      scale = true;
-      split = true;
-      break;
-
-   default:
-      break;
-   }
-
-   /* Invalidate the format bits, but clear the rest so they can still be set. */
+   /* Invalidate the format bits, but clear the rest so they can still be set.
+    */
    if (pck_format == ~0)
-      pck_format = 0b11111;
+      pck_format = PVR_PCK_FORMAT_INVALID;
 
    uint32_t pck_info = pck_format;
    if (split)
-      pck_info |= BITFIELD_BIT(5);
+      pck_info |= PVR_PCK_INFO_SPLIT_BIT;
 
    if (scale)
-      pck_info |= BITFIELD_BIT(6);
+      pck_info |= PVR_PCK_INFO_SCALE_BIT;
 
    if (roundzero)
-      pck_info |= BITFIELD_BIT(7);
+      pck_info |= PVR_PCK_INFO_ROUNDZERO_BIT;
 
    if (util_format_is_unorm(format))
-      pck_info |= BITFIELD_BIT(8);
+      pck_info |= PVR_PCK_INFO_UNORM_BIT;
 
    return pck_info;
 }

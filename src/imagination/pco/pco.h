@@ -95,4 +95,9 @@ typedef struct _pco_smp_params {
    bool int_mode;
 } pco_smp_params;
 nir_intrinsic_instr *pco_emit_nir_smp(nir_builder *b, pco_smp_params *params);
+
+enum pco_pck_format pco_pipe_to_pck_format(enum pipe_format format,
+                                           bool *scale,
+                                           bool *roundzero,
+                                           bool *split);
 #endif /* PCO_H */
