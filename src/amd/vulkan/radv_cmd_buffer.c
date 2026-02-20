@@ -5625,6 +5625,7 @@ radv_emit_framebuffer_state(struct radv_cmd_buffer *cmd_buffer)
 static uint32_t
 radv_gfx12_override_hiz_enable(struct radv_cmd_buffer *cmd_buffer, bool enable)
 {
+   const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_rendering_state *render = &cmd_buffer->state.render;
    const struct radv_ds_buffer_info *ds = &render->ds_att.ds;
    struct radv_cmd_stream *cs = cmd_buffer->cs;
@@ -5633,6 +5634,8 @@ radv_gfx12_override_hiz_enable(struct radv_cmd_buffer *cmd_buffer, bool enable)
 
    if (!enable)
       hiz_info &= C_028B94_SURFACE_ENABLE;
+
+   radeon_check_space(device->ws, cs->b, 3);
 
    radeon_begin(cs);
    gfx12_begin_context_regs();
