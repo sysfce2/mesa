@@ -42,6 +42,18 @@ valid_sample_count(unsigned sample_count, bool is_suboptimal)
 }
 
 static bool
+is_cl_supported(const struct fd_dev_info *info, enum pipe_format format)
+{
+   if (info->chip >= A8XX) {
+      unsigned b = util_format_get_component_bits(
+         format, UTIL_FORMAT_COLORSPACE_RGB, PIPE_SWIZZLE_W);
+      if (b == 2)
+         return false;
+   }
+   return true;
+}
+
+static bool
 fd6_screen_is_format_supported(struct pipe_screen *pscreen,
                                enum pipe_format format,
                                enum pipe_texture_target target,
@@ -54,7 +66,12 @@ fd6_screen_is_format_supported(struct pipe_screen *pscreen,
    unsigned retval = 0;
 
    usage &= ~PIPE_BIND_SAMPLER_VIEW_SUBOPTIMAL;
-   usage &= ~PIPE_BIND_OPENCL;
+
+   if (usage & PIPE_BIND_OPENCL) {
+      if (!is_cl_supported(screen->info, format))
+         return false;
+      usage &= ~PIPE_BIND_OPENCL;
+   }
 
    if ((target >= PIPE_MAX_TEXTURE_TYPES) ||
        !valid_sample_count(sample_count, is_suboptimal)) {
