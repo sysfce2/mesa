@@ -54,6 +54,7 @@ fd6_screen_is_format_supported(struct pipe_screen *pscreen,
    unsigned retval = 0;
 
    usage &= ~PIPE_BIND_SAMPLER_VIEW_SUBOPTIMAL;
+   usage &= ~PIPE_BIND_OPENCL;
 
    if ((target >= PIPE_MAX_TEXTURE_TYPES) ||
        !valid_sample_count(sample_count, is_suboptimal)) {

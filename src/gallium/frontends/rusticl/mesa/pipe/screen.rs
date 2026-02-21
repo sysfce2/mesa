@@ -469,8 +469,9 @@ impl PipeScreen {
         &self,
         format: pipe_format,
         target: pipe_texture_target,
-        bindings: u32,
+        mut bindings: u32,
     ) -> bool {
+        bindings |= PIPE_BIND_OPENCL;
         unsafe {
             self.screen().is_format_supported.unwrap()(self.pipe(), format, target, 0, 0, bindings)
         }
