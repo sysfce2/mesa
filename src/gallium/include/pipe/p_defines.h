@@ -551,6 +551,9 @@ enum pipe_tess_spacing {
 
 /**
  * Query object types
+ *
+ * Note, PIPE_QUERY_x has somehow become ABI between virgl (guest) and
+ * virglrenderer (host).  Mistakes were made, now we live with it.
  */
 enum pipe_query_type {
    PIPE_QUERY_OCCLUSION_COUNTER,
