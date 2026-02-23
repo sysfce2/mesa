@@ -61,10 +61,9 @@ radv_meta_nir_build_fs_noop(struct radv_device *dev)
 }
 
 static void
-radv_meta_nir_build_resolve_shader_core(struct radv_device *device, nir_builder *b, bool is_integer, int samples,
+radv_meta_nir_build_resolve_shader_core(nir_builder *b, bool use_fmask, bool is_integer, int samples,
                                         nir_variable *input_img, nir_variable *color, nir_def *img_coord)
 {
-   const struct radv_physical_device *pdev = radv_device_physical(device);
    nir_deref_instr *input_img_deref = nir_build_deref_var(b, input_img);
    nir_def *sample0 = nir_txf_ms(b, img_coord, nir_imm_int(b, 0), .texture_deref = input_img_deref);
 
@@ -73,7 +72,7 @@ radv_meta_nir_build_resolve_shader_core(struct radv_device *device, nir_builder 
       return;
    }
 
-   if (pdev->use_fmask) {
+   if (use_fmask) {
       nir_def *all_same = nir_samples_identical(b, img_coord, .texture_deref = input_img_deref);
       nir_push_if(b, nir_inot(b, all_same));
    }
@@ -87,7 +86,7 @@ radv_meta_nir_build_resolve_shader_core(struct radv_device *device, nir_builder 
    accum = nir_fdiv_imm(b, accum, samples);
    nir_store_var(b, color, accum, 0xf);
 
-   if (pdev->use_fmask) {
+   if (use_fmask) {
       nir_push_else(b, NULL);
       nir_store_var(b, color, sample0, 0xf);
       nir_pop_if(b, NULL);
@@ -1208,8 +1207,8 @@ radv_meta_resolve_compute_type_name(enum radv_meta_resolve_compute_type type)
 }
 
 nir_shader *
-radv_meta_nir_build_resolve_compute_shader(struct radv_device *dev, enum radv_meta_resolve_compute_type type,
-                                           int samples)
+radv_meta_nir_build_resolve_compute_shader(struct radv_device *dev, bool use_fmask,
+                                           enum radv_meta_resolve_compute_type type, int samples)
 {
    enum glsl_base_type img_base_type = type == RADV_META_RESOLVE_COMPUTE_INTEGER ? GLSL_TYPE_UINT : GLSL_TYPE_FLOAT;
    const struct glsl_type *sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, true, img_base_type);
@@ -1240,7 +1239,7 @@ radv_meta_nir_build_resolve_compute_shader(struct radv_device *dev, enum radv_me
 
    nir_variable *color = nir_local_variable_create(b.impl, glsl_vec4_type(), "color");
 
-   radv_meta_nir_build_resolve_shader_core(dev, &b, type == RADV_META_RESOLVE_COMPUTE_INTEGER, samples, input_img,
+   radv_meta_nir_build_resolve_shader_core(&b, use_fmask, type == RADV_META_RESOLVE_COMPUTE_INTEGER, samples, input_img,
                                            color, src_img_coord);
 
    nir_def *outval = nir_load_var(&b, color);
@@ -1350,7 +1349,7 @@ radv_meta_nir_build_depth_stencil_resolve_compute_shader(struct radv_device *dev
 }
 
 nir_shader *
-radv_meta_nir_build_resolve_fragment_shader(struct radv_device *dev, bool is_integer, int samples)
+radv_meta_nir_build_resolve_fragment_shader(struct radv_device *dev, bool use_fmask, bool is_integer, int samples)
 {
    enum glsl_base_type img_base_type = is_integer ? GLSL_TYPE_UINT : GLSL_TYPE_FLOAT;
    const struct glsl_type *vec4 = glsl_vec4_type();
@@ -1374,7 +1373,7 @@ radv_meta_nir_build_resolve_fragment_shader(struct radv_device *dev, bool is_int
    nir_def *img_coord = nir_trim_vector(&b, nir_iadd(&b, pos_int, src_offset), 2);
    nir_variable *color = nir_local_variable_create(b.impl, glsl_vec4_type(), "color");
 
-   radv_meta_nir_build_resolve_shader_core(dev, &b, is_integer, samples, input_img, color, img_coord);
+   radv_meta_nir_build_resolve_shader_core(&b, use_fmask, is_integer, samples, input_img, color, img_coord);
 
    nir_def *outval = nir_load_var(&b, color);
    nir_store_var(&b, color_out, outval, 0xf);

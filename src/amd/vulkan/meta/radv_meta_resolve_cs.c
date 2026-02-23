@@ -84,6 +84,7 @@ static VkResult
 get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *src_iview, VkPipeline *pipeline_out,
                            VkPipelineLayout *layout_out)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
    const enum radv_meta_resolve_compute_type type = radv_meta_get_resolve_compute_type(src_iview->vk.format);
    uint32_t samples = src_iview->image->vk.samples;
    struct radv_resolve_color_cs_key key;
@@ -104,7 +105,7 @@ get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *s
       return VK_SUCCESS;
    }
 
-   nir_shader *cs = radv_meta_nir_build_resolve_compute_shader(device, type, samples);
+   nir_shader *cs = radv_meta_nir_build_resolve_compute_shader(device, pdev->use_fmask, type, samples);
 
    const VkPipelineShaderStageCreateInfo stage_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,

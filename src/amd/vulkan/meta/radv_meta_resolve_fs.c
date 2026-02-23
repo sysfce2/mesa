@@ -204,6 +204,7 @@ static VkResult
 get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *src_iview,
                            struct radv_image_view *dst_iview, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
    const uint32_t samples = src_iview->image->vk.samples;
    VkFormat format = dst_iview->vk.format;
    const bool is_integer = vk_format_is_int(format);
@@ -226,7 +227,7 @@ get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *s
    }
 
    nir_shader *vs_module = radv_meta_nir_build_vs_generate_vertices(device);
-   nir_shader *fs_module = radv_meta_nir_build_resolve_fragment_shader(device, is_integer, samples);
+   nir_shader *fs_module = radv_meta_nir_build_resolve_fragment_shader(device, pdev->use_fmask, is_integer, samples);
 
    const VkGraphicsPipelineCreateInfo pipeline_create_info = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
