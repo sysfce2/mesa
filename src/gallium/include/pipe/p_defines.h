@@ -1062,6 +1062,7 @@ struct pipe_caps {
    bool mesh_shader;
    bool representative_fragment_test;
    bool prefer_persp;
+   bool blit_3d;
 
    int accelerated;
    int min_texel_offset;

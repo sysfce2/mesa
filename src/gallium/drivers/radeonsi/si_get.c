@@ -1198,6 +1198,7 @@ void si_init_screen_caps(struct si_screen *sscreen)
    caps->has_const_bw = true;
    caps->cl_gl_sharing = true;
    caps->call_finalize_nir_in_linker = true;
+   caps->blit_3d = true;
 
    /* Fixup dmabuf caps for the virtio + vpipe case (when fd=-1, u_init_pipe_screen_caps
     * fails to set this capability). */
