@@ -163,7 +163,10 @@ nir_round_int_to_float(nir_builder *b, nir_def *src,
       UNREACHABLE("unexpected rounding mode");
    } else {
       nir_def *mantissa_bit_size = nir_imm_int(b, mantissa_bits);
-      nir_def *msb = nir_imax(b, nir_ufind_msb(b, src), mantissa_bit_size);
+      nir_def *ufind_msb_src = src;
+      if (src->bit_size < 32)
+         ufind_msb_src = nir_u2u32(b, src);
+      nir_def *msb = nir_imax(b, nir_ufind_msb(b, ufind_msb_src), mantissa_bit_size);
       nir_def *bits_to_lose = nir_isub(b, msb, mantissa_bit_size);
       nir_def *one = nir_imm_intN_t(b, 1, src->bit_size);
       nir_def *adjust = nir_ishl(b, one, bits_to_lose);
