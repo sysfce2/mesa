@@ -32,6 +32,8 @@ Layered drivers include:
 
 -  :doc:`D3D12 <drivers/d3d12>` - driver providing OpenGL on top of
    Microsoft's Direct3D 12 API.
+-  :doc:`KosmicKrisp <drivers/kosmickrisp>` - driver providing Vulkan
+   on top of Apple's Metal API.
 -  :doc:`SVGA3D <drivers/svga3d>` - driver for VMware virtual GPU
 -  :doc:`VirGL <drivers/virgl>` - project for accelerated graphics for
    QEMU guests
