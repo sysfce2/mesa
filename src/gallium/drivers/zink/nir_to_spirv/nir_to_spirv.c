@@ -1501,7 +1501,7 @@ emit_bo(struct ntv_context *ctx, struct nir_variable *var, bool aliased)
 
    unsigned idx = bitsize >> 4;
    assert(idx < ARRAY_SIZE(ctx->ssbos));
-   if (ssbo) {
+   if (ssbo && !ctx->sinfo->is_native_vulkan) {
       assert(!ctx->ssbos[idx]);
       ctx->ssbos[idx] = var_id;
       if (bitsize == 32)
@@ -3007,6 +3007,7 @@ emit_global_atomic_intrinsic(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 static void
 emit_get_ssbo_size(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 {
+   assert(!ctx->sinfo->is_native_vulkan);
    SpvId uint_type = get_uvec_type(ctx, 32, 1);
    nir_variable *var = ctx->ssbo_vars;
    const struct glsl_type *bare_type = glsl_without_array(var->type);
