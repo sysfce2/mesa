@@ -13,6 +13,7 @@ static VkResult
 get_pipeline(struct radv_device *device, struct radv_image *image, VkPipeline *pipeline_out,
              VkPipelineLayout *layout_out)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
    enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_COPY_VRS_HTILE;
    VkResult result;
 
@@ -48,7 +49,8 @@ get_pipeline(struct radv_device *device, struct radv_image *image, VkPipeline *p
       return VK_SUCCESS;
    }
 
-   nir_shader *cs = radv_meta_nir_build_copy_vrs_htile_shader(device, &image->planes[0].surface);
+   nir_shader *cs = radv_meta_nir_build_copy_vrs_htile_shader(device, pdev->info.gfx_level, pdev->info.gb_addr_config,
+                                                              &image->planes[0].surface);
 
    const VkPipelineShaderStageCreateInfo stage_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,

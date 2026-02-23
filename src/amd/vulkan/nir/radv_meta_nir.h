@@ -20,6 +20,7 @@ extern "C" {
 
 struct radv_device;
 struct radeon_surf;
+enum amd_gfx_level;
 
 nir_builder PRINTFLIKE(3, 4)
    radv_meta_nir_init_shader(struct radv_device *dev, mesa_shader_stage stage, const char *name, ...);
@@ -74,9 +75,11 @@ void radv_meta_nir_build_clear_depthstencil_shaders(struct radv_device *dev, str
 nir_shader *radv_meta_nir_build_clear_htile_mask_shader(struct radv_device *dev);
 nir_shader *radv_meta_nir_build_clear_dcc_comp_to_single_shader(struct radv_device *dev, bool is_msaa);
 
-nir_shader *radv_meta_nir_build_copy_vrs_htile_shader(struct radv_device *device, const struct radeon_surf *surf);
+nir_shader *radv_meta_nir_build_copy_vrs_htile_shader(struct radv_device *device, enum amd_gfx_level gfx_level,
+                                                      uint32_t gb_addr_config, const struct radeon_surf *surf);
 
-nir_shader *radv_meta_nir_build_dcc_retile_compute_shader(struct radv_device *dev, const struct radeon_surf *surf);
+nir_shader *radv_meta_nir_build_dcc_retile_compute_shader(struct radv_device *dev, enum amd_gfx_level gfx_level,
+                                                          uint32_t gb_addr_config, const struct radeon_surf *surf);
 
 nir_shader *radv_meta_nir_build_expand_depth_stencil_compute_shader(struct radv_device *dev);
 

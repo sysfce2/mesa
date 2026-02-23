@@ -63,6 +63,7 @@ static VkResult
 get_pipeline(struct radv_device *device, struct radv_image *image, VkPipeline *pipeline_out,
              VkPipelineLayout *layout_out)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
    const unsigned swizzle_mode = image->planes[0].surface.u.gfx9.swizzle_mode;
    struct radv_dcc_retile_key key;
    VkResult result;
@@ -81,7 +82,8 @@ get_pipeline(struct radv_device *device, struct radv_image *image, VkPipeline *p
       return VK_SUCCESS;
    }
 
-   nir_shader *cs = radv_meta_nir_build_dcc_retile_compute_shader(device, &image->planes[0].surface);
+   nir_shader *cs = radv_meta_nir_build_dcc_retile_compute_shader(device, pdev->info.gfx_level,
+                                                                  pdev->info.gb_addr_config, &image->planes[0].surface);
 
    const VkPipelineShaderStageCreateInfo stage_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
