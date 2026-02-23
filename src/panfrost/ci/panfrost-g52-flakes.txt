@@ -20,9 +20,17 @@ spec@glsl-1.30@execution@texturesize@vs-texturesize-isamplercube
 namespace pollution@renderbuffer with glgetteximage-compressed
 
 afbcp-glx@glx-multithread-texture
+
 afbcp-spec@arb_texture_gather@texturegather@fs-r-none-float-cube
 afbcp-spec@arb_texture_gather@texturegather@fs-r-none-float-cubearray
+afbcp-spec@arb_texture_gather@texturegather@fs-r-none-unorm-2darray
+afbcp-spec@arb_texture_gather@texturegather@fs-rg-none-int-cubearray
+afbcp-spec@arb_texture_gather@texturegather@fs-rgb-blue-int-2d
+afbcp-spec@arb_texture_gather@texturegather@fs-rgb-green-unorm-2d
+afbcp-spec@arb_texture_gather@texturegather@vs-rg-green-float-cubearray
+afbcp-spec@arb_texture_gather@texturegatheroffset@fs-rgba-green-float-2d
 afbcp-spec@arb_texture_gather@texturegatheroffset@vs-rgba-zero-unorm-2darray
+
 afbcp-spec@egl_nok_texture_from_pixmap@basic
 afbcp-spec@glsl-1.30@execution@texturesize@vs-texturesize-isamplercube
 
@@ -33,7 +41,6 @@ afbcp-spec@egl 1.4@largest possible eglcreatepbuffersurface and then glclear
 # uprev Piglit in Mesa
 glx@glx-multithread-clearbuffer
 afbcp-glx@glx-multithread-clearbuffer
-afbcp-spec@arb_texture_gather@texturegather@fs-rgb-green-unorm-2d
 afbcp-spec@arb_texture_multisample@texelfetch@6-vs-isampler2dmsarray
 glx@glx-visuals-depth
 
@@ -68,7 +75,5 @@ dEQP-VK.glsl.conversions.matrix_to_matrix.mat2x4_to_mat3x2_vertex
 dEQP-VK.glsl.operator.binary_operator.div.mediump_float_vec3_vertex
 
 # Nightly run expectations update
-afbcp-spec@arb_texture_gather@texturegather@fs-rg-none-int-cubearray
-afbcp-spec@arb_texture_gather@texturegatheroffset@fs-rgba-green-float-2d
 glx@glx-visuals-stencil
 
