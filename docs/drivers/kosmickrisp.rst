@@ -29,21 +29,13 @@ Requirements
    - cmake
    - pkg-config
    - libclc
-   - llvm
+   - llvm (20.1.8+, lower versions may work but have not been tested)
    - spirv-llvm-translator
+   - spirv-tools (static library preferred which is not included in the package, Vulkan macOS SDK does)
 
-Due to potential conflicts, Homebrew will not add `llvm` to the path. To add
-`llvm` to future terminal instances:
-
-.. code-block:: sh
-
-   echo 'export PATH="/opt/homebrew/opt/llvm/bin:$PATH"' >> ~/.zshrc
-
-To add `llvm` to current terminal instance:
-
-.. code-block:: sh
-
-   export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+Users might already have llvm installed, run ``llvm-config --version`` and
+check that the command works and prints at least ``20.1.8``. Otherwise install
+llvm from homebrew and add it to the ``PATH`` (follow homebrew instructions).
 
 - Python
 - Python packages
@@ -76,7 +68,7 @@ used to create a debug build:
 
 .. code-block:: sh
 
-   meson setup <path/to/mesa> --buildtype=debug -Dplatforms=macos -Dvulkan-drivers=kosmickrisp -Dgallium-drivers= -Dopengl=false -Dzstd=disabled
+   meson setup <path/to/mesa> --buildtype=debug -Dplatforms=macos -Dvulkan-drivers=kosmickrisp -Dgallium-drivers= -Dopengl=false -Dzstd=disabled --prefer-static
 
 Environment variables
 *********************
