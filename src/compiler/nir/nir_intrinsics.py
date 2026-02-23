@@ -2644,7 +2644,9 @@ system_value("urb_output_handle_intel", 1)
 load("urb_input_handle_indexed_intel", [1], [], [CAN_ELIMINATE, CAN_REORDER])
 
 # Inline register delivery (available on Gfx12.5+ for CS/Mesh/Task stages)
-load("inline_data_intel", [], [BASE], [CAN_ELIMINATE, CAN_REORDER])
+#
+# src[] = { offset }
+load("inline_data_intel", [1], [BASE, RANGE], [CAN_ELIMINATE, CAN_REORDER])
 
 # Load push data on Intel VS,TCS,TES,GS,FS stages
 # src[] = { offset }

@@ -978,7 +978,7 @@ static nir_def *
 mesh_load_provoking_vertex(nir_builder *b, void *data)
 {
    return nir_load_inline_data_intel(
-      b, 1, 32,
+      b, 1, 32, nir_imm_int(b, 0),
       .base = ANV_INLINE_PARAM_MESH_PROVOKING_VERTEX);
 }
 

@@ -115,7 +115,7 @@ lower_num_workgroups(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
    if (pdevice->info.verx10 >= 125) {
       num_workgroups =
          nir_load_inline_data_intel(
-            b, 3, 32,
+            b, 3, 32, nir_imm_int(b, 0),
             .base = ANV_INLINE_PARAM_NUM_WORKGROUPS_OFFSET);
    } else {
       num_workgroups =

@@ -304,7 +304,6 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_load_reloc_const_intel:
    case nir_intrinsic_load_btd_global_arg_addr_intel:
    case nir_intrinsic_load_btd_local_arg_addr_intel:
-   case nir_intrinsic_load_inline_data_intel:
    case nir_intrinsic_load_simd_width_intel:
    case nir_intrinsic_load_ray_num_dss_rt_stacks_intel:
    case nir_intrinsic_load_lshs_vertex_stride_amd:
@@ -785,7 +784,8 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_load_texture_handle_kk:
    case nir_intrinsic_load_depth_texture_kk:
    case nir_intrinsic_load_sampler_handle_kk:
-   case nir_intrinsic_load_texture_scale: {
+   case nir_intrinsic_load_texture_scale:
+   case nir_intrinsic_load_inline_data_intel: {
       unsigned num_srcs = nir_intrinsic_infos[instr->intrinsic].num_srcs;
       for (unsigned i = 0; i < num_srcs; i++) {
          if (src_divergent(instr->src[i], state)) {

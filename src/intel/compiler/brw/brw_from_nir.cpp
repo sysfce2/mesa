@@ -1911,7 +1911,6 @@ get_nir_def(nir_to_brw_state &ntb, const nir_def &def, bool all_sources_uniform)
       case nir_intrinsic_load_btd_local_arg_addr_intel:
       case nir_intrinsic_load_btd_shader_type_intel:
       case nir_intrinsic_load_global_constant_uniform_block_intel:
-      case nir_intrinsic_load_inline_data_intel:
       case nir_intrinsic_load_reloc_const_intel:
       case nir_intrinsic_load_ssbo_uniform_block_intel:
       case nir_intrinsic_load_ubo_uniform_block_intel:
@@ -1924,6 +1923,7 @@ get_nir_def(nir_to_brw_state &ntb, const nir_def &def, bool all_sources_uniform)
          break;
 
       case nir_intrinsic_load_push_data_intel:
+      case nir_intrinsic_load_inline_data_intel:
          is_scalar = get_nir_src(ntb, instr->src[0], 0).is_scalar;
          break;
 
@@ -4235,8 +4235,6 @@ brw_from_nir_emit_cs_intrinsic(nir_to_brw_state &ntb,
    if (nir_intrinsic_infos[instr->intrinsic].has_dest)
       dest = get_nir_def(ntb, instr->def);
 
-   const brw_builder xbld = dest.is_scalar ? bld.scalar_group() : bld;
-
    switch (instr->intrinsic) {
    case nir_intrinsic_barrier:
       if (nir_intrinsic_memory_scope(instr) != SCOPE_NONE)
@@ -4256,17 +4254,6 @@ brw_from_nir_emit_cs_intrinsic(nir_to_brw_state &ntb,
          cs_prog_data->uses_barrier = true;
       }
       break;
-
-   case nir_intrinsic_load_inline_data_intel: {
-      unsigned inline_stride = brw_type_size_bytes(dest.type);
-      for (unsigned c = 0; c < instr->def.num_components; c++) {
-         xbld.MOV(offset(dest, xbld, c),
-                  byte_offset(brw_uniform_reg(BRW_INLINE_PARAM_REG, dest.type),
-                              nir_intrinsic_base(instr) +
-                              c * inline_stride));
-      }
-      break;
-   }
 
    case nir_intrinsic_load_subgroup_id:
       s.cs_payload().load_subgroup_id(bld, dest);
@@ -5298,14 +5285,18 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
       break;
    }
 
-   case nir_intrinsic_load_push_data_intel: {
+   case nir_intrinsic_load_push_data_intel:
+   case nir_intrinsic_load_inline_data_intel: {
       /* Offsets are in bytes but they should always aligned to
        * the type size
        */
       unsigned base_offset = nir_intrinsic_base(instr);
       assert(base_offset % 4 == 0 || base_offset % brw_type_size_bytes(dest.type) == 0);
 
-      brw_reg src = brw_uniform_reg(base_offset / REG_SIZE, dest.type);
+      brw_reg src = brw_uniform_reg(
+         instr->intrinsic == nir_intrinsic_load_inline_data_intel ?
+         BRW_INLINE_PARAM_REG : (base_offset / REG_SIZE),
+         dest.type);
 
       if (nir_src_is_const(instr->src[0])) {
          unsigned load_offset = nir_src_as_uint(instr->src[0]);

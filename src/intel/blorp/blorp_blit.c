@@ -1493,8 +1493,10 @@ blorp_build_nir_shader(struct blorp_context *blorp,
 
       if (key->dst_samples > 1) {
          nir_def *num_layers_data =
-            nir_load_inline_data_intel(&b, 1, 32,
-               .base = BLORP_INLINE_PARAM_THREAD_GROUP_ID_Z_DIMENSION);
+            nir_load_inline_data_intel(
+               &b, 1, 32, nir_imm_int(&b, 0),
+               .base = BLORP_INLINE_PARAM_THREAD_GROUP_ID_Z_DIMENSION,
+               .range = 4);
 
          nir_def *z_pos = nir_umod(&b, nir_channel(&b, store_pos, 2),
                                    num_layers_data);
