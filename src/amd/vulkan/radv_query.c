@@ -158,7 +158,8 @@ radv_occlusion_query_use_l2(const struct radv_physical_device *pdev)
 }
 
 static nir_shader *
-build_occlusion_query_shader(struct radv_device *device)
+build_occlusion_query_shader(struct radv_device *device, uint64_t enabled_rb_mask, uint32_t max_render_backends,
+                             bool use_l2)
 {
    /* the shader this builds is roughly
     *
@@ -167,7 +168,7 @@ build_occlusion_query_shader(struct radv_device *device)
     * 	uint32_t dst_stride;
     * };
     *
-    * uint32_t src_stride = 16 * db_count;
+    * uint32_t src_stride = 16 * max_render_backends;
     *
     * location(binding = 0) buffer dst_buf;
     * location(binding = 1) buffer src_buf;
@@ -177,7 +178,7 @@ build_occlusion_query_shader(struct radv_device *device)
     * 	uint64_t src_offset = src_stride * global_id.x;
     * 	uint64_t dst_offset = dst_stride * global_id.x;
     * 	bool available = true;
-    * 	for (int i = 0; i < db_count; ++i) {
+    * 	for (int i = 0; i < max_render_backends; ++i) {
     *		if (enabled_rb_mask & BITFIELD64_BIT(i)) {
     *			uint64_t start = src_buf[src_offset + 16 * i];
     *			uint64_t end = src_buf[src_offset + 16 * i + 8];
@@ -199,7 +200,6 @@ build_occlusion_query_shader(struct radv_device *device)
     * 	}
     * }
     */
-   const struct radv_physical_device *pdev = radv_device_physical(device);
    nir_builder b = radv_meta_nir_init_shader(device, MESA_SHADER_COMPUTE, "occlusion_query");
    b.shader->info.workgroup_size[0] = 64;
 
@@ -208,8 +208,6 @@ build_occlusion_query_shader(struct radv_device *device)
    nir_variable *start = nir_local_variable_create(b.impl, glsl_uint64_t_type(), "start");
    nir_variable *end = nir_local_variable_create(b.impl, glsl_uint64_t_type(), "end");
    nir_variable *available = nir_local_variable_create(b.impl, glsl_bool_type(), "available");
-   uint64_t enabled_rb_mask = pdev->info.enabled_rb_mask;
-   unsigned db_count = pdev->info.max_render_backends;
 
    nir_def *addrs = nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .range = 16);
    nir_def *src_va = nir_pack_64_2x32(&b, nir_channels(&b, addrs, 0x3));
@@ -219,7 +217,7 @@ build_occlusion_query_shader(struct radv_device *device)
 
    nir_def *global_id = radv_meta_nir_get_global_ids(&b, 1);
 
-   nir_def *input_stride = nir_imm_int(&b, db_count * 16);
+   nir_def *input_stride = nir_imm_int(&b, max_render_backends * 16);
    nir_def *input_base = nir_imul(&b, input_stride, global_id);
    nir_def *output_stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 20), .range = 24);
    nir_def *output_base = nir_imul(&b, output_stride, global_id);
@@ -228,7 +226,7 @@ build_occlusion_query_shader(struct radv_device *device)
    nir_store_var(&b, outer_counter, nir_imm_int(&b, 0), 0x1);
    nir_store_var(&b, available, nir_imm_true(&b), 0x1);
 
-   if (radv_occlusion_query_use_l2(pdev)) {
+   if (use_l2) {
       nir_def *query_result_wait = nir_test_mask(&b, flags, VK_QUERY_RESULT_WAIT_BIT);
       nir_push_if(&b, query_result_wait);
       {
@@ -254,7 +252,7 @@ build_occlusion_query_shader(struct radv_device *device)
    nir_push_loop(&b);
 
    nir_def *current_outer_count = nir_load_var(&b, outer_counter);
-   radv_meta_nir_break_on_count(&b, outer_counter, nir_imm_int(&b, db_count));
+   radv_meta_nir_break_on_count(&b, outer_counter, nir_imm_int(&b, max_render_backends));
 
    nir_def *enabled_cond = nir_iand_imm(&b, nir_ishl(&b, nir_imm_int64(&b, 1), current_outer_count), enabled_rb_mask);
 
@@ -418,10 +416,9 @@ radv_get_pipelinestat_query_size(struct radv_device *device)
 }
 
 static nir_shader *
-build_pipeline_statistics_query_shader(struct radv_device *device)
+build_pipeline_statistics_query_shader(struct radv_device *device, uint32_t pipelinestat_block_size,
+                                       bool emulate_mesh_shader_queries)
 {
-   unsigned pipelinestat_block_size = +radv_get_pipelinestat_query_size(device);
-
    /* the shader this builds is roughly
     *
     * push constants {
@@ -464,7 +461,6 @@ build_pipeline_statistics_query_shader(struct radv_device *device)
     * 	}
     * }
     */
-   const struct radv_physical_device *pdev = radv_device_physical(device);
    nir_builder b = radv_meta_nir_init_shader(device, MESA_SHADER_COMPUTE, "pipeline_statistics_query");
    b.shader->info.workgroup_size[0] = 64;
 
@@ -496,7 +492,7 @@ build_pipeline_statistics_query_shader(struct radv_device *device)
    nir_def *available32 = nir_load_global(&b, 1, 32, nir_iadd(&b, src_va, nir_u2u64(&b, avail_offset)));
    nir_store_var(&b, available, nir_i2b(&b, available32), 0x1);
 
-   if (pdev->emulate_mesh_shader_queries) {
+   if (emulate_mesh_shader_queries) {
       nir_push_if(&b, nir_test_mask(&b, stats_mask, VK_QUERY_PIPELINE_STATISTIC_TASK_SHADER_INVOCATIONS_BIT_EXT));
       {
          const uint32_t idx = ffs(VK_QUERY_PIPELINE_STATISTIC_TASK_SHADER_INVOCATIONS_BIT_EXT) - 1;
@@ -1704,6 +1700,7 @@ create_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 static VkResult
 get_pipeline(struct radv_device *device, VkQueryType query_type, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
    enum radv_meta_object_key_type key = 0;
    VkResult result;
    nir_shader *cs;
@@ -1743,10 +1740,12 @@ get_pipeline(struct radv_device *device, VkQueryType query_type, VkPipeline *pip
 
    switch (query_type) {
    case VK_QUERY_TYPE_OCCLUSION:
-      cs = build_occlusion_query_shader(device);
+      cs = build_occlusion_query_shader(device, pdev->info.enabled_rb_mask, pdev->info.max_render_backends,
+                                        radv_occlusion_query_use_l2(pdev));
       break;
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
-      cs = build_pipeline_statistics_query_shader(device);
+      cs = build_pipeline_statistics_query_shader(device, radv_get_pipelinestat_query_size(device),
+                                                  pdev->emulate_mesh_shader_queries);
       break;
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
       cs = build_tfb_query_shader(device);
