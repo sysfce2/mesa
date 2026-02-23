@@ -67,7 +67,8 @@ void *si_create_dcc_retile_cs(struct si_context *sctx, const struct radeon_surf 
                                              surf->u.gfx9.color.dcc_block_height));
 
    nir_def *src_offset =
-      ac_nir_dcc_addr_from_coord(&b, &sctx->screen->info, surf->bpe, &surf->u.gfx9.color.dcc_equation,
+      ac_nir_dcc_addr_from_coord(&b, sctx->screen->info.gfx_level, sctx->screen->info.gb_addr_config,
+                                 surf->bpe, &surf->u.gfx9.color.dcc_equation,
                                  src_dcc_pitch, src_dcc_height, zero, /* DCC slice size */
                                  nir_channel(&b, coord, 0), nir_channel(&b, coord, 1), /* x, y */
                                  zero, zero, zero); /* z, sample, pipe_xor */
@@ -75,7 +76,8 @@ void *si_create_dcc_retile_cs(struct si_context *sctx, const struct radeon_surf 
    nir_def *value = nir_load_ssbo(&b, 1, 8, zero, src_offset, .align_mul=1);
 
    nir_def *dst_offset =
-      ac_nir_dcc_addr_from_coord(&b, &sctx->screen->info, surf->bpe, &surf->u.gfx9.color.display_dcc_equation,
+      ac_nir_dcc_addr_from_coord(&b, sctx->screen->info.gfx_level, sctx->screen->info.gb_addr_config,
+                                 surf->bpe, &surf->u.gfx9.color.display_dcc_equation,
                                  dst_dcc_pitch, dst_dcc_height, zero, /* DCC slice size */
                                  nir_channel(&b, coord, 0), nir_channel(&b, coord, 1), /* x, y */
                                  zero, zero, zero); /* z, sample, pipe_xor */
@@ -112,7 +114,8 @@ void *gfx9_create_clear_dcc_msaa_cs(struct si_context *sctx, struct si_texture *
                                       tex->surface.u.gfx9.color.dcc_block_depth));
 
    nir_def *offset =
-      ac_nir_dcc_addr_from_coord(&b, &sctx->screen->info, tex->surface.bpe,
+      ac_nir_dcc_addr_from_coord(&b, sctx->screen->info.gfx_level,
+                                 sctx->screen->info.gb_addr_config, tex->surface.bpe,
                                  &tex->surface.u.gfx9.color.dcc_equation,
                                  dcc_pitch, dcc_height, zero, /* DCC slice size */
                                  nir_channel(&b, coord, 0), nir_channel(&b, coord, 1), /* x, y */

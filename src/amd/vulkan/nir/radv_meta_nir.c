@@ -894,9 +894,9 @@ radv_meta_nir_build_copy_vrs_htile_shader(struct radv_device *device, const stru
 
    /* Get the HTILE addr from coordinates. */
    nir_def *zero = nir_imm_int(&b, 0);
-   nir_def *htile_offset =
-      ac_nir_htile_addr_from_coord(&b, &pdev->info, &surf->u.gfx9.zs.htile_equation, htile_pitch, htile_slice_size,
-                                   nir_channel(&b, coord, 0), nir_channel(&b, coord, 1), zero, zero);
+   nir_def *htile_offset = ac_nir_htile_addr_from_coord(
+      &b, pdev->info.gfx_level, pdev->info.gb_addr_config, &surf->u.gfx9.zs.htile_equation, htile_pitch,
+      htile_slice_size, nir_channel(&b, coord, 0), nir_channel(&b, coord, 1), zero, zero);
 
    /* Set up the input VRS image descriptor. */
    const struct glsl_type *vrs_sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_2D, false, false, GLSL_TYPE_FLOAT);
@@ -982,12 +982,12 @@ radv_meta_nir_build_dcc_retile_compute_shader(struct radv_device *dev, const str
    coord =
       nir_imul(&b, coord, nir_imm_ivec2(&b, surf->u.gfx9.color.dcc_block_width, surf->u.gfx9.color.dcc_block_height));
 
-   nir_def *src = ac_nir_dcc_addr_from_coord(&b, &pdev->info, surf->bpe, &surf->u.gfx9.color.dcc_equation,
-                                             src_dcc_pitch, src_dcc_height, zero, nir_channel(&b, coord, 0),
-                                             nir_channel(&b, coord, 1), zero, zero, zero);
-   nir_def *dst = ac_nir_dcc_addr_from_coord(&b, &pdev->info, surf->bpe, &surf->u.gfx9.color.display_dcc_equation,
-                                             dst_dcc_pitch, dst_dcc_height, zero, nir_channel(&b, coord, 0),
-                                             nir_channel(&b, coord, 1), zero, zero, zero);
+   nir_def *src = ac_nir_dcc_addr_from_coord(&b, pdev->info.gfx_level, pdev->info.gb_addr_config, surf->bpe,
+                                             &surf->u.gfx9.color.dcc_equation, src_dcc_pitch, src_dcc_height, zero,
+                                             nir_channel(&b, coord, 0), nir_channel(&b, coord, 1), zero, zero, zero);
+   nir_def *dst = ac_nir_dcc_addr_from_coord(
+      &b, pdev->info.gfx_level, pdev->info.gb_addr_config, surf->bpe, &surf->u.gfx9.color.display_dcc_equation,
+      dst_dcc_pitch, dst_dcc_height, zero, nir_channel(&b, coord, 0), nir_channel(&b, coord, 1), zero, zero, zero);
 
    nir_def *dcc_val = nir_image_deref_load(&b, 1, 32, input_dcc_ref, nir_vec4(&b, src, src, src, src),
                                            nir_undef(&b, 1, 32), nir_imm_int(&b, 0), .image_dim = dim,
