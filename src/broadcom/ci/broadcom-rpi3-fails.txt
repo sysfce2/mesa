@@ -968,8 +968,6 @@ spec@arb_texture_rectangle@texrect-many,Crash
 spec@arb_vertex_program@minmax,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl 1.4@largest possible eglcreatepbuffersurface and then glclear,Fail
-spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
-spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_rgba,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
 spec@ext_direct_state_access@multi-texture,Crash
@@ -1207,9 +1205,6 @@ spec@ext_framebuffer_multisample@unaligned-blit 4 stencil msaa,Fail
 
 # https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/817
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
-
-# Couldn't reproduce locally
-spec@oes_packed_depth_stencil@depth_stencil texture gles2,Fail
 
 # Failures from arm32
 arm32-KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component16,Fail
