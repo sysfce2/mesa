@@ -393,6 +393,8 @@ v3d_init_screen_caps(struct v3d_screen *screen)
         caps->device_reset_status_query = screen->devinfo.has_reset_counter;
         caps->robust_buffer_access_behavior = true;
 
+        caps->sample_shading = true;
+
         /* FIXME: same settings as v3dv, maybe put them in a common place. */
         if (screen->devinfo.ver >= 71) {
            caps->shader_subgroup_size = V3D_CHANNELS;
@@ -594,6 +596,7 @@ v3d_screen_get_compiler_options(struct pipe_screen *pscreen,
                 .lower_mul_high = true,
                 .lower_wpos_pntc = true,
                 .lower_to_scalar = true,
+                .lower_interpolate_at = true,
                 .lower_int64_options =
                         nir_lower_bcsel64 |
                         nir_lower_conv64 |

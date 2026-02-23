@@ -2492,7 +2492,9 @@ ntq_setup_outputs(struct v3d_compile *c)
                         c->output_position_index = loc;
                         break;
                 case FRAG_RESULT_SAMPLE_MASK:
-                        c->output_sample_mask_index = loc;
+                        if (!c->fs_key->ignore_sample_mask) {
+                                c->output_sample_mask_index = loc;
+                        }
                         break;
                 }
         }

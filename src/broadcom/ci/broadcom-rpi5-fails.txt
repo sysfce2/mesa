@@ -360,10 +360,6 @@ KHR-GL31.transform_feedback3.skip_components,Fail
 KHR-GL31.transform_feedback3.skip_multiple_buffers,Fail
 asan-KHR-GL31.transform_feedback3.skip_multiple_buffers,Fail
 
-# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6350
-KHR-GL31.frag_coord_conventions.multisample,Fail
-asan-KHR-GL31.frag_coord_conventions.multisample,Fail
-
 # This seems to be working with upstream
 program@execute@vector-conversion,Fail
 

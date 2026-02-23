@@ -621,6 +621,11 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
                 key->msaa = v3d->rasterizer->base.multisample;
                 key->sample_alpha_to_coverage = v3d->blend->base.alpha_to_coverage;
                 key->sample_alpha_to_one = v3d->blend->base.alpha_to_one;
+        } else {
+                /* Unlike Vulkan, OpenGL CTS tests require that SampleMask is
+                 * ignored when MSAA is disabled.
+                 */
+                key->ignore_sample_mask =  true;
         }
 
         key->swap_color_rb = v3d->swap_color_rb;

@@ -485,11 +485,6 @@ program@run kernel with max work item sizes,Fail
 # Bisected to 6bc47e65 ("rusticl: Fix work group size validation")
 program@bitcoin: phatk kernel,Fail
 
-# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6350
-KHR-GL31.frag_coord_conventions.multisample,Fail
-arm32-KHR-GL31.frag_coord_conventions.multisample,Fail
-ubsan-KHR-GL31.frag_coord_conventions.multisample,Fail
-
 # Failures from arm32
 arm32-KHR-GL31.framebuffer_blit.multisampled_to_singlesampled_blit_color_config_test,Fail
 arm32-KHR-GL31.framebuffer_blit.scissor_blit,Fail
