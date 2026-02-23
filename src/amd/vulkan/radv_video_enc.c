@@ -1708,7 +1708,7 @@ radv_enc_ctx2(struct radv_cmd_buffer *cmd_buffer, const VkVideoEncodeInfoKHR *in
    uint64_t va = 0;
    if (cmd_buffer->video.vid->ctx.mem) {
       va = radv_buffer_get_va(cmd_buffer->video.vid->ctx.mem->bo);
-      va += cmd_buffer->video.vid->ctx.offset + VCN_ENC_AV1_DEFAULT_CDF_SIZE;
+      va += cmd_buffer->video.vid->ctx.offset;
    }
 
    RADEON_ENC_BEGIN(pdev->vcn_enc_cmds.ctx);
@@ -2519,9 +2519,9 @@ radv_enc_cdf_default_table(struct radv_cmd_buffer *cmd_buffer, const VkVideoEnco
       vk_find_struct_const(enc_info->pNext, VIDEO_ENCODE_AV1_PICTURE_INFO_KHR);
    const StdVideoEncodeAV1PictureInfo *av1_pic = av1_picture_info->pStdPictureInfo;
 
-   radv_cs_add_buffer(device->ws, cs->b, cmd_buffer->video.vid->ctx.mem->bo);
-   uint64_t va = radv_buffer_get_va(cmd_buffer->video.vid->ctx.mem->bo);
-   va += cmd_buffer->video.vid->ctx.offset;
+   radv_cs_add_buffer(device->ws, cs->b, cmd_buffer->video.vid->default_cdf.mem->bo);
+   uint64_t va = radv_buffer_get_va(cmd_buffer->video.vid->default_cdf.mem->bo);
+   va += cmd_buffer->video.vid->default_cdf.offset;
    uint32_t use_cdf_default = (av1_pic->frame_type == STD_VIDEO_AV1_FRAME_TYPE_KEY ||
                                av1_pic->frame_type == STD_VIDEO_AV1_FRAME_TYPE_INTRA_ONLY ||
                                av1_pic->frame_type == STD_VIDEO_AV1_FRAME_TYPE_SWITCH ||
@@ -3033,13 +3033,13 @@ radv_vcn_encode_video(struct radv_cmd_buffer *cmd_buffer, const VkVideoEncodeInf
 }
 
 void
-radv_video_enc_init_ctx(struct radv_device *device, struct radv_video_session *vid)
+radv_video_enc_init_cdf(struct radv_device *device, struct radv_video_session *vid)
 {
    if (vid->enc_standard == RENCODE_ENCODE_STANDARD_AV1) {
-      uint8_t *cdfptr = radv_buffer_map(device->ws, vid->ctx.mem->bo);
-      cdfptr += vid->ctx.offset;
+      uint8_t *cdfptr = radv_buffer_map(device->ws, vid->default_cdf.mem->bo);
+      cdfptr += vid->default_cdf.offset;
       memcpy(cdfptr, rvcn_av1_cdf_default_table, VCN_ENC_AV1_DEFAULT_CDF_SIZE);
-      device->ws->buffer_unmap(device->ws, vid->ctx.mem->bo, false);
+      device->ws->buffer_unmap(device->ws, vid->default_cdf.mem->bo, false);
    }
 }
 
@@ -3555,13 +3555,27 @@ radv_video_get_encode_session_memory_requirements(struct radv_device *device, st
       {
          m->memoryBindIndex = RADV_BIND_ENCODE_AV1_CDF_STORE;
          m->memoryRequirements.size = VCN_ENC_AV1_DEFAULT_CDF_SIZE;
-         if (pdev->enc_hw_ver >= RADV_VIDEO_ENC_HW_5)
-            m->memoryRequirements.size += RENCODE_AV1_SDB_FRAME_CONTEXT_SIZE;
          m->memoryRequirements.alignment = 0;
          m->memoryRequirements.memoryTypeBits = 0;
          for (unsigned i = 0; i < pdev->memory_properties.memoryTypeCount; i++)
             if (pdev->memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
                m->memoryRequirements.memoryTypeBits |= (1 << i);
+      }
+   }
+
+   if (pdev->enc_hw_ver >= RADV_VIDEO_ENC_HW_5) {
+      unsigned ctx_size = 0;
+      if (vid->vk.op == VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR)
+         ctx_size += RENCODE_AV1_SDB_FRAME_CONTEXT_SIZE;
+
+      if (ctx_size) {
+         vk_outarray_append_typed(VkVideoSessionMemoryRequirementsKHR, &out, m)
+         {
+            m->memoryBindIndex = RADV_BIND_ENCODE_CTX;
+            m->memoryRequirements.size = ctx_size;
+            m->memoryRequirements.alignment = 0;
+            m->memoryRequirements.memoryTypeBits = memory_type_bits;
+         }
       }
    }
 

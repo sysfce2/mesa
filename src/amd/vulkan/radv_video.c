@@ -1292,12 +1292,14 @@ radv_BindVideoSessionMemoryKHR(VkDevice _device, VkVideoSessionKHR videoSession,
             device->ws->buffer_unmap(device->ws, vid->sessionctx.mem->bo, false);
          }
          break;
-      case RADV_BIND_ENCODE_AV1_CDF_STORE:
+      case RADV_BIND_ENCODE_CTX:
          copy_bind(&vid->ctx, &pBindSessionMemoryInfos[i]);
-         if (vid->encode)
-            radv_video_enc_init_ctx(device, vid);
          break;
-
+      case RADV_BIND_ENCODE_AV1_CDF_STORE:
+         copy_bind(&vid->default_cdf, &pBindSessionMemoryInfos[i]);
+         if (vid->encode)
+            radv_video_enc_init_cdf(device, vid);
+         break;
       case RADV_BIND_INTRA_ONLY: {
          VkBindImageMemoryInfo bind_image = {
             .sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO,

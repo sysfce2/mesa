@@ -28,6 +28,7 @@ struct radv_cmd_stream;
 #define RADV_BIND_INTRA_ONLY           2
 #define RADV_BIND_ENCODE_QP_MAP        3
 #define RADV_BIND_ENCODE_AV1_CDF_STORE 1
+#define RADV_BIND_ENCODE_CTX           4
 
 #define RADV_ENC_FEEDBACK_STATUS_IDX 10
 
@@ -46,6 +47,7 @@ struct radv_video_session {
 
    struct radv_vid_mem sessionctx;
    struct radv_vid_mem ctx;
+   struct radv_vid_mem default_cdf;
    struct radv_vid_mem qp_map;
    struct radv_image *intra_only_dpb;
 
@@ -83,7 +85,7 @@ void radv_vcn_write_memory(struct radv_cmd_buffer *cmd_buffer, uint64_t va, unsi
 void radv_init_physical_device_encoder(struct radv_physical_device *pdevice);
 void radv_probe_video_decode(struct radv_physical_device *pdev);
 void radv_probe_video_encode(struct radv_physical_device *pdev);
-void radv_video_enc_init_ctx(struct radv_device *device, struct radv_video_session *vid);
+void radv_video_enc_init_cdf(struct radv_device *device, struct radv_video_session *vid);
 void radv_video_enc_control_video_coding(struct radv_cmd_buffer *cmd_buffer,
                                          const VkVideoCodingControlInfoKHR *pCodingControlInfo);
 void radv_video_enc_begin_video_coding(struct radv_cmd_buffer *cmd_buffer, const VkVideoBeginCodingInfoKHR *pBeginInfo);
