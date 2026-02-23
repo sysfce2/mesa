@@ -4598,7 +4598,10 @@ emit_deref_array(struct ntv_context *ctx, nir_deref_instr *deref)
       /* this is either the array<buffers> deref or the array<uint> deref */
       if (glsl_type_is_struct_or_ifc(deref->type)) {
          /* array<buffers> */
-         type = get_bo_struct_type(ctx, var);
+         bool is_zink_bo = !ctx->sinfo->is_native_vulkan;
+         type = is_zink_bo ?
+                get_bo_struct_type(ctx, var) :
+                get_glsl_type(ctx, deref->type, false);
          break;
       }
       /* array<uint> */
