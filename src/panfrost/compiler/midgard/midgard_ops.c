@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019 Alyssa Rosenzweig (alyssa@rosenzweig.io)
+ * Copyright (c) 2018-2019 Alyssa Rosenzweig
  * Copyright (C) 2019-2020 Collabora, Ltd.
  * SPDX-License-Identifier: MIT
  */

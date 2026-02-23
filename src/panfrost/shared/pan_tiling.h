@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011-2013 Luc Verhaegen <libv@skynet.be>
- * Copyright (c) 2018 Alyssa Rosenzweig <alyssa@rosenzweig.io>
+ * Copyright (c) 2018 Alyssa Rosenzweig
  * Copyright (c) 2018 Vasily Khoruzhick <anarsoul@gmail.com>
  * SPDX-License-Identifier: MIT
  */

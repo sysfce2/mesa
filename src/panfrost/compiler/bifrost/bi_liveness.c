@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2020 Collabora, Ltd.
- * Copyright (C) 2018-2019 Alyssa Rosenzweig <alyssa@rosenzweig.io>
+ * Copyright (C) 2018-2019 Alyssa Rosenzweig
  * Copyright © 2014 Intel Corporation
  * SPDX-License-Identifier: MIT
  */

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2020 Collabora Ltd.
- * Copyright (C) 2022 Alyssa Rosenzweig <alyssa@rosenzweig.io>
+ * Copyright (C) 2022 Alyssa Rosenzweig
  * Copyright (C) 2025 Arm Ltd.
  * SPDX-License-Identifier: MIT
  */
