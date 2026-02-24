@@ -1481,16 +1481,6 @@ d3d12_video_encoder_update_current_encoder_config_state_hevc(struct d3d12_video_
                     pD3D12Enc->m_currentEncodeCapabilities.m_encoderLevelSuggestedDesc.m_HEVCLevelSetting.Level);
    }
 
-   if (pD3D12Enc->m_currentEncodeCapabilities.m_MaxSlicesInOutput >
-       pD3D12Enc->m_currentEncodeCapabilities.m_currentResolutionSupportCaps.MaxSubregionsNumber) {
-      debug_printf("[d3d12_video_encoder_hevc] Desired number of subregions %d is not supported (higher than max "
-                      "reported slice number %d in query caps) for current resolution (%d, %d)\n.",
-                      pD3D12Enc->m_currentEncodeCapabilities.m_MaxSlicesInOutput,
-                      pD3D12Enc->m_currentEncodeCapabilities.m_currentResolutionSupportCaps.MaxSubregionsNumber,
-                      pD3D12Enc->m_currentEncodeConfig.m_currentResolution.Width,
-                      pD3D12Enc->m_currentEncodeConfig.m_currentResolution.Height);
-      return false;
-   }
    return true;
 }
 

@@ -3025,7 +3025,7 @@ d3d12_video_encoder_calculate_max_slices_count_in_output(
       case D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_BYTES_PER_SUBREGION:
       case D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_AUTO:
       {
-         maxSlices = MaxSubregionsNumberFromCaps;
+         maxSlices = std::max(128u, MaxSubregionsNumberFromCaps);
       } break;
       case D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_SQUARE_UNITS_PER_SUBREGION_ROW_UNALIGNED:
       {
