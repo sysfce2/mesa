@@ -1086,6 +1086,12 @@ util_format_get_component_shift(enum pipe_format format,
    }
 }
 
+static inline unsigned
+util_format_get_depth_bits(enum pipe_format format)
+{
+   return util_format_get_component_bits(format, UTIL_FORMAT_COLORSPACE_ZS, 0);
+}
+
 /**
  * Given a linear RGB colorspace format, return the corresponding SRGB
  * format, or PIPE_FORMAT_NONE if none.
