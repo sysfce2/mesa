@@ -16,7 +16,7 @@
 #include <assert.h>
 
 #define KK_MAX_SETS                      32
-#define KK_MAX_PUSH_SIZE                 128
+#define KK_MAX_PUSH_SIZE                 256
 #define KK_MAX_DYNAMIC_BUFFERS           64
 #define KK_MAX_RTS                       8
 #define KK_MAX_SAMPLES                   8
