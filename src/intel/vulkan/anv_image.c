@@ -1653,6 +1653,11 @@ alloc_private_binding(struct anv_device *device,
                                          &binding->address.bo);
    ANV_DMR_BO_ALLOC(&image->vk.base, binding->address.bo, result);
 
+   struct anv_address addr = anv_address_add(binding->address,
+                                             image->bindings[ANV_IMAGE_MEMORY_BINDING_PRIVATE].memory_range.offset);
+   ANV_ADDR_BINDING_REPORT_ADDR_BIND(device, &image->vk.base, addr,
+                                     image->bindings[ANV_IMAGE_MEMORY_BINDING_PRIVATE].memory_range.size);
+
    return result;
 }
 
