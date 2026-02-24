@@ -279,9 +279,7 @@ vk_sync_as_lvp_pipe_sync(struct vk_sync *sync)
 
 struct lvp_image_plane {
    struct pipe_resource *bo;
-   struct pipe_memory_allocation *pmem;
    VkDeviceSize plane_offset;
-   VkDeviceSize memory_offset;
    VkDeviceSize size;
 };
 

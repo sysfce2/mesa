@@ -2461,8 +2461,6 @@ lvp_image_plane_bind(struct lvp_device *device,
        */
       return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
    }
-   plane->pmem = mem->pmem;
-   plane->memory_offset = memory_offset;
    plane->plane_offset = plane_offset;
    *min_plane_offset = plane_offset + plane->size;
    return VK_SUCCESS;
