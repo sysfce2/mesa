@@ -1958,6 +1958,7 @@ CDX12EncHMFT::xThreadProc( void *pCtx )
       if( !pThis->m_bLowLatency && !pThis->m_bFlushing && !pThis->m_bDraining )
       {
          pThis->m_dwNeedInputCount++;
+         HMFT_ETW_EVENT_INFO( "METransformNeedInput", pThis );
          HRESULT hr = pThis->QueueEvent( METransformNeedInput, GUID_NULL, S_OK, nullptr );
          if( FAILED( hr ) )
          {
@@ -2428,6 +2429,7 @@ CDX12EncHMFT::ProcessMessage( MFT_MESSAGE_TYPE eMessage, ULONG_PTR ulParam )
          m_bStreaming = true;
          m_bDraining = false;
          m_bFlushing = false;
+         HMFT_ETW_EVENT_INFO( "METransformNeedInput", this );
          CHECKHR_GOTO( QueueEvent( METransformNeedInput, GUID_NULL, S_OK, nullptr ), done );
          m_dwNeedInputCount++;
          break;
@@ -2733,6 +2735,7 @@ CDX12EncHMFT::ProcessInput( DWORD dwInputStreamIndex, IMFSample *pSample, DWORD 
       if( queueSize < MFT_INPUT_QUEUE_DEPTH )
       {
          m_dwNeedInputCount++;
+         HMFT_ETW_EVENT_INFO( "METransformNeedInput", this );
          hr = QueueEvent( METransformNeedInput, GUID_NULL, S_OK, nullptr );
          if( FAILED( hr ) )
          {
@@ -2797,16 +2800,32 @@ CDX12EncHMFT::ProcessOutput( DWORD dwFlags, DWORD cOutputBufferCount, MFT_OUTPUT
 
    if( m_bLowLatency )
    {
+      bool sendNeedInput = true;
       // For low-latency, some callers (like RDP) require a ping-pong pattern of:
       // - METransformNeedInput
       // - METransformHaveOutput
       // So we want to say METransformNeedInput as part of ProcessOutput()
-      m_dwNeedInputCount++;
-      hr = QueueEvent( METransformNeedInput, GUID_NULL, S_OK, nullptr );
-      if( FAILED( hr ) )
+      if( m_uiSliceGenerationMode )
       {
-         m_dwNeedInputCount--;
-         goto done;
+         UINT32 isLastSlice = FALSE;
+         if( SUCCEEDED( pOutputSamples[0].pSample->GetUINT32( MFSampleExtension_LastSlice, &isLastSlice ) ) )
+         {
+            if (!isLastSlice)
+            {
+               sendNeedInput = false;
+            }
+         }
+      }
+      if( sendNeedInput )
+      {
+         m_dwNeedInputCount++;
+         HMFT_ETW_EVENT_INFO( "METransformNeedInput", this );
+         hr = QueueEvent( METransformNeedInput, GUID_NULL, S_OK, nullptr );
+         if( FAILED( hr ) )
+         {
+            m_dwNeedInputCount--;
+            goto done;
+         }
       }
    }
 
