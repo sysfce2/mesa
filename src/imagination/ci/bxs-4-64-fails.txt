@@ -233,5 +233,3 @@ dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.random.seed99,Fail
 dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.random.seed99_multiview,Fail
 dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.random.seed9_multiview,Fail
 dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.suballocation.attachment.4.568,Fail
-dEQP-VK.renderpasses.renderpass1.dedicated_allocation.attachment_allocation.input_output.71,Fail
-dEQP-VK.renderpasses.renderpass1.suballocation.attachment_allocation.input_output.71,Fail
