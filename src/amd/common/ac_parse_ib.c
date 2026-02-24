@@ -1494,11 +1494,14 @@ static void print_vcn_msg_buffer_contents(FILE *f, struct ac_ib_parser *ib, uint
    }
 }
 
-static uint64_t print_vcn_addr(FILE *f, struct ac_ib_parser *ib, const char *prefix_format, ...)
+static uint64_t print_vcn_addr(FILE *f, struct ac_ib_parser *ib, bool high_first, const char *prefix_format, ...)
 {
    uint32_t high = ac_ib_get(ib);
    fprintf(f, "\n");
    uint32_t low = ac_ib_get(ib);
+
+   if (!high_first)
+      SWAP(high, low);
 
    va_list args;
    va_start(args, prefix_format);
@@ -1622,7 +1625,7 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
          fprintf(f, "    interface version = %u.%u\n",
                  (version & RENCODE_IF_MAJOR_VERSION_MASK) >> RENCODE_IF_MAJOR_VERSION_SHIFT,
                  (version & RENCODE_IF_MINOR_VERSION_MASK) >> RENCODE_IF_MINOR_VERSION_SHIFT);
-         print_vcn_addr(f, ib, "    sw context");
+         print_vcn_addr(f, ib, true, "    sw context");
          if (ib->vcn_version < VCN_3_0_0) {
             uint32_t engine = ac_ib_get(ib);
             fprintf(f, "    engine type = %s\n",
@@ -1984,8 +1987,8 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
          fprintf(f, "    picture type = %s\n", vcn_picture_type(pic_type));
          uint32_t bs_size = ac_ib_get(ib);
          fprintf(f, "    allowed max bitstream size = %u\n", bs_size);
-         print_vcn_addr(f, ib, "    input picture luma");
-         print_vcn_addr(f, ib, "    input picture chroma");
+         print_vcn_addr(f, ib, true, "    input picture luma");
+         print_vcn_addr(f, ib, true, "    input picture chroma");
          uint32_t luma_pitch = ac_ib_get(ib);
          fprintf(f, "    input picture luma pitch = %u\n", luma_pitch);
          uint32_t chroma_pitch = ac_ib_get(ib);
@@ -2017,7 +2020,7 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
          fprintf(f, "    region size = %u\n", region_size);
       } else if (op == cmd.ctx) {
          fprintf(f, "%sENCODE_CONTEXT_BUFFER%s\n", O_COLOR_GREEN, O_COLOR_RESET);
-         print_vcn_addr(f, ib, "    encode context buffer");
+         print_vcn_addr(f, ib, true, "    encode context buffer");
          if (ib->vcn_version < VCN_5_0_0) {
             uint32_t swizzle = ac_ib_get(ib);
             fprintf(f, "    swizzle mode = %s\n",
@@ -2080,7 +2083,7 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
                  mode == RENCODE_VIDEO_BITSTREAM_BUFFER_MODE_LINEAR ? "LINEAR" :
                  mode == RENCODE_VIDEO_BITSTREAM_BUFFER_MODE_CIRCULAR ? "CIRCULAR" :
                  "???");
-         print_vcn_addr(f, ib, "    video bitstream buffer");
+         print_vcn_addr(f, ib, true, "    video bitstream buffer");
          uint32_t size = ac_ib_get(ib);
          fprintf(f, "    video bitstream buffer size = %u\n", size);
          uint32_t offset = ac_ib_get(ib);
@@ -2092,7 +2095,7 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
                  mode == RENCODE_FEEDBACK_BUFFER_MODE_LINEAR ? "LINEAR" :
                  mode == RENCODE_FEEDBACK_BUFFER_MODE_CIRCULAR ? "CIRCULAR" :
                  "???");
-         print_vcn_addr(f, ib, "    feedback buffer");
+         print_vcn_addr(f, ib, true, "    feedback buffer");
          uint32_t size = ac_ib_get(ib);
          fprintf(f, "    feedback buffer size = %u\n", size);
          uint32_t data_size = ac_ib_get(ib);
@@ -2105,14 +2108,14 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
                  type == RENCODE_QP_MAP_TYPE_DELTA ? "DELTA" :
                  type == RENCODE_QP_MAP_TYPE_MAP_PA ? "PA" :
                  "???");
-         print_vcn_addr(f, ib, "    QP map buffer");
+         print_vcn_addr(f, ib, true, "    QP map buffer");
          uint32_t pitch = ac_ib_get(ib);
          fprintf(f, "    QP map buffer pitch = %u\n", pitch);
       } else if (op == cmd.enc_statistics) {
          fprintf(f, "%sENCODE_STATISTICS%s\n", O_COLOR_GREEN, O_COLOR_RESET);
          uint32_t type = ac_ib_get(ib);
          fprintf(f, "    encode statistics type = %u\n", type);
-         print_vcn_addr(f, ib, "    encode statistics buffer");
+         print_vcn_addr(f, ib, true, "    encode statistics buffer");
       } else if (op == cmd.enc_latency) {
          fprintf(f, "%sENCODE_LATENCY%s\n", O_COLOR_GREEN, O_COLOR_RESET);
          uint32_t latency = ac_ib_get(ib);
@@ -2161,10 +2164,7 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
          fprintf(f, "%sCDF_DEFAULT_TABLE_BUFFER%s\n", O_COLOR_GREEN, O_COLOR_RESET);
          uint32_t use_default = ac_ib_get(ib);
          fprintf(f, "    use cdf default = %u\n", use_default);
-         ac_ib_get(ib);
-         fprintf(f, "    cdf default buffer VA low\n");
-         ac_ib_get(ib);
-         fprintf(f, "    cdf default buffer VA high\n");
+         print_vcn_addr(f, ib, ib->vcn_version >= VCN_5_0_0, "    cdf default table buffer");
       } else if (op == cmd.spec_misc_av1) {
          fprintf(f, "%sAV1_SPEC_MISC%s\n", O_COLOR_GREEN, O_COLOR_RESET);
          uint32_t palette = ac_ib_get(ib);
@@ -2277,7 +2277,7 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
          }
       } else if (op == cmd.metadata) {
          fprintf(f, "%sMETADATA_BUFFER%s\n", O_COLOR_GREEN, O_COLOR_RESET);
-         print_vcn_addr(f, ib, "    metadata buffer");
+         print_vcn_addr(f, ib, true, "    metadata buffer");
          uint32_t search_offset = ac_ib_get(ib);
          fprintf(f, "    2-pass search center map offset = %u\n", search_offset);
       } else if (op == cmd.enc_params_hevc) {
@@ -2372,7 +2372,7 @@ static void parse_vcn_ib(FILE *f, struct ac_ib_parser *ib)
          }
          case RADEON_VCN_IB_COMMON_OP_WRITEMEMORY: {
             fprintf(f, "%sOP_WRITEMEMORY%s\n", O_COLOR_CYAN, O_COLOR_RESET);
-            print_vcn_addr(f, ib, "    dest");
+            print_vcn_addr(f, ib, false, "    dest");
             uint32_t data = ac_ib_get(ib);
             fprintf(f, "    data = %u\n", data);
             break;
@@ -2385,12 +2385,12 @@ static void parse_vcn_ib(FILE *f, struct ac_ib_parser *ib)
             fprintf(f, "    map width = %u\n", width);
             uint32_t height = ac_ib_get(ib);
             fprintf(f, "    map height = %u\n", height);
-            print_vcn_addr(f, ib, "    input");
+            print_vcn_addr(f, ib, false, "    input");
             uint32_t pitch = ac_ib_get(ib);
             fprintf(f, "    input pitch = %u\n", pitch);
             uint32_t swizzle = ac_ib_get(ib);
             fprintf(f, "    input swizzle = %u\n", swizzle);
-            print_vcn_addr(f, ib, "    output");
+            print_vcn_addr(f, ib, false, "    output");
             break;
          }
          case RDECODE_IB_PARAM_DECODE_BUFFER: {
@@ -2474,23 +2474,23 @@ static void parse_vcn_ib(FILE *f, struct ac_ib_parser *ib)
                   break;
                }
             }
-            uint64_t msg_buffer_va = print_vcn_addr(f, ib, "    msg buffer");
+            uint64_t msg_buffer_va = print_vcn_addr(f, ib, true, "    msg buffer");
             print_vcn_msg_buffer_contents(f, ib, msg_buffer_va);
-            print_vcn_addr(f, ib, "    dpb buffer");
-            print_vcn_addr(f, ib, "    target buffer");
-            print_vcn_addr(f, ib, "    session context buffer");
-            print_vcn_addr(f, ib, "    bitstream buffer");
-            print_vcn_addr(f, ib, "    context buffer");
-            print_vcn_addr(f, ib, "    feedback buffer");
-            print_vcn_addr(f, ib, "    luma hist buffer");
-            print_vcn_addr(f, ib, "    prob tbl buffer");
-            print_vcn_addr(f, ib, "    sclr coeff buffer");
-            print_vcn_addr(f, ib, "    it sclr table buffer");
-            print_vcn_addr(f, ib, "    sclr target buffer");
-            print_vcn_addr(f, ib, "    reserved size info buffer");
-            print_vcn_addr(f, ib, "    mpeg2 pic param buffer");
-            print_vcn_addr(f, ib, "    mpeg2 mb control buffer");
-            print_vcn_addr(f, ib, "    mpeg2 idct coeff buffer");
+            print_vcn_addr(f, ib, true, "    dpb buffer");
+            print_vcn_addr(f, ib, true, "    target buffer");
+            print_vcn_addr(f, ib, true, "    session context buffer");
+            print_vcn_addr(f, ib, true, "    bitstream buffer");
+            print_vcn_addr(f, ib, true, "    context buffer");
+            print_vcn_addr(f, ib, true, "    feedback buffer");
+            print_vcn_addr(f, ib, true, "    luma hist buffer");
+            print_vcn_addr(f, ib, true, "    prob tbl buffer");
+            print_vcn_addr(f, ib, true, "    sclr coeff buffer");
+            print_vcn_addr(f, ib, true, "    it sclr table buffer");
+            print_vcn_addr(f, ib, true, "    sclr target buffer");
+            print_vcn_addr(f, ib, true, "    reserved size info buffer");
+            print_vcn_addr(f, ib, true, "    mpeg2 pic param buffer");
+            print_vcn_addr(f, ib, true, "    mpeg2 mb control buffer");
+            print_vcn_addr(f, ib, true, "    mpeg2 idct coeff buffer");
             break;
          }
          case RDECODE_IB_PARAM_DYNAMIC_REFLIST_BUFFER: {
@@ -2508,21 +2508,21 @@ static void parse_vcn_ib(FILE *f, struct ac_ib_parser *ib)
                fprintf(f, "    ref[%u] Y aligned height = %u\n", i, y_aligned_height);
                uint32_t y_aligned_size = ac_ib_get(ib);
                fprintf(f, "    ref[%u] Y aligned size = %u\n", i, y_aligned_size);
-               print_vcn_addr(f, ib, "    ref[%u] Y buffer", i);
+               print_vcn_addr(f, ib, true, "    ref[%u] Y buffer", i);
                uint32_t uv_pitch = ac_ib_get(ib);
                fprintf(f, "    ref[%u] UV pitch = %u\n", i, uv_pitch);
                uint32_t uv_aligned_height = ac_ib_get(ib);
                fprintf(f, "    ref[%u] UV aligned height = %u\n", i, uv_aligned_height);
                uint32_t uv_aligned_size = ac_ib_get(ib);
                fprintf(f, "    ref[%u] UV aligned size = %u\n", i, uv_aligned_size);
-               print_vcn_addr(f, ib, "    ref[%u] UV buffer", i);
+               print_vcn_addr(f, ib, true, "    ref[%u] UV buffer", i);
                uint32_t v_pitch = ac_ib_get(ib);
                fprintf(f, "    ref[%u] V pitch = %u\n", i, v_pitch);
                uint32_t v_aligned_height = ac_ib_get(ib);
                fprintf(f, "    ref[%u] V aligned height = %u\n", i, v_aligned_height);
                uint32_t v_aligned_size = ac_ib_get(ib);
                fprintf(f, "    ref[%u] V aligned size = %u\n", i, v_aligned_size);
-               print_vcn_addr(f, ib, "    ref[%u] V buffer", i);
+               print_vcn_addr(f, ib, true, "    ref[%u] V buffer", i);
             }
             break;
          }
