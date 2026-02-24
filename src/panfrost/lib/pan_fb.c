@@ -428,6 +428,11 @@ emit_zs_crc_desc(const struct pan_fb_desc_info *info,
 
          const struct pan_image *img =
             pan_image_view_get_zs_plane(store->zs.iview).image;
+         assert(util_format_get_depth_bits(img->props.format) ==
+                util_format_get_depth_bits(fb->z_format));
+         assert(util_format_get_depth_bits(store->zs.iview->format) ==
+                util_format_get_depth_bits(fb->z_format));
+
          const bool writes_s =
             util_format_has_stencil(util_format_description(img->props.format));
          const bool always_load =

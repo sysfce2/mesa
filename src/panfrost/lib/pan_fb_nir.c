@@ -159,7 +159,8 @@ get_key_target(enum pipe_format format,
    if (in_bounds_op == PAN_FB_SHADER_LOAD_IMAGE ||
        border_op == PAN_FB_SHADER_LOAD_IMAGE) {
       if (util_format_has_depth(util_format_description(format)))
-         assert(format == util_format_get_depth_only(iview->format));
+         assert(util_format_get_depth_bits(format) ==
+                util_format_get_depth_bits(iview->format));
       else if (util_format_has_stencil(util_format_description(format)))
          assert(util_format_has_stencil(util_format_description(iview->format)));
       else
