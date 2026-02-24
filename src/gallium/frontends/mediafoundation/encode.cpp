@@ -614,7 +614,7 @@ CDX12EncHMFT::PrepareForEncode( IMFSample *pSample, LPDX12EncodeContext *ppDX12E
 
       if( m_bSliceGenerationModeSet && pDX12EncodeContext->IsSliceAutoModeEnabled() )
       {
-         num_output_buffers = m_EncoderCapabilities.m_uiMaxHWSupportedMaxSlices;
+         num_output_buffers = std::max(128u, m_EncoderCapabilities.m_uiMaxHWSupportedMaxSlices);
       }
 
       // Minimum per-slice buffer size to prevent excessively small allocations.
