@@ -43,6 +43,56 @@ mali_sampling_mode(const struct pan_image_view *view)
 }
 
 static bool
+pan_afbc_superblock_exceeds_tile_size(uint64_t drm_mod,
+                                      unsigned tile_size_px)
+{
+   assert(drm_is_afbc(drm_mod));
+   assert(tile_size_px <= pan_max_effective_tile_size(PAN_ARCH));
+
+   struct pan_image_block_size tileblk_sz =
+      pan_effective_tile_block_size(tile_size_px);
+   struct pan_image_block_size superblk_sz =
+      pan_afbc_superblock_size(drm_mod);
+
+   return tileblk_sz.width < superblk_sz.width ||
+      tileblk_sz.height < superblk_sz.height;
+}
+
+/* There is an issue with AFBC that can occur when the tile size is not a
+ * multiple of the superblock size.  If multiple tiles access the same AFBC
+ * superblock and also read from that superblock, then the read in one tile
+ * may race with the write at the end of the other tile, resulting in reading
+ * inconsistent AFBC data and a resulting rendering corruption.
+ *
+ * Starting with v7, there is a bit in the Z/S and color target descriptors
+ * to tell the tiler to be more careful about tile order and compression to
+ * ensure this doesn't happen.
+ *
+ * TODO: Right now, we always assume that the target may be read but there may
+ * be cases when the driver can prove otherwise.  (Unfortunately, thanks to
+ * incremental rendering, those cases are pretty limited.)
+ */
+static bool
+pan_needs_afbc_reverse_issue_order(const struct pan_attachment_info *att,
+                                   const struct pan_image *image)
+{
+   return pan_afbc_superblock_exceeds_tile_size(image->props.modifier,
+                                                att->fb_tile_size_px);
+}
+
+#if PAN_ARCH <= 6
+static void
+pan_warn_on_afbc_reverse_issue_order(const struct pan_attachment_info *att,
+                                     const struct pan_image *image)
+{
+   if (pan_needs_afbc_reverse_issue_order(att, image)) {
+      mesa_logw_once("panfrost: Tile size is smaller than AFBC superblock."
+                     "  Rendering may not be correct");
+   }
+}
+#endif
+
+static bool
 renderblock_fits_in_single_pass(const struct pan_image_view *view,
                                 unsigned tile_size)
 {
@@ -255,6 +305,8 @@ GENX(pan_emit_afbc_s_attachment)(const struct pan_attachment_info *att,
    pan_cast_and_pack(payload, AFBC_S_TARGET, cfg) {
       cfg.write_format = translate_s_format(s->format);
       cfg.block_format = get_afbc_block_format(pref.image->props.modifier);
+      cfg.reverse_issue_order =
+         pan_needs_afbc_reverse_issue_order(att, pref.image);
       cfg.header = header;
       cfg.body_offset = body_offset;
       cfg.header_row_stride = hdr_row_stride;
@@ -333,6 +385,12 @@ GENX(pan_emit_afbc_zs_attachment)(const struct pan_attachment_info *att,
    pan_cast_and_pack(payload, AFBC_ZS_TARGET, cfg) {
       cfg.write_format = translate_zs_format(zs->format);
       cfg.block_format = get_afbc_block_format(pref.image->props.modifier);
+#if PAN_ARCH >= 7
+      cfg.reverse_issue_order =
+         pan_needs_afbc_reverse_issue_order(att, pref.image);
+#else
+      pan_warn_on_afbc_reverse_issue_order(att, pref.image);
+#endif
 
 #if PAN_ARCH >= 9
       cfg.header = header;
@@ -457,6 +515,7 @@ pan_emit_zs_crc_ext(const struct pan_fb_info *fb, unsigned layer_idx,
       const struct pan_attachment_info att = {
          .iview = fb->zs.view.zs,
          .layer_or_z_slice = layer_idx + fb->zs.view.zs->first_layer,
+         .fb_tile_size_px = fb->tile_size,
       };
 
       struct mali_zs_crc_extension_packed zs_part;
@@ -472,6 +531,7 @@ pan_emit_zs_crc_ext(const struct pan_fb_info *fb, unsigned layer_idx,
       const struct pan_attachment_info att = {
          .iview = fb->zs.view.s,
          .layer_or_z_slice = layer_idx + fb->zs.view.s->first_layer,
+         .fb_tile_size_px = fb->tile_size,
       };
 
       struct mali_zs_crc_extension_packed s_part;
@@ -701,6 +761,12 @@ GENX(pan_emit_afbc_color_attachment)(const struct pan_attachment_info *att,
 #if PAN_ARCH >= 6
       cfg.wide_block = pan_afbc_is_wide(image->props.modifier);
       cfg.split_block = (image->props.modifier & AFBC_FORMAT_MOD_SPLIT);
+#endif
+#if PAN_ARCH >= 7
+      cfg.reverse_issue_order =
+         pan_needs_afbc_reverse_issue_order(att, pref.image);
+#else
+      pan_warn_on_afbc_reverse_issue_order(att, pref.image);
 #endif
 
 #if PAN_ARCH >= 9
@@ -987,6 +1053,7 @@ pan_emit_rt(const struct pan_fb_info *fb, unsigned layer_idx, unsigned idx,
    const struct pan_attachment_info att = {
       .iview = fb->rts[idx].view,
       .layer_or_z_slice = layer_idx + rt->first_layer,
+      .fb_tile_size_px = fb->tile_size,
    };
 
    struct mali_render_target_packed desc;
@@ -1032,15 +1099,8 @@ pan_force_clean_write_on(const struct pan_image *image, unsigned tile_size)
    if (!drm_is_afbc(image->props.modifier))
       return false;
 
-   assert(tile_size <= pan_max_effective_tile_size(PAN_ARCH));
-
-   struct pan_image_block_size tileblk_sz =
-      pan_effective_tile_block_size(tile_size);
-   struct pan_image_block_size superblk_sz =
-      pan_afbc_superblock_size(image->props.modifier);
-
-   return tileblk_sz.width < superblk_sz.width ||
-      tileblk_sz.height < superblk_sz.height;
+   return pan_afbc_superblock_exceeds_tile_size(image->props.modifier,
+                                                tile_size);
 #else
    return false;
 #endif

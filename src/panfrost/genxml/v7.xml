@@ -1104,6 +1104,7 @@
     <!-- Must be set if either one of the effective tile size dimension is
          smaller than the AFBC superblock dimension. -->
     <field name="Clean Tile Write Enable" size="1" start="3:10" type="bool"/>
+    <field name="Reverse Issue Order" size="1" start="3:14" type="bool"/>
     <field name="Header" size="64" start="4:0" type="address"/>
     <field name="Header Row Stride" size="13" start="6:0" type="uint"/>
     <field name="Body" size="64" start="8:0" type="address"/>

@@ -471,6 +471,7 @@ emit_zs_crc_desc(const struct pan_fb_desc_info *info,
       const struct pan_attachment_info att = {
          .iview = iview,
          .layer_or_z_slice = iview->first_layer + info->layer,
+         .fb_tile_size_px = fb->tile_size_px,
       };
 
       struct mali_zs_crc_extension_packed zs_part;
@@ -487,6 +488,7 @@ emit_zs_crc_desc(const struct pan_fb_desc_info *info,
       const struct pan_attachment_info att = {
          .iview = iview,
          .layer_or_z_slice = iview->first_layer + info->layer,
+         .fb_tile_size_px = fb->tile_size_px,
       };
 
       struct mali_zs_crc_extension_packed s_part;
@@ -563,6 +565,7 @@ emit_rgb_rt_desc(const struct pan_fb_desc_info *info,
       const struct pan_attachment_info att = {
          .iview = iview,
          .layer_or_z_slice = iview->first_layer + info->layer,
+         .fb_tile_size_px = fb->tile_size_px,
       };
 
       mod_handler->emit_color_attachment(&att, &desc);

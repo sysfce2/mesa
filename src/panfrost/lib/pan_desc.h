@@ -297,6 +297,7 @@ int GENX(pan_select_crc_rt)(const struct pan_fb_info *fb, unsigned tile_size);
 struct pan_attachment_info {
    const struct pan_image_view *iview;
    unsigned layer_or_z_slice;
+   unsigned fb_tile_size_px;
 };
 
 #if PAN_ARCH >= 5
