@@ -340,18 +340,22 @@ panfrost_emit_blend(struct panfrost_batch *batch, void *rts,
       }
 
 #if PAN_ARCH >= 6
+#if PAN_ARCH <= 7
       struct panfrost_compiled_shader *fs = ctx->prog[MESA_SHADER_FRAGMENT];
+#endif
       struct mali_internal_blend_packed *internal_blend_packed =
          (struct mali_internal_blend_packed *)&packed->opaque[2];
 
       /* Words 2 and 3: Internal blend */
       if (blend_shaders[i]) {
+#if PAN_ARCH <= 7
          /* The blend shader's address needs to be at
           * the same top 32 bit as the fragment shader.
           * TODO: Ensure that's always the case.
           */
          assert(!fs->bin.bo || (blend_shaders[i] & (0xffffffffull << 32)) ==
                                   (fs->bin.gpu & (0xffffffffull << 32)));
+#endif
 
          pan_pack(internal_blend_packed, INTERNAL_BLEND, cfg) {
             cfg.mode = MALI_BLEND_MODE_SHADER;
