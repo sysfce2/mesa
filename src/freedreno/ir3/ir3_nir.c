@@ -256,6 +256,7 @@ ir3_lower_bit_size(const nir_instr *instr, UNUSED void *data)
       case nir_op_ishr:
       case nir_op_isub_sat:
       case nir_op_uadd_sat:
+      case nir_op_usub_sat:
       case nir_op_umax:
       case nir_op_umin:
       case nir_op_ushr:
