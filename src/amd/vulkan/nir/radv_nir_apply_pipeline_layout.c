@@ -515,8 +515,7 @@ apply_layout_to_tex(nir_builder *b, apply_layout_state *state, nir_tex_instr *te
       sampler = get_sampler_desc(b, state, sampler_deref_instr, AC_DESC_SAMPLER, tex->sampler_non_uniform, tex, false);
    }
 
-   if (sampler && state->disable_aniso_single_level && tex->sampler_dim < GLSL_SAMPLER_DIM_RECT &&
-       state->gfx_level < GFX8) {
+   if (sampler && state->disable_aniso_single_level && tex->sampler_dim < GLSL_SAMPLER_DIM_RECT) {
       /* Disable anisotropic filtering if BASE_LEVEL == LAST_LEVEL.
        *
        * GFX6-GFX7:
@@ -569,14 +568,13 @@ radv_nir_apply_pipeline_layout(nir_shader *shader, struct radv_device *device, c
 {
    bool progress = false;
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
 
    apply_layout_state state = {
       .gfx_level = pdev->info.gfx_level,
       .address32_hi = pdev->info.address32_hi,
       .combined_image_sampler_desc_size = radv_get_combined_image_sampler_desc_size(pdev),
       .combined_image_sampler_offset = radv_get_combined_image_sampler_offset(pdev),
-      .disable_aniso_single_level = instance->drirc.debug.disable_aniso_single_level,
+      .disable_aniso_single_level = pdev->cache_key.disable_aniso_single_level,
       .has_image_load_dcc_bug = pdev->info.has_image_load_dcc_bug,
       .disable_tg4_trunc_coord = !pdev->info.conformant_trunc_coord && !pdev->cache_key.disable_trunc_coord,
       .args = &stage->args,
