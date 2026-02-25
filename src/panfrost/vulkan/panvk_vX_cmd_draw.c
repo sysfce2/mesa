@@ -93,6 +93,28 @@ get_ms2ss_image_view(struct panvk_image_view *iview, uint32_t nr_samples)
    return res;
 }
 
+static bool
+avoid_direct_resolve_to(const struct pan_image *img)
+{
+   /* There is an issue with AFBC and small tiles where, if the tile size is
+    * not a multiple of superblock size then writes and reads may race within
+    * a superblock.  On v7+, there's a hardware bit to help us work around
+    * this but it doesn't exist on v6 and earlier.
+    *
+    * This is particularly likely to happen with MSAA since the sample count
+    * is a multiplier on the color allocation, making it much more likely that
+    * we'll hit this case.  MSAA images are safe because they don't allow AFBC
+    * but we have a real problem if we attempt to resolve directly to an
+    * AFBC-compressed single-sampled image.  Skip the resolve optimization in
+    * this case.
+    *
+    * TODO: If we moved this decision later, it could be based on the final
+    * framebuffer layout and we could potentially allow direct resolves in
+    * more cases.
+    */
+   return PAN_ARCH < 7 && drm_is_afbc(img->props.modifier);
+}
+
 static void
 render_state_set_color_attachment(struct panvk_cmd_buffer *cmdbuf,
                                   const VkRenderingAttachmentInfo *att,
@@ -175,7 +197,11 @@ render_state_set_color_attachment(struct panvk_cmd_buffer *cmdbuf,
       assert(resolve.dst_iview != NULL);
       assert(resolve.dst_iview->pview.nr_samples == 1);
 
-      if (ms2ss || att->storeOp != VK_ATTACHMENT_STORE_OP_STORE) {
+      const struct pan_image *resolve_pimage =
+         pan_image_view_get_color_plane(&resolve.dst_iview->pview).image;
+
+      if ((ms2ss || att->storeOp != VK_ATTACHMENT_STORE_OP_STORE) &&
+          !avoid_direct_resolve_to(resolve_pimage)) {
          render->fb.resolve.rts[index] = (struct pan_fb_resolve_target) {
             .in_bounds = {
                .resolve = PAN_FB_RESOLVE_RT(index),
@@ -464,7 +490,11 @@ render_state_set_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
       }
 
       if (z_resolve.mode != VK_RESOLVE_MODE_NONE) {
-         if (z_ms2ss || z_att->storeOp != VK_ATTACHMENT_STORE_OP_STORE) {
+         const struct pan_image *z_resolve_pimage =
+            pan_image_view_get_zs_plane(&z_resolve.dst_iview->pview).image;
+
+         if ((z_ms2ss || z_att->storeOp != VK_ATTACHMENT_STORE_OP_STORE) &&
+             !avoid_direct_resolve_to(z_resolve_pimage)) {
             render->z_pview.resolve = get_z_pan_image_view(z_resolve.dst_iview);
             render->fb.resolve.z = (struct pan_fb_resolve_target) {
                .in_bounds = {
@@ -487,7 +517,11 @@ render_state_set_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
       }
 
       if (s_resolve.mode != VK_RESOLVE_MODE_NONE) {
-         if (s_ms2ss || s_att->storeOp != VK_ATTACHMENT_STORE_OP_STORE) {
+         const struct pan_image *s_resolve_pimage =
+            pan_image_view_get_s_plane(&s_resolve.dst_iview->pview).image;
+
+         if ((s_ms2ss || s_att->storeOp != VK_ATTACHMENT_STORE_OP_STORE) &&
+             !avoid_direct_resolve_to(s_resolve_pimage)) {
             render->s_pview.resolve = get_s_pan_image_view(s_resolve.dst_iview);
             render->fb.resolve.s = (struct pan_fb_resolve_target) {
                .in_bounds = {
