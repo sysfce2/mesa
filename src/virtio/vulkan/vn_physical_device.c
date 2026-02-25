@@ -3103,6 +3103,8 @@ vn_GetPhysicalDeviceDescriptorSizeEXT(VkPhysicalDevice physicalDevice,
                vn_call_vkGetPhysicalDeviceDescriptorSizeEXT(
                   ring, physicalDevice, vn_descriptor_heap_types[i]);
          }
+
+         physical_dev->descriptor_sizes_initialized = true;
       }
       simple_mtx_unlock(&physical_dev->mutex);
    }
