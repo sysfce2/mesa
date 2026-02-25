@@ -5666,4 +5666,5 @@ ntv_shader_prepare(nir_shader *nir)
          var->data.driver_location = var->data.binding;
       }
    }
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 }
