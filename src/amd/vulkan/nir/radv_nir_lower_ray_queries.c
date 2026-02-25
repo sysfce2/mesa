@@ -266,7 +266,6 @@ lower_rq_initialize(nir_builder *b, nir_intrinsic_instr *instr, struct ray_query
                     struct radv_device *device)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   struct radv_instance *instance = radv_physical_device_instance(pdev);
 
    nir_deref_instr *closest = rq_deref(b, rq, closest);
    nir_deref_instr *candidate = rq_deref(b, rq, candidate);
@@ -339,7 +338,7 @@ lower_rq_initialize(nir_builder *b, nir_intrinsic_instr *instr, struct ray_query
 
    rq_store(b, rq, trav_top_stack, nir_imm_int(b, -1));
 
-   rq_store(b, rq, incomplete, nir_iand_imm(b, accel_struct_non_null, !(instance->debug_flags & RADV_DEBUG_NO_RT)));
+   rq_store(b, rq, incomplete, nir_iand_imm(b, accel_struct_non_null, !pdev->cache_key.no_rt));
 
    vars->initialize = instr;
 }
