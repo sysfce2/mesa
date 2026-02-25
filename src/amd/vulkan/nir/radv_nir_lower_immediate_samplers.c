@@ -74,10 +74,9 @@ bool
 radv_nir_lower_immediate_samplers(nir_shader *shader, struct radv_device *device, const struct radv_shader_stage *stage)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
 
    lower_immediate_samplers_state state = {
-      .disable_tg4_trunc_coord = !pdev->info.conformant_trunc_coord && !instance->drirc.debug.disable_trunc_coord,
+      .disable_tg4_trunc_coord = !pdev->info.conformant_trunc_coord && !pdev->cache_key.disable_trunc_coord,
       .layout = &stage->layout,
    };
 
