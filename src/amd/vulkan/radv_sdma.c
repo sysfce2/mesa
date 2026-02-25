@@ -179,11 +179,12 @@ radv_sdma_get_buf_surf(uint64_t buffer_va, const struct radv_image *const image,
 }
 
 struct radv_sdma_surf
-radv_sdma_get_surf(const struct radv_device *const device, const struct radv_image *const image,
+radv_sdma_get_surf(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *const image, VkImageLayout image_layout,
                    const VkImageSubresourceLayers subresource, const VkOffset3D offset)
 {
    assert(util_bitcount(subresource.aspectMask) == 1);
 
+   const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_physical_device *pdev = radv_device_physical(device);
    const unsigned plane_idx = radv_plane_from_aspect(subresource.aspectMask);
    const unsigned binding_idx = image->disjoint ? plane_idx : 0;
@@ -227,7 +228,11 @@ radv_sdma_get_surf(const struct radv_device *const device, const struct radv_ima
       info.pitch = surf->u.gfx9.pitch[subresource.mipLevel];
       info.slice_pitch = surf->blk_w * surf->blk_h * surf->u.gfx9.surf_slice_size / bpe;
    } else {
-      const bool htile_enabled = radv_htile_enabled(image, subresource.mipLevel);
+      const uint32_t queue_mask = radv_image_queue_family_mask(image, cmd_buffer->qf, cmd_buffer->qf);
+      const bool htile_compressed =
+         radv_layout_is_htile_compressed(device, image, subresource.mipLevel, image_layout, queue_mask);
+      const bool dcc_compressed =
+         radv_layout_dcc_compressed(device, image, subresource.mipLevel, image_layout, queue_mask);
 
       /* 1D resources should be linear. */
       assert(surf->u.gfx9.resource_type != RADEON_RESOURCE_1D);
@@ -236,15 +241,14 @@ radv_sdma_get_surf(const struct radv_device *const device, const struct radv_ima
 
       if (pdev->info.gfx_level >= GFX12) {
          info.is_compressed = binding->bo && binding->bo->gfx12_allow_dcc;
-      } else if (pdev->info.sdma_supports_compression &&
-                 (radv_dcc_enabled(image, subresource.mipLevel) || htile_enabled)) {
+      } else if (pdev->info.sdma_supports_compression && (dcc_compressed || htile_compressed)) {
          info.is_compressed = true;
       }
 
       if (info.is_compressed) {
          info.meta_va = va + surf->meta_offset;
          info.surface_type = radv_sdma_surface_type_from_aspect_mask(subresource.aspectMask);
-         info.htile_enabled = htile_enabled;
+         info.htile_enabled = htile_compressed;
       }
    }
 

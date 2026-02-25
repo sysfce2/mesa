@@ -113,7 +113,8 @@ transfer_copy_memory_image(struct radv_cmd_buffer *cmd_buffer, uint64_t buffer_v
       radv_wait_gang_follower(cmd_buffer);
 
    struct radv_sdma_surf buf = radv_sdma_get_buf_surf(buffer_va, image, region);
-   const struct radv_sdma_surf img = radv_sdma_get_surf(device, image, region->imageSubresource, region->imageOffset);
+   const struct radv_sdma_surf img =
+      radv_sdma_get_surf(cmd_buffer, image, layout, region->imageSubresource, region->imageOffset);
    const VkExtent3D extent = radv_sdma_get_copy_extent(image, region->imageSubresource, region->imageExtent);
 
    if (radv_sdma_use_unaligned_buffer_image_copy(device, &buf, &img, extent)) {
@@ -513,8 +514,10 @@ transfer_copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_i
       src_subresource.aspectMask = BITFIELD_BIT(b);
       dst_subresource.aspectMask = BITFIELD_BIT(u_bit_scan(&dst_aspect_mask_remaining));
 
-      const struct radv_sdma_surf src = radv_sdma_get_surf(device, src_image, src_subresource, region->srcOffset);
-      const struct radv_sdma_surf dst = radv_sdma_get_surf(device, dst_image, dst_subresource, region->dstOffset);
+      const struct radv_sdma_surf src =
+         radv_sdma_get_surf(cmd_buffer, src_image, src_image_layout, src_subresource, region->srcOffset);
+      const struct radv_sdma_surf dst =
+         radv_sdma_get_surf(cmd_buffer, dst_image, dst_image_layout, dst_subresource, region->dstOffset);
       const VkExtent3D extent = radv_sdma_get_copy_extent(src_image, src_subresource, region->extent);
 
       if (radv_sdma_use_t2t_scanline_copy(device, &src, &dst, extent)) {
