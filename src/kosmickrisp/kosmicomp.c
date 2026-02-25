@@ -45,7 +45,7 @@ static void
 debug_callback(void *priv, enum nir_spirv_debug_level debuglevel, size_t offset,
                const char *message)
 {
-   fprintf(stderr, "<%d> at %ld %s\n", debuglevel, offset, message);
+   fprintf(stderr, "<%d> at %zu %s\n", debuglevel, offset, message);
 }
 
 static int
