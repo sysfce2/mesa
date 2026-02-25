@@ -1075,6 +1075,7 @@ emit_output(struct ntv_context *ctx, struct nir_variable *var)
 static void
 emit_shader_temp(struct ntv_context *ctx, struct nir_variable *var)
 {
+   assert(!var->constant_initializer);
    SpvId var_type = get_glsl_type(ctx, var->type, true);
 
    SpvId pointer_type = spirv_builder_type_pointer(&ctx->builder,
@@ -1094,6 +1095,7 @@ emit_shader_temp(struct ntv_context *ctx, struct nir_variable *var)
 static void
 emit_temp(struct ntv_context *ctx, struct nir_variable *var)
 {
+   assert(!var->constant_initializer);
    SpvId var_type = get_glsl_type(ctx, var->type, true);
 
    SpvId pointer_type = spirv_builder_type_pointer(&ctx->builder,
@@ -5649,6 +5651,7 @@ ntv_shader_prepare(nir_shader *nir)
    NIR_PASS(_, nir, nir_inline_functions);
    nir_cleanup_functions(nir);
    optimize_nir(nir);
+   NIR_PASS(_, nir, nir_lower_variable_initializers, nir_var_shader_temp);
    NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_shader_temp, NULL);
    /* required until phi support is complete */
    NIR_PASS(_, nir, nir_convert_from_ssa, true, false);
