@@ -268,6 +268,10 @@ create_ms_views(struct panvk_device *dev, struct panvk_image_view *view,
                 const VkImageViewCreateInfo *pCreateInfo,
                 const VkAllocationCallbacks *pAllocator)
 {
+   /* Don't create extra views for internal views. */
+   if (pCreateInfo->flags & VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA)
+      return;
+
    struct panvk_image *source_img =
       panvk_image_from_handle(vk_image_to_handle(view->vk.image));
    const VkImage *target_images = source_img->ms_imgs;
