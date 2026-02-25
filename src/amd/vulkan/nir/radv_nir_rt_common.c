@@ -16,7 +16,7 @@ radv_use_bvh_stack_rtn(const struct radv_physical_device *pdevice)
 {
    /* gfx12 requires using the bvh4 ds_bvh_stack_rtn differently - enable hw stack instrs on gfx12 only with bvh8 */
    return (pdevice->info.gfx_level == GFX11 || pdevice->info.gfx_level == GFX11_5 || radv_use_bvh8(pdevice)) &&
-          !radv_emulate_rt(pdevice);
+          !pdevice->cache_key.emulate_rt;
 }
 
 nir_def *
@@ -605,7 +605,7 @@ insert_traversal_triangle_case(struct radv_device *device, nir_builder *b, const
    {
       intersection.frontface = nir_fgt_imm(b, div, 0);
       nir_def *not_cull;
-      if (pdev->info.gfx_level < GFX11 || radv_emulate_rt(pdev)) {
+      if (pdev->info.gfx_level < GFX11 || pdev->cache_key.emulate_rt) {
          nir_def *switch_ccw =
             nir_test_mask(b, nir_load_deref(b, args->vars.sbt_offset_and_flags), RADV_INSTANCE_TRIANGLE_FLIP_FACING);
          intersection.frontface = nir_ixor(b, intersection.frontface, switch_ccw);
@@ -786,7 +786,7 @@ static nir_def *
 build_bvh_base(nir_builder *b, const struct radv_physical_device *pdev, nir_def *base_addr, nir_def *ptr_flags,
                bool overwrite)
 {
-   if (pdev->info.gfx_level < GFX11 || radv_emulate_rt(pdev))
+   if (pdev->info.gfx_level < GFX11 || pdev->cache_key.emulate_rt)
       return base_addr;
 
    nir_def *base_addr_vec = nir_unpack_64_2x32(b, base_addr);
@@ -945,7 +945,7 @@ radv_build_ray_traversal(struct radv_device *device, nir_builder *b, const struc
       nir_def *global_bvh_node = nir_iadd(b, nir_load_deref(b, args->vars.bvh_base), nir_u2u64(b, bvh_node));
 
       bool has_result = false;
-      if (pdev->info.cu_info.has_image_bvh_intersect_ray && !radv_emulate_rt(pdev)) {
+      if (pdev->info.cu_info.has_image_bvh_intersect_ray && !pdev->cache_key.emulate_rt) {
          nir_store_var(
             b, intrinsic_result,
             nir_bvh64_intersect_ray_amd(b, 32, desc, nir_unpack_64_2x32(b, global_bvh_node),
