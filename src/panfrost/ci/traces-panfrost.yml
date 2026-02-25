@@ -71,7 +71,7 @@ traces:
       checksum: 32e349d14319b4ae921c146224d26a0e
   humus/RaytracedShadows-v2.trace:
     gl-panfrost-t860:
-      checksum: b2f909cbf5ea5de03b88f8a685eb2e28
+      checksum: f7d5129163beaff3150d98ca7b3f11f6
   humus/VolumetricFogging2-v2.trace:
     gl-panfrost-t860:
       checksum: f53b5b1430aa21804c6fed01bce560aa
