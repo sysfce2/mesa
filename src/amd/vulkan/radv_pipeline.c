@@ -249,7 +249,6 @@ radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_stat
                      struct radv_shader_stage *stage)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
    enum amd_gfx_level gfx_level = pdev->info.gfx_level;
    bool progress;
 
@@ -302,7 +301,7 @@ radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_stat
       NIR_PASS(progress, stage->nir, nir_opt_load_store_vectorize, &vectorize_opts);
       if (progress) {
          NIR_PASS(_, stage->nir, nir_opt_copy_prop);
-         NIR_PASS(_, stage->nir, nir_opt_shrink_stores, !instance->drirc.debug.disable_shrink_image_store);
+         NIR_PASS(_, stage->nir, nir_opt_shrink_stores, !pdev->cache_key.disable_shrink_image_store);
 
          constant_fold_for_push_const = true;
       }
