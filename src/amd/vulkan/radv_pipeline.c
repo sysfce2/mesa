@@ -623,11 +623,10 @@ bool
 radv_shader_should_clear_lds(const struct radv_device *device, const nir_shader *shader)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
 
    return (shader->info.stage == MESA_SHADER_COMPUTE || shader->info.stage == MESA_SHADER_MESH ||
            shader->info.stage == MESA_SHADER_TASK) &&
-          shader->info.shared_size > 0 && instance->drirc.misc.clear_lds;
+          shader->info.shared_size > 0 && pdev->cache_key.clear_lds;
 }
 
 static uint32_t
