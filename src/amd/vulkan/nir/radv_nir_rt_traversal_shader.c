@@ -1267,7 +1267,7 @@ radv_build_traversal(struct radv_device *device, struct radv_ray_tracing_pipelin
       .data = &data,
    };
 
-   if (radv_use_bvh8(pdev))
+   if (pdev->cache_key.bvh8)
       radv_build_ray_traversal_gfx12(device, b, &args);
    else
       radv_build_ray_traversal(device, b, &args);

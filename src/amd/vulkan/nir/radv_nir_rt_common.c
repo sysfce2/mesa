@@ -15,7 +15,7 @@ bool
 radv_use_bvh_stack_rtn(const struct radv_physical_device *pdevice)
 {
    /* gfx12 requires using the bvh4 ds_bvh_stack_rtn differently - enable hw stack instrs on gfx12 only with bvh8 */
-   return (pdevice->info.gfx_level == GFX11 || pdevice->info.gfx_level == GFX11_5 || radv_use_bvh8(pdevice)) &&
+   return (pdevice->info.gfx_level == GFX11 || pdevice->info.gfx_level == GFX11_5 || pdevice->cache_key.bvh8) &&
           !pdevice->cache_key.emulate_rt;
 }
 
@@ -387,7 +387,7 @@ build_addr_to_node(struct radv_device *device, nir_builder *b, nir_def *addr, ni
    nir_def *node = nir_ushr_imm(b, addr, 3);
    node = nir_iand_imm(b, node, (bvh_size - 1) << 3);
 
-   if (radv_use_bvh8(pdev)) {
+   if (pdev->cache_key.bvh8) {
       /* The HW ray flags are the same bits as the API flags.
        * - SpvRayFlagsTerminateOnFirstHitKHRMask, SpvRayFlagsSkipClosestHitShaderKHRMask are handled in shader code.
        * - SpvRayFlagsSkipTrianglesKHRMask, SpvRayFlagsSkipAABBsKHRMask do not work.
@@ -435,7 +435,7 @@ radv_load_vertex_position(struct radv_device *device, nir_builder *b, nir_def *p
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
-   if (radv_use_bvh8(pdev)) {
+   if (pdev->cache_key.bvh8) {
       /* Assume that vertices are uncompressed. */
       uint32_t offset = ROUND_DOWN_TO(RADV_GFX12_PRIMITIVE_NODE_HEADER_SIZE / 8, 4) + index * 3 * sizeof(float);
       nir_def *data[4];
@@ -466,7 +466,7 @@ radv_load_wto_matrix(struct radv_device *device, nir_builder *b, nir_def *instan
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
    unsigned offset = offsetof(struct radv_bvh_instance_node, wto_matrix);
-   if (radv_use_bvh8(pdev))
+   if (pdev->cache_key.bvh8)
       offset = offsetof(struct radv_gfx12_instance_node, wto_matrix);
 
    for (unsigned i = 0; i < 3; ++i) {
@@ -481,7 +481,7 @@ radv_load_otw_matrix(struct radv_device *device, nir_builder *b, nir_def *instan
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
    unsigned offset = offsetof(struct radv_bvh_instance_node, otw_matrix);
-   if (radv_use_bvh8(pdev))
+   if (pdev->cache_key.bvh8)
       offset =
          sizeof(struct radv_gfx12_instance_node) + offsetof(struct radv_gfx12_instance_node_user_data, otw_matrix);
 
@@ -496,7 +496,7 @@ radv_load_custom_instance(struct radv_device *device, nir_builder *b, nir_def *i
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
-   if (radv_use_bvh8(pdev)) {
+   if (pdev->cache_key.bvh8) {
       return nir_load_global(b, 1, 32,
                              nir_iadd_imm(b, instance_addr,
                                           sizeof(struct radv_gfx12_instance_node) +
@@ -515,7 +515,7 @@ radv_load_instance_id(struct radv_device *device, nir_builder *b, nir_def *insta
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
-   if (radv_use_bvh8(pdev)) {
+   if (pdev->cache_key.bvh8) {
       return nir_load_global(b, 1, 32,
                              nir_iadd_imm(b, instance_addr,
                                           sizeof(struct radv_gfx12_instance_node) +
@@ -547,7 +547,7 @@ create_bvh_descriptor(nir_builder *b, const struct radv_physical_device *pdev, s
     * instances at the cost of having to use 64-bit node ids. */
    const uint64_t bvh_size = 1ull << 42;
 
-   const uint32_t sort_triangles_first = radv_use_bvh8(pdev) ? BITFIELD_BIT(52 - 32) : 0;
+   const uint32_t sort_triangles_first = pdev->cache_key.bvh8 ? BITFIELD_BIT(52 - 32) : 0;
    const uint32_t box_sort_enable = BITFIELD_BIT(63 - 32);
    const uint32_t triangle_return_mode = BITFIELD_BIT(120 - 96); /* Return IJ for triangles */
 
@@ -573,7 +573,7 @@ create_bvh_descriptor(nir_builder *b, const struct radv_physical_device *pdev, s
                          nir_imm_int(b, (box_sort_largest << 21) | sort_triangles_first | box_sort_enable), dword1);
    }
 
-   if (radv_use_bvh8(pdev)) {
+   if (pdev->cache_key.bvh8) {
       /* compressed_format_en */
       dword3 |= BITFIELD_BIT(115 - 96);
       /* wide_sort_en */
@@ -764,7 +764,7 @@ static nir_def *
 fetch_parent_node(struct radv_device *device, nir_builder *b, nir_def *bvh, nir_def *node)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   nir_def *offset = nir_iadd_imm(b, nir_imul_imm(b, nir_udiv_imm(b, node, radv_use_bvh8(pdev) ? 16 : 8), 4), 4);
+   nir_def *offset = nir_iadd_imm(b, nir_imul_imm(b, nir_udiv_imm(b, node, pdev->cache_key.bvh8 ? 16 : 8), 4), 4);
    return nir_load_global(b, 1, 32, nir_isub(b, bvh, nir_u2u64(b, offset)), .align_mul = 4);
 }
 
@@ -808,7 +808,7 @@ build_instance_exit(nir_builder *b, const struct radv_physical_device *pdev, con
    nir_if *instance_exit = nir_push_if(b, nir_ior(b, stack_instance_exit, root_instance_exit));
    instance_exit->control = nir_selection_control_dont_flatten;
    {
-      if (radv_use_bvh8(pdev) && args->use_bvh_stack_rtn)
+      if (pdev->cache_key.bvh8 && args->use_bvh_stack_rtn)
          nir_store_deref(b, args->vars.stack,
                          nir_ior_imm(b, nir_load_deref(b, args->vars.stack), RADV_BVH_STACK_FLAG_TLAS_POP), 0x1);
       else
@@ -817,7 +817,7 @@ build_instance_exit(nir_builder *b, const struct radv_physical_device *pdev, con
       nir_store_deref(b, args->vars.instance_bottom_node, nir_imm_int(b, RADV_BVH_NO_INSTANCE_ROOT), 1);
 
       nir_def *root_bvh_base =
-         radv_use_bvh8(pdev) ? args->root_bvh_base : build_bvh_base(b, pdev, args->root_bvh_base, ptr_flags, true);
+         pdev->cache_key.bvh8 ? args->root_bvh_base : build_bvh_base(b, pdev, args->root_bvh_base, ptr_flags, true);
 
       nir_store_deref(b, args->vars.bvh_base, root_bvh_base, 0x1);
       nir_store_deref(b, args->vars.origin, args->origin, 7);

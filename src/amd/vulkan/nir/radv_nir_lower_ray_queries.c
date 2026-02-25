@@ -591,7 +591,7 @@ lower_rq_proceed(nir_builder *b, nir_intrinsic_instr *instr, struct ray_query_va
    nir_push_if(b, rq_load(b, rq, incomplete));
    {
       nir_def *incomplete;
-      if (radv_use_bvh8(pdev))
+      if (pdev->cache_key.bvh8)
          incomplete = radv_build_ray_traversal_gfx12(device, b, &args);
       else
          incomplete = radv_build_ray_traversal(device, b, &args);
