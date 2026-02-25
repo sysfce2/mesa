@@ -289,6 +289,9 @@ pan_effective_tile_block_size(unsigned tile_size)
 
 void GENX(pan_select_tile_size)(struct pan_fb_info *fb);
 
+bool GENX(pan_force_clean_write_on)(const struct pan_image *image,
+                                    unsigned fb_tile_size_px);
+
 void GENX(pan_emit_tls)(const struct pan_tls_info *info,
                         struct mali_local_storage_packed *out);
 

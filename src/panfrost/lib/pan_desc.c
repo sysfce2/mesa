@@ -1087,10 +1087,15 @@ pan_fix_frame_shader_mode(enum mali_pre_post_frame_shader_mode mode,
 
 /* Clean tiles must be written back for AFBC buffers (color, z/s) when either
  * one of the effective tile size dimension is smaller than the superblock
- * dimension. */
-
-static bool
-pan_force_clean_write_on(const struct pan_image *image, unsigned tile_size)
+ * dimension.
+ *
+ * This isn't just about making sure we render the whole superblock.  If we
+ * don't, set clean_tile_write_enable and only part of the superblock gets
+ * written, compression can go wrong and the results may be garbage.
+ */
+bool
+GENX(pan_force_clean_write_on)(const struct pan_image *image,
+                               unsigned fb_tile_size_px)
 {
 #if PAN_ARCH >= 6
    if (!image)
@@ -1100,7 +1105,7 @@ pan_force_clean_write_on(const struct pan_image *image, unsigned tile_size)
       return false;
 
    return pan_afbc_superblock_exceeds_tile_size(image->props.modifier,
-                                                tile_size);
+                                                fb_tile_size_px);
 #else
    return false;
 #endif
@@ -1121,14 +1126,15 @@ pan_get_clean_tile_info(const struct pan_fb_info *fb)
 
       img = fb->rts[i].view ?
          pan_image_view_get_color_plane(fb->rts[i].view).image : NULL;
-      if (fb->rts[i].clear || pan_force_clean_write_on(img, fb->tile_size))
+      if (fb->rts[i].clear ||
+          GENX(pan_force_clean_write_on)(img, fb->tile_size))
          clean_tile.write_rt_mask |= 1 << i;
    }
 
    if (!fb->zs.discard.z) {
       img = fb->zs.view.zs ?
          pan_image_view_get_zs_plane(fb->zs.view.zs).image : NULL;
-      if (fb->zs.clear.z || pan_force_clean_write_on(img, fb->tile_size))
+      if (fb->zs.clear.z || GENX(pan_force_clean_write_on)(img, fb->tile_size))
          clean_tile.write_zs = 1;
       const bool zs_has_stencil = img &&
          util_format_has_stencil(util_format_description(img->props.format));
@@ -1139,7 +1145,7 @@ pan_get_clean_tile_info(const struct pan_fb_info *fb)
    if (!fb->zs.discard.s) {
       img = fb->zs.view.s ?
          pan_image_view_get_s_plane(fb->zs.view.s).image : NULL;
-      if (fb->zs.clear.s || pan_force_clean_write_on(img, fb->tile_size))
+      if (fb->zs.clear.s || GENX(pan_force_clean_write_on)(img, fb->tile_size))
          clean_tile.write_zs = 1;
    }
 

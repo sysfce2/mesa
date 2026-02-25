@@ -450,6 +450,13 @@ pan_fb_get_clean_tile(const struct pan_fb_desc_info *info)
       if ((load && pan_fb_load_target_always(&load->rts[rt])) ||
           (store && pan_fb_store_target_always(&store->rts[rt])))
          ct.rts |= BITFIELD_BIT(rt);
+
+      if (store && store->rts[rt].store) {
+         const struct pan_image *img =
+            pan_image_view_get_color_plane(store->rts[rt].iview).image;
+         if (GENX(pan_force_clean_write_on)(img, fb->tile_size_px))
+            ct.rts |= BITFIELD_BIT(rt);
+      }
    }
 
    const bool z_always_load = load && pan_fb_load_target_always(&load->z);
@@ -473,11 +480,22 @@ pan_fb_get_clean_tile(const struct pan_fb_desc_info *info)
          /* If ZS writes stencil, we have to also include stencil loads */
          if (util_format_has_stencil(zs_fmt_desc) && s_always_load)
             ct.zs = true;
+
+         if (GENX(pan_force_clean_write_on)(img, fb->tile_size_px))
+            ct.zs = true;
       }
    }
 
-   if (fb->s_format != PIPE_FORMAT_NONE)
+   if (fb->s_format != PIPE_FORMAT_NONE) {
       ct.s = s_always_load || s_always_store;
+
+      if (store && store->s.store) {
+         const struct pan_image *img =
+            pan_image_view_get_s_plane(store->s.iview).image;
+         if (GENX(pan_force_clean_write_on)(img, fb->tile_size_px))
+            ct.s = true;
+      }
+   }
 
    return ct;
 }
