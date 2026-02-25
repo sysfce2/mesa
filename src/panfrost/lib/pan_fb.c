@@ -468,14 +468,14 @@ pan_fb_get_clean_tile(const struct pan_fb_desc_info *info)
       ct.zs = z_always_load || zs_always_store;
 
       if (store && store->zs.store) {
-         const struct pan_image *zs_img =
+         const struct pan_image *img =
             pan_image_view_get_zs_plane(store->zs.iview).image;
-         assert(util_format_get_depth_bits(zs_img->props.format) ==
+         assert(util_format_get_depth_bits(img->props.format) ==
                 util_format_get_depth_bits(fb->z_format));
          assert(util_format_get_depth_bits(store->zs.iview->format) ==
                 util_format_get_depth_bits(fb->z_format));
          const struct util_format_description *zs_fmt_desc =
-            util_format_description(zs_img->props.format);
+            util_format_description(img->props.format);
 
          /* If ZS writes stencil, we have to also include stencil loads */
          if (util_format_has_stencil(zs_fmt_desc) && s_always_load)
@@ -648,6 +648,27 @@ emit_rgb_rt_desc(const struct pan_fb_desc_info *info,
    pan_merge(rgb_rt, &desc, RGB_RENDER_TARGET);
 }
 
+#if PAN_ARCH >= 6
+/* All GPUs starting from Bifrost are affected by issue TSIX-2033:
+ *
+ *      Forcing clean_tile_writes breaks INTERSECT readbacks
+ *
+ * To workaround, use the pre-frame shader mode ALWAYS instead of INTERSECT if
+ * clean_tile_write_enable is set on either one of the color, depth or stencil
+ * buffers. Since INTERSECT is a hint that the hardware may ignore, this
+ * cannot affect correctness, only performance. */
+
+static enum mali_pre_post_frame_shader_mode
+pan_fix_frame_shader_mode(enum mali_pre_post_frame_shader_mode mode,
+                          bool force_clean_tile)
+{
+   if (force_clean_tile && mode == MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT)
+      return MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS;
+   else
+      return mode;
+}
+#endif
+
 uint32_t
 GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info, void *out)
 {
@@ -667,8 +688,10 @@ GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info, void *out)
 
    pan_section_pack(&fbd, FRAMEBUFFER, PARAMETERS, cfg) {
 #if PAN_ARCH >= 6
-      cfg.pre_frame_0 = info->frame_shaders.modes[0];
-      cfg.pre_frame_1 = info->frame_shaders.modes[1];
+      cfg.pre_frame_0 = pan_fix_frame_shader_mode(info->frame_shaders.modes[0],
+                                                  ct.rts || ct.zs || ct.s);
+      cfg.pre_frame_1 = pan_fix_frame_shader_mode(info->frame_shaders.modes[1],
+                                                  ct.rts || ct.zs || ct.s);
       cfg.post_frame = info->frame_shaders.modes[2];
       cfg.frame_shader_dcds = info->frame_shaders.dcd_pointer;
 
