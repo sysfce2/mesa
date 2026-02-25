@@ -5647,6 +5647,7 @@ ntv_shader_prepare(nir_shader *nir)
    NIR_PASS(_, nir, nir_split_per_member_structs);
    NIR_PASS(_, nir, nir_lower_returns);
    NIR_PASS(_, nir, nir_inline_functions);
+   nir_cleanup_functions(nir);
    optimize_nir(nir);
    /* required until phi support is complete */
    NIR_PASS(_, nir, nir_convert_from_ssa, true, false);
