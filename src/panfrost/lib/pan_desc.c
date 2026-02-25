@@ -221,14 +221,15 @@ get_afbc_att_mem_props(struct pan_image_plane_ref pref, unsigned mip_level,
 #endif
 
 void
-GENX(pan_emit_linear_s_attachment)(const struct pan_image_view *s,
-                                   unsigned layer_or_z_slice, void *payload)
+GENX(pan_emit_linear_s_attachment)(const struct pan_attachment_info *att,
+                                   void *payload)
 {
+   const struct pan_image_view *s = att->iview;
    uint64_t base, row_stride, surf_stride;
 
    get_tiled_or_linear_att_mem_props(pan_image_view_get_s_plane(s),
-                                     s->first_level, layer_or_z_slice, &base,
-                                     &row_stride, &surf_stride);
+                                     s->first_level, att->layer_or_z_slice,
+                                     &base, &row_stride, &surf_stride);
    pan_cast_and_pack(payload, S_TARGET, cfg) {
       cfg.write_format = translate_s_format(s->format);
       cfg.block_format = MALI_BLOCK_FORMAT_LINEAR;
@@ -239,17 +240,18 @@ GENX(pan_emit_linear_s_attachment)(const struct pan_image_view *s,
 }
 
 void
-GENX(pan_emit_afbc_s_attachment)(const struct pan_image_view *s,
-                                 unsigned layer_or_z_slice, void *payload)
+GENX(pan_emit_afbc_s_attachment)(const struct pan_attachment_info *att,
+                                 void *payload)
 {
    assert(PAN_ARCH >= 9);
 
 #if PAN_ARCH >= 9
+   const struct pan_image_view *s = att->iview;
    const struct pan_image_plane_ref pref = pan_image_view_get_s_plane(s);
    uint64_t header, body_offset, hdr_row_stride;
 
-   get_afbc_att_mem_props(pref, s->first_level, layer_or_z_slice, &header,
-                          &body_offset, &hdr_row_stride);
+   get_afbc_att_mem_props(pref, s->first_level, att->layer_or_z_slice,
+                          &header, &body_offset, &hdr_row_stride);
    pan_cast_and_pack(payload, AFBC_S_TARGET, cfg) {
       cfg.write_format = translate_s_format(s->format);
       cfg.block_format = get_afbc_block_format(pref.image->props.modifier);
@@ -261,14 +263,15 @@ GENX(pan_emit_afbc_s_attachment)(const struct pan_image_view *s,
 }
 
 void
-GENX(pan_emit_u_tiled_s_attachment)(const struct pan_image_view *s,
-                                    unsigned layer_or_z_slice, void *payload)
+GENX(pan_emit_u_tiled_s_attachment)(const struct pan_attachment_info *att,
+                                    void *payload)
 {
+   const struct pan_image_view *s = att->iview;
    uint64_t base, row_stride, surf_stride;
 
    get_tiled_or_linear_att_mem_props(pan_image_view_get_s_plane(s),
-                                     s->first_level, layer_or_z_slice, &base,
-                                     &row_stride, &surf_stride);
+                                     s->first_level, att->layer_or_z_slice,
+                                     &base, &row_stride, &surf_stride);
    pan_cast_and_pack(payload, S_TARGET, cfg) {
       cfg.write_format = translate_s_format(s->format);
       cfg.block_format = MALI_BLOCK_FORMAT_TILED_U_INTERLEAVED;
@@ -279,14 +282,15 @@ GENX(pan_emit_u_tiled_s_attachment)(const struct pan_image_view *s,
 }
 
 void
-GENX(pan_emit_linear_zs_attachment)(const struct pan_image_view *zs,
-                                    unsigned layer_or_z_slice, void *payload)
+GENX(pan_emit_linear_zs_attachment)(const struct pan_attachment_info *att,
+                                    void *payload)
 {
+   const struct pan_image_view *zs = att->iview;
    uint64_t base, row_stride, surf_stride;
 
    get_tiled_or_linear_att_mem_props(pan_image_view_get_zs_plane(zs),
-                                     zs->first_level, layer_or_z_slice, &base,
-                                     &row_stride, &surf_stride);
+                                     zs->first_level, att->layer_or_z_slice,
+                                     &base, &row_stride, &surf_stride);
    pan_cast_and_pack(payload, ZS_TARGET, cfg) {
       cfg.write_format = translate_zs_format(zs->format);
       cfg.block_format = MALI_BLOCK_FORMAT_LINEAR;
@@ -297,14 +301,15 @@ GENX(pan_emit_linear_zs_attachment)(const struct pan_image_view *zs,
 }
 
 void
-GENX(pan_emit_u_tiled_zs_attachment)(const struct pan_image_view *zs,
-                                     unsigned layer_or_z_slice, void *payload)
+GENX(pan_emit_u_tiled_zs_attachment)(const struct pan_attachment_info *att,
+                                     void *payload)
 {
+   const struct pan_image_view *zs = att->iview;
    uint64_t base, row_stride, surf_stride;
 
    get_tiled_or_linear_att_mem_props(pan_image_view_get_zs_plane(zs),
-                                     zs->first_level, layer_or_z_slice, &base,
-                                     &row_stride, &surf_stride);
+                                     zs->first_level, att->layer_or_z_slice,
+                                     &base, &row_stride, &surf_stride);
    pan_cast_and_pack(payload, ZS_TARGET, cfg) {
       cfg.write_format = translate_zs_format(zs->format);
       cfg.block_format = MALI_BLOCK_FORMAT_TILED_U_INTERLEAVED;
@@ -315,14 +320,15 @@ GENX(pan_emit_u_tiled_zs_attachment)(const struct pan_image_view *zs,
 }
 
 void
-GENX(pan_emit_afbc_zs_attachment)(const struct pan_image_view *zs,
-                                  unsigned layer_or_z_slice, void *payload)
+GENX(pan_emit_afbc_zs_attachment)(const struct pan_attachment_info *att,
+                                  void *payload)
 {
+   const struct pan_image_view *zs = att->iview;
    const struct pan_image_plane_ref pref = pan_image_view_get_zs_plane(zs);
    uint64_t header, body_offset, hdr_row_stride;
 
-   get_afbc_att_mem_props(pref, zs->first_level, layer_or_z_slice, &header,
-                          &body_offset, &hdr_row_stride);
+   get_afbc_att_mem_props(pref, zs->first_level, att->layer_or_z_slice,
+                          &header, &body_offset, &hdr_row_stride);
 
    pan_cast_and_pack(payload, AFBC_ZS_TARGET, cfg) {
       cfg.write_format = translate_zs_format(zs->format);
@@ -351,14 +357,15 @@ GENX(pan_emit_afbc_zs_attachment)(const struct pan_image_view *zs,
 
 #if PAN_ARCH >= 10
 void
-GENX(pan_emit_interleaved_64k_s_attachment)(const struct pan_image_view *s,
-                                            unsigned layer_or_z_slice, void *payload)
+GENX(pan_emit_interleaved_64k_s_attachment)(const struct pan_attachment_info *att,
+                                            void *payload)
 {
+   const struct pan_image_view *s = att->iview;
    uint64_t base, row_stride, surf_stride;
 
    get_tiled_or_linear_att_mem_props(pan_image_view_get_s_plane(s),
-                                     s->first_level, layer_or_z_slice, &base,
-                                     &row_stride, &surf_stride);
+                                     s->first_level, att->layer_or_z_slice,
+                                     &base, &row_stride, &surf_stride);
    pan_cast_and_pack(payload, S_TARGET, cfg) {
       cfg.write_format = translate_s_format(s->format);
       cfg.block_format = MALI_BLOCK_FORMAT_INTERLEAVED_64K;
@@ -369,14 +376,15 @@ GENX(pan_emit_interleaved_64k_s_attachment)(const struct pan_image_view *s,
 }
 
 void
-GENX(pan_emit_interleaved_64k_zs_attachment)(const struct pan_image_view *zs,
-                                             unsigned layer_or_z_slice, void *payload)
+GENX(pan_emit_interleaved_64k_zs_attachment)(const struct pan_attachment_info *att,
+                                             void *payload)
 {
+   const struct pan_image_view *zs = att->iview;
    uint64_t base, row_stride, surf_stride;
 
    get_tiled_or_linear_att_mem_props(pan_image_view_get_zs_plane(zs),
-                                     zs->first_level, layer_or_z_slice, &base,
-                                     &row_stride, &surf_stride);
+                                     zs->first_level, att->layer_or_z_slice,
+                                     &base, &row_stride, &surf_stride);
    pan_cast_and_pack(payload, ZS_TARGET, cfg) {
       cfg.write_format = translate_zs_format(zs->format);
       cfg.block_format = MALI_BLOCK_FORMAT_INTERLEAVED_64K;
@@ -445,10 +453,14 @@ pan_emit_zs_crc_ext(const struct pan_fb_info *fb, unsigned layer_idx,
       const struct pan_image_plane_ref pref =
          pan_image_view_get_zs_plane(fb->zs.view.zs);
       const struct pan_mod_handler *mod_handler = pref.image->mod_handler;
-      struct mali_zs_crc_extension_packed zs_part;
 
-      mod_handler->emit_zs_attachment(fb->zs.view.zs,
-         layer_idx + fb->zs.view.zs->first_layer, &zs_part);
+      const struct pan_attachment_info att = {
+         .iview = fb->zs.view.zs,
+         .layer_or_z_slice = layer_idx + fb->zs.view.zs->first_layer,
+      };
+
+      struct mali_zs_crc_extension_packed zs_part;
+      mod_handler->emit_zs_attachment(&att, &zs_part);
       pan_merge(&desc, &zs_part, ZS_CRC_EXTENSION);
    }
 
@@ -456,10 +468,14 @@ pan_emit_zs_crc_ext(const struct pan_fb_info *fb, unsigned layer_idx,
       const struct pan_image_plane_ref pref =
          pan_image_view_get_s_plane(fb->zs.view.s);
       const struct pan_mod_handler *mod_handler = pref.image->mod_handler;
-      struct mali_zs_crc_extension_packed s_part;
 
-      mod_handler->emit_s_attachment(fb->zs.view.s,
-         layer_idx + fb->zs.view.s->first_layer, &s_part);
+      const struct pan_attachment_info att = {
+         .iview = fb->zs.view.s,
+         .layer_or_z_slice = layer_idx + fb->zs.view.s->first_layer,
+      };
+
+      struct mali_zs_crc_extension_packed s_part;
+      mod_handler->emit_s_attachment(&att, &s_part);
       pan_merge(&desc, &s_part, ZS_CRC_EXTENSION);
    }
 
@@ -655,16 +671,16 @@ GENX(pan_emit_default_color_attachment)(enum pipe_format format,
 }
 
 void
-GENX(pan_emit_afbc_color_attachment)(const struct pan_image_view *iview,
-                                     unsigned layer_or_z_slice,
+GENX(pan_emit_afbc_color_attachment)(const struct pan_attachment_info *att,
                                      void *payload)
 {
+   const struct pan_image_view *iview = att->iview;
    const struct pan_image_plane_ref pref = pan_image_view_get_color_plane(iview);
    const struct pan_image *image = pref.image;
    uint64_t header, body_offset, hdr_row_stride;
 
-   get_afbc_att_mem_props(pref, iview->first_level, layer_or_z_slice, &header,
-                          &body_offset, &hdr_row_stride);
+   get_afbc_att_mem_props(pref, iview->first_level, att->layer_or_z_slice,
+                          &header, &body_offset, &hdr_row_stride);
 
    /* TODO: YUV RT. */
    assert(!pan_format_is_yuv(iview->format));
@@ -717,14 +733,14 @@ GENX(pan_emit_afbc_color_attachment)(const struct pan_image_view *iview,
 }
 
 void
-GENX(pan_emit_u_tiled_color_attachment)(const struct pan_image_view *iview,
-                                        unsigned layer_or_z_slice,
+GENX(pan_emit_u_tiled_color_attachment)(const struct pan_attachment_info *att,
                                         void *payload)
 {
+   const struct pan_image_view *iview = att->iview;
    uint64_t base, row_stride, surf_stride;
 
    get_tiled_or_linear_att_mem_props(pan_image_view_get_color_plane(iview),
-                                     iview->first_level, layer_or_z_slice,
+                                     iview->first_level, att->layer_or_z_slice,
                                      &base, &row_stride, &surf_stride);
 
    /* TODO: YUV RT. */
@@ -742,14 +758,14 @@ GENX(pan_emit_u_tiled_color_attachment)(const struct pan_image_view *iview,
 }
 
 void
-GENX(pan_emit_linear_color_attachment)(const struct pan_image_view *iview,
-                                       unsigned layer_or_z_slice,
+GENX(pan_emit_linear_color_attachment)(const struct pan_attachment_info *att,
                                        void *payload)
 {
+   const struct pan_image_view *iview = att->iview;
    uint64_t base, row_stride, surf_stride;
 
    get_tiled_or_linear_att_mem_props(pan_image_view_get_color_plane(iview),
-                                     iview->first_level, layer_or_z_slice,
+                                     iview->first_level, att->layer_or_z_slice,
                                      &base, &row_stride, &surf_stride);
 
    /* TODO: YUV RT. */
@@ -768,14 +784,14 @@ GENX(pan_emit_linear_color_attachment)(const struct pan_image_view *iview,
 
 #if PAN_ARCH >= 10
 void
-GENX(pan_emit_interleaved_64k_color_attachment)(const struct pan_image_view *iview,
-                                                unsigned layer_or_z_slice,
+GENX(pan_emit_interleaved_64k_color_attachment)(const struct pan_attachment_info *att,
                                                 void *payload)
 {
+   const struct pan_image_view *iview = att->iview;
    uint64_t base, row_stride, surf_stride;
 
    get_tiled_or_linear_att_mem_props(pan_image_view_get_color_plane(iview),
-                                     iview->first_level, layer_or_z_slice,
+                                     iview->first_level, att->layer_or_z_slice,
                                      &base, &row_stride, &surf_stride);
 
    /* TODO: YUV RT. */
@@ -793,10 +809,10 @@ GENX(pan_emit_interleaved_64k_color_attachment)(const struct pan_image_view *ivi
 }
 
 void
-GENX(pan_emit_afrc_color_attachment)(const struct pan_image_view *iview,
-                                     unsigned layer_or_z_slice,
+GENX(pan_emit_afrc_color_attachment)(const struct pan_attachment_info *att,
                                      void *payload)
 {
+   const struct pan_image_view *iview = att->iview;
    const struct pan_image_plane_ref pref = pan_image_view_get_color_plane(iview);
    const struct pan_image *image = pref.image;
    struct pan_afrc_format_info finfo =
@@ -804,7 +820,7 @@ GENX(pan_emit_afrc_color_attachment)(const struct pan_image_view *iview,
    uint64_t base, row_stride, surf_stride;
 
    get_tiled_or_linear_att_mem_props(pan_image_view_get_s_plane(iview),
-                                     iview->first_level, layer_or_z_slice,
+                                     iview->first_level, att->layer_or_z_slice,
                                      &base, &row_stride, &surf_stride);
 
    /* TODO: YUV RT. */
@@ -968,11 +984,13 @@ pan_emit_rt(const struct pan_fb_info *fb, unsigned layer_idx, unsigned idx,
 
    assert(rt->last_level == rt->first_level);
    assert(layer_idx < layer_count);
+   const struct pan_attachment_info att = {
+      .iview = fb->rts[idx].view,
+      .layer_or_z_slice = layer_idx + rt->first_layer,
+   };
 
    struct mali_render_target_packed desc;
-   mod_handler->emit_color_attachment(fb->rts[idx].view,
-                                      layer_idx + rt->first_layer,
-                                      &desc);
+   mod_handler->emit_color_attachment(&att, &desc);
 
    /* Avoid mixing loads and stores on write-combined memory. */
    pan_merge(&desc, &common, RGB_RENDER_TARGET);

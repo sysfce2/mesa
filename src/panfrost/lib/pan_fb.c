@@ -468,10 +468,13 @@ emit_zs_crc_desc(const struct pan_fb_desc_info *info,
          pan_image_view_get_zs_plane(iview).image->mod_handler;
 
       assert(info->layer < pan_image_view_get_layer_count(iview));
+      const struct pan_attachment_info att = {
+         .iview = iview,
+         .layer_or_z_slice = iview->first_layer + info->layer,
+      };
 
       struct mali_zs_crc_extension_packed zs_part;
-      mod_handler->emit_zs_attachment(iview,
-         iview->first_layer + info->layer, &zs_part);
+      mod_handler->emit_zs_attachment(&att, &zs_part);
       pan_merge(zs_crc, &zs_part, ZS_CRC_EXTENSION);
    }
 
@@ -481,10 +484,13 @@ emit_zs_crc_desc(const struct pan_fb_desc_info *info,
          pan_image_view_get_s_plane(iview).image->mod_handler;
 
       assert(info->layer < pan_image_view_get_layer_count(iview));
+      const struct pan_attachment_info att = {
+         .iview = iview,
+         .layer_or_z_slice = iview->first_layer + info->layer,
+      };
 
       struct mali_zs_crc_extension_packed s_part;
-      mod_handler->emit_s_attachment(iview,
-         iview->first_layer + info->layer, &s_part);
+      mod_handler->emit_s_attachment(&att, &s_part);
       pan_merge(zs_crc, &s_part, ZS_CRC_EXTENSION);
    }
 
@@ -554,9 +560,12 @@ emit_rgb_rt_desc(const struct pan_fb_desc_info *info,
          pan_image_view_get_color_plane(iview).image->mod_handler;
 
       assert(info->layer < pan_image_view_get_layer_count(iview));
+      const struct pan_attachment_info att = {
+         .iview = iview,
+         .layer_or_z_slice = iview->first_layer + info->layer,
+      };
 
-      mod_handler->emit_color_attachment(iview,
-         iview->first_layer + info->layer, &desc);
+      mod_handler->emit_color_attachment(&att, &desc);
    } else {
       GENX(pan_emit_default_color_attachment)(fb->rt_formats[rt], &desc);
    }
