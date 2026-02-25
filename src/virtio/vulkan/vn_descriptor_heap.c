@@ -156,6 +156,12 @@ vn_RegisterCustomBorderColorEXT(
 {
    struct vn_device *dev = vn_device_from_handle(device);
 
+   if (requestIndex == VK_TRUE) {
+      vn_async_vkRegisterCustomBorderColorEXT(
+         dev->primary_ring, device, pBorderColor, requestIndex, pIndex);
+      return VK_SUCCESS;
+   }
+
    /* TODO manage indexes to make it async */
    return vn_call_vkRegisterCustomBorderColorEXT(
       dev->primary_ring, device, pBorderColor, requestIndex, pIndex);
