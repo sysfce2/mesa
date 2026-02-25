@@ -413,12 +413,81 @@ translate_msaa_copy_op(const struct pan_fb_layout *fb,
    }
 }
 
-static void
-emit_zs_crc_desc(const struct pan_fb_desc_info *info,
-                 struct mali_zs_crc_extension_packed *zs_crc)
+struct pan_fb_clean_tile {
+   uint8_t rts;
+   bool zs, s;
+};
+
+static bool
+pan_fb_load_target_always(const struct pan_fb_load_target *target)
+{
+   if (target->in_bounds_load == PAN_FB_LOAD_NONE &&
+       target->border_load == PAN_FB_LOAD_NONE)
+      return false;
+
+   return target->always;
+}
+
+static bool
+pan_fb_store_target_always(const struct pan_fb_store_target *target)
+{
+   return target->store && target->always;
+}
+
+static struct pan_fb_clean_tile
+pan_fb_get_clean_tile(const struct pan_fb_desc_info *info)
 {
    const struct pan_fb_layout *fb = info->fb;
    const struct pan_fb_load *load = info->load;
+   const struct pan_fb_store *store = info->store;
+
+   struct pan_fb_clean_tile ct = { };
+
+   for (unsigned rt = 0; rt < fb->rt_count; rt++) {
+      if (fb->rt_formats[rt] == PIPE_FORMAT_NONE)
+         continue;
+
+      if ((load && pan_fb_load_target_always(&load->rts[rt])) ||
+          (store && pan_fb_store_target_always(&store->rts[rt])))
+         ct.rts |= BITFIELD_BIT(rt);
+   }
+
+   const bool z_always_load = load && pan_fb_load_target_always(&load->z);
+   const bool s_always_load = load && pan_fb_load_target_always(&load->s);
+   const bool zs_always_store = store && pan_fb_store_target_always(&store->zs);
+   const bool s_always_store = store && pan_fb_store_target_always(&store->s);
+
+   if (fb->z_format != PIPE_FORMAT_NONE) {
+      ct.zs = z_always_load || zs_always_store;
+
+      if (store && store->zs.store) {
+         const struct pan_image *zs_img =
+            pan_image_view_get_zs_plane(store->zs.iview).image;
+         assert(util_format_get_depth_bits(zs_img->props.format) ==
+                util_format_get_depth_bits(fb->z_format));
+         assert(util_format_get_depth_bits(store->zs.iview->format) ==
+                util_format_get_depth_bits(fb->z_format));
+         const struct util_format_description *zs_fmt_desc =
+            util_format_description(zs_img->props.format);
+
+         /* If ZS writes stencil, we have to also include stencil loads */
+         if (util_format_has_stencil(zs_fmt_desc) && s_always_load)
+            ct.zs = true;
+      }
+   }
+
+   if (fb->s_format != PIPE_FORMAT_NONE)
+      ct.s = s_always_load || s_always_store;
+
+   return ct;
+}
+
+static void
+emit_zs_crc_desc(const struct pan_fb_desc_info *info,
+                 const struct pan_fb_clean_tile ct,
+                 struct mali_zs_crc_extension_packed *zs_crc)
+{
+   const struct pan_fb_layout *fb = info->fb;
    const struct pan_fb_store *store = info->store;
 
    pan_pack(zs_crc, ZS_CRC_EXTENSION, cfg) {
@@ -426,22 +495,10 @@ emit_zs_crc_desc(const struct pan_fb_desc_info *info,
          cfg.zs.msaa = translate_msaa_copy_op(fb, store->zs.iview,
                                               store->zs.msaa);
 
-         const struct pan_image *img =
-            pan_image_view_get_zs_plane(store->zs.iview).image;
-         assert(util_format_get_depth_bits(img->props.format) ==
-                util_format_get_depth_bits(fb->z_format));
-         assert(util_format_get_depth_bits(store->zs.iview->format) ==
-                util_format_get_depth_bits(fb->z_format));
-
-         const bool writes_s =
-            util_format_has_stencil(util_format_description(img->props.format));
-         const bool always_load =
-            load && (load->z.always || (writes_s && load->s.always));
-         const bool clean_write_enable = store->zs.always || always_load;
 #if PAN_ARCH >= 6
-         cfg.zs.clean_tile_write_enable = clean_write_enable;
+         cfg.zs.clean_tile_write_enable = ct.zs;
 #else
-         cfg.zs.clean_pixel_write_enable = clean_write_enable;
+         cfg.zs.clean_pixel_write_enable = ct.zs;
 #endif
 
       }
@@ -450,12 +507,10 @@ emit_zs_crc_desc(const struct pan_fb_desc_info *info,
          cfg.s.msaa = translate_msaa_copy_op(fb, store->s.iview,
                                              store->s.msaa);
 
-         const bool clean_write_enable =
-            store->s.always || (load && load->s.always);
 #if PAN_ARCH >= 6
-         cfg.s.clean_tile_write_enable = clean_write_enable;
+         cfg.s.clean_tile_write_enable = ct.s;
 #else
-         cfg.s.clean_pixel_write_enable = clean_write_enable;
+         cfg.s.clean_pixel_write_enable = ct.s;
 #endif
       }
 
@@ -501,6 +556,7 @@ emit_zs_crc_desc(const struct pan_fb_desc_info *info,
 
 static void
 emit_rgb_rt_desc(const struct pan_fb_desc_info *info,
+                 const struct pan_fb_clean_tile ct,
                  unsigned rt, uint32_t tile_rt_offset_B,
                  struct mali_rgb_render_target_packed *rgb_rt)
 {
@@ -533,11 +589,10 @@ emit_rgb_rt_desc(const struct pan_fb_desc_info *info,
                                    store->rts[rt].msaa);
       }
 
-      const bool clean_write_enable = load && load->rts[rt].always;
 #if PAN_ARCH >= 6
-      cfg.clean_tile_write_enable = clean_write_enable;
+      cfg.clean_tile_write_enable = !!(ct.rts & BITFIELD_BIT(rt));
 #else
-      cfg.clean_pixel_write_enable = clean_write_enable;
+      cfg.clean_pixel_write_enable = !!(ct.rts & BITFIELD_BIT(rt));
 #endif
 
       if (load && target_has_clear(&load->rts[rt])) {
@@ -581,6 +636,7 @@ GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info, void *out)
    const struct pan_fb_layout *fb = info->fb;
    const struct pan_fb_load *load = info->load;
    const struct pan_fb_store *store = info->store;
+   const struct pan_fb_clean_tile ct = pan_fb_get_clean_tile(info);
 
    const bool has_zs_crc_ext = pan_fb_has_zs(fb);
 
@@ -700,7 +756,7 @@ GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info, void *out)
 
    if (has_zs_crc_ext) {
       struct mali_zs_crc_extension_packed zs_crc;
-      emit_zs_crc_desc(info, &zs_crc);
+      emit_zs_crc_desc(info, ct, &zs_crc);
       memcpy(out, &zs_crc, sizeof(zs_crc));
       out += sizeof(zs_crc);
    }
@@ -708,7 +764,7 @@ GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info, void *out)
    uint32_t tile_rt_offset_B = 0;
    for (unsigned rt = 0; rt < fb->rt_count; rt++) {
       struct mali_rgb_render_target_packed rgb_rt;
-      emit_rgb_rt_desc(info, rt, tile_rt_offset_B, &rgb_rt);
+      emit_rgb_rt_desc(info, ct, rt, tile_rt_offset_B, &rgb_rt);
       memcpy(out, &rgb_rt, sizeof(rgb_rt));
       out += sizeof(rgb_rt);
 
