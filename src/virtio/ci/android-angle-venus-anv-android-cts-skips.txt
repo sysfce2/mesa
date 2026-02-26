@@ -23,3 +23,6 @@ x86_64 CtsGraphicsTestCases android.graphics.fonts.SystemFontsTest#testAvailable
 
 # Instrumentation ran for longer than the configured timeout.
 x86_64 CtsNativeHardwareTestCases android.hardware.nativehardware.cts.AHardwareBufferNativeTests#AHardwareBufferTest_AllocateLockUnlockDeallocateStressTest
+
+# Invalid test, spec violation: https://gitlab.khronos.org/vulkan/vulkan/-/issues/4713
+x86_64 CtsSkQPTestCases org.skia.skqp.SkQPRunner#UnitTest_VkBackendSurfaceMutableStateTest
