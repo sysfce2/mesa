@@ -11,7 +11,7 @@
 #include "compiler/nir/nir_builder.h"
 #include "compiler/pan_nir.h"
 
-static enum glsl_base_type
+static enum glsl_sampler_dim
 mali_to_glsl_dim(enum mali_texture_dimension dim)
 {
    switch (dim) {
