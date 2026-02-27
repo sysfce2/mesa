@@ -501,7 +501,7 @@ VkResult anv_CreateDevice(
          decoder->engine = physical_device->queue.families[i].engine_class;
          decoder->dynamic_base = physical_device->va.dynamic_state_pool.addr;
          decoder->surface_base = physical_device->va.internal_surface_state_pool.addr;
-         decoder->instruction_base = physical_device->va.instruction_state_pool.addr;
+         decoder->instruction_base = physical_device->va.shader_heap.addr;
       }
    }
 
@@ -653,7 +653,7 @@ VkResult anv_CreateDevice(
       goto fail_dynamic_state_pool;
 
    result = anv_shader_heap_init(&device->shader_heap, device,
-                                 device->physical->va.instruction_state_pool,
+                                 device->physical->va.shader_heap,
                                  21 /* 2MiB */, 27 /* 64MiB */);
    if (result != VK_SUCCESS)
       goto fail_custom_border_color_pool;

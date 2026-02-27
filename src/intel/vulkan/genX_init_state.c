@@ -286,10 +286,10 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
 
       sba.InstructionBaseAddress =
          (struct anv_address) {
-            .offset = device->physical->va.instruction_state_pool.addr,
+            .offset = device->physical->va.shader_heap.addr,
          };
       sba.InstructionBufferSize =
-         device->physical->va.instruction_state_pool.size / 4096;
+         device->physical->va.shader_heap.size / 4096;
 
       sba.InstructionMOCS = mocs;
       sba.InstructionBaseAddressModifyEnable = true;

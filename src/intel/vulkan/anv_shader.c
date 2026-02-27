@@ -452,14 +452,14 @@ anv_shader_set_relocs(struct anv_device *device,
 {
    int rv_count = 0;
    const uint64_t shader_data_addr =
-      device->physical->va.instruction_state_pool.addr +
+      device->physical->va.shader_heap.addr +
       shader->kernel.offset +
       shader->prog_data->const_data_offset;
 
-   assert((device->physical->va.instruction_state_pool.addr & 0xffffffff) == 0);
+   assert((device->physical->va.shader_heap.addr & 0xffffffff) == 0);
    reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
       .id = BRW_SHADER_RELOC_INSTRUCTION_BASE_ADDR_HIGH,
-      .value = device->physical->va.instruction_state_pool.addr >> 32,
+      .value = device->physical->va.shader_heap.addr >> 32,
    };
    assert((device->physical->va.dynamic_visible_pool.addr & 0xffffffff) == 0);
    reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
@@ -474,16 +474,16 @@ anv_shader_set_relocs(struct anv_device *device,
                (device->physical->va.indirect_descriptor_pool.addr >> 32) :
                (device->physical->va.internal_surface_state_pool.addr >> 32),
    };
-   assert((device->physical->va.instruction_state_pool.addr & 0xffffffff) == 0);
+   assert((device->physical->va.shader_heap.addr & 0xffffffff) == 0);
    reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
       .id = INTEL_SHADER_RELOC_CONST_DATA_ADDR_LOW,
       .value = shader_data_addr,
    };
-   assert((device->physical->va.instruction_state_pool.addr & 0xffffffff) == 0);
-   assert(shader_data_addr >> 32 == device->physical->va.instruction_state_pool.addr >> 32);
+   assert((device->physical->va.shader_heap.addr & 0xffffffff) == 0);
+   assert(shader_data_addr >> 32 == device->physical->va.shader_heap.addr >> 32);
    reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
       .id = INTEL_SHADER_RELOC_CONST_DATA_ADDR_HIGH,
-      .value = device->physical->va.instruction_state_pool.addr >> 32,
+      .value = device->physical->va.shader_heap.addr >> 32,
    };
    reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
       .id = INTEL_SHADER_RELOC_SHADER_START_OFFSET,
@@ -493,7 +493,7 @@ anv_shader_set_relocs(struct anv_device *device,
       const struct brw_bs_prog_data *bs_prog_data =
          brw_bs_prog_data_const(shader->prog_data);
       uint64_t resume_sbt_addr =
-         device->physical->va.instruction_state_pool.addr +
+         device->physical->va.shader_heap.addr +
          shader->kernel.offset +
          bs_prog_data->resume_sbt_offset;
       reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
