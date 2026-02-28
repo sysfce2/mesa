@@ -931,7 +931,7 @@ static nir_def *lower_image(nir_builder *b, nir_instr *instr, void *cb_data)
             bool roundzero = false;
             bool split = false;
             enum pco_pck_format pck_format =
-               pco_pipe_to_pck_format(data_format, &scale, &roundzero, &split);
+               pco_pipe_to_pck_format(format, &scale, &roundzero, &split);
 
             if (pck_format != ~0) {
                if (split) {
